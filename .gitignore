@@ -1,0 +1,42 @@
+# ======== TZ Analysis - .gitignore ========
+# Ignorar entornos virtuales
+.venv/
+env/
+venv/
+
+# Ignorar cachés y temporales
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Ignorar archivos temporales de usuario / sistema
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Ignorar archivos de salida del programa
+*.html
+*.htm
+*.kml
+*.kmz
+*.xlsx
+*.csv
+*.txt
+*.pdf
+*.docx
+
+# Ignorar resultados o reportes generados
+/reports/
+/output/
+/export/
+/results/
+
+# Ignorar configuraciones locales de IDE
+.vscode/
+.idea/
+
+# Ignorar backups o duplicados manuales
+*_copia*
+*_backup*
