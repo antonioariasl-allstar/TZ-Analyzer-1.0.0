@@ -1,0 +1,6953 @@
+# ======================================================================
+#                 T Z   A N A L Y S I S  —  MAPA DE SECCIONES
+# ======================================================================
+# SECCIÓN 0 · IMPORTS & CONFIG
+#     - Imports estándar y de terceros
+#     - Carga/uso de CONFIG (sin lógica)
+#
+# SECCIÓN 1 · ENTRADA / I/O (Excel, hoja, prompts base)
+#     - Selección de archivo y hoja visible
+#     - Wizard de mapeo (SOLO esenciales)
+#     - Elección de color (paleta/HEX)
+#
+# SECCIÓN 2 · NORMALIZACIÓN / LIMPIEZA
+#     - Fecha/Hora: serial Excel, ISO y local → datetime (TZ: America/El_Salvador)
+#     - Lat/Lon: floats válidos; descartar filas fuera de rango
+#     - Azimut: permitir 0; normalizar [0..360)
+#     - IMEI/TEL: como str, sin “.0”
+#     - Omitir campos vacíos (no “SinInf”)
+#
+# SECCIÓN 3 · MOTOR / FILTROS / CÁLCULOS
+#     - Filtro por día / rango de días / rango de horas
+#     - Top N antenas y Top N contactos (después de filtros)
+#     - Resúmenes y contadores (válidas/descartadas)
+#
+# SECCIÓN 4 · VISTAS HTML
+#     - Metadatos (alias/usuario/abonado si existen)
+#     - “Periodo analizado”: dd/mm/yyyy HH:MM — dd/mm/yyyy HH:MM
+#     - Tablas (incluye “Antenas más activadas” con azimut sin decimales)
+#
+# SECCIÓN 5 · VISTAS KML/KMZ
+#     - Puntos y líneas (azimut 0 también se dibuja)
+#     - Burbujas: ocultar campos vacíos; IMEI/TEL sin “.0”
+#
+# SECCIÓN 6 · UTILIDADES
+#     - Selección de carpeta/archivo (Tkinter + fallback consola)
+#     - Logging y helpers varios
+#
+# SECCIÓN 7 · MENÚ / ORQUESTACIÓN
+#     - Menú único (loop en modo manual)
+#     - Flujo: menú → color → entrada → mapeo → preguntas finales (alias/usuario/abonado/top) → carpeta destino → generar
+#
+# NOTA: Este bloque solo documenta y ordena la lectura del archivo. No modifica funcionalidad.
+# ======================================================================
+
+#===============================================================================
+# === SECCIÓN 0 · IMPORTS & CONFIG ===
+
+# Estándar
+import json
+import math
+import os
+import re
+import shutil
+import sys
+import unicodedata
+
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+import numpy as np
+
+# Terceros
+import pandas as pd  # <-- UNO solo, aquí arriba
+
+# Módulos locales
+from utilidades import seleccionar_archivo, seleccionar_carpeta
+from validaciones import validar_datos, guardar_errores
+from kml_generador import generar_kml  # si lo estás usando desde aquí
+#=================================================================================
+
+def bootstrap_config() -> None:
+    """
+    Inicializa configuración y rename map, y muestra banner.
+    Evita ejecutar esto en import; llamarlo solo desde el entrypoint.
+    """
+    # Banner (antes estaba al nivel superior)
+    print(r"""
+┌───────────────────────────────────────────────┐
+│                 T  Z   A N A L Y S I S       │
+│        Bitácoras → KML/KMZ + Informe HTML     │
+└───────────────────────────────────────────────┘
+""")
+    # Configuración y mapa de sinónimos (antes estaban al nivel superior)
+    global CONFIG, RENAME_MAP
+    CONFIG = cargar_config()
+    RENAME_MAP = cfg_build_rename_map(CONFIG)
+
+# === SECCIÓN: WIZARD DE MAPEO DE COLUMNAS (detección, mapeo manual, QC) ===
+MANUAL_QC_MAPPING = True
+def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
+    """Guía el mapeo de columnas esenciales/no esenciales y persiste decisiones en CONFIG si aplica."""
+    cols_menu = list(map(str, getattr(df, "_orig_cols", list(df.columns))))
+    def _menu_horizontal(_cols, per_line=6):
+        filas, fila = [], []
+        for i, c in enumerate(_cols, 1):
+            s = f"[{i}] {c}"
+            fila.append(s)
+            if len(fila) == per_line:
+                filas.append("  " + "  |  ".join(fila))
+                fila = []
+        if fila:
+            filas.append("  " + "  |  ".join(fila))
+        return "\n".join(filas)
+
+    if esenciales is None:
+        esenciales = ["tel", "lat", "long", "fecha", "hora", "azimut"]
+    if no_esenciales is None:
+        no_esenciales = ["alias", "usuario", "abonado", "celda", "direccion", "imei", "imsi", "duracion"]
+
+    asignadas = {}   # canónico -> (tipo, valor) ; tipo: "col"|"fijo"|"omitido"
+    usadas = set()   # columnas ya tomadas (para evitar duplicados en esenciales)
+
+    def _elige_col(canonico):
+        while True:
+            sel = input(f"→ Elegí columna para **{canonico}** (número, menú arriba): ").strip()
+            try:
+                k = int(sel)
+                if 1 <= k <= len(cols_menu):
+                    col = cols_menu[k-1]
+                    return col
+            except:
+                pass
+            print("  [QC] Entrada inválida. Debe ser un número de la lista.")
+
+    # --- ESENCIALES (obligatorio, sin valores fijos ni omitir) ---
+    # Mostrar menú de columnas UNA sola vez
+    print("\n[QC] Columnas disponibles (una sola vez):")
+    print(_menu_horizontal(cols_menu, per_line=6))
+    print("\n[QC] === Mapeo ESENCIALES ===")
+    pendientes = []
+    for can in esenciales:
+        while True:
+            sel = input(f"→ Elegí columna para **{can}** (número — '?' para ver menú / Enter=omitir): ").strip()
+            if sel == "?":
+                print(_menu_horizontal(cols_menu, per_line=6))
+                continue
+            break
+
+        if not sel:
+            pendientes.append(can)
+            asignadas[can] = ("omitido", None)
+            continue
+        ok = False
+        while not ok:
+            try:
+                k = int(sel)
+                if 1 <= k <= len(cols_menu):
+                    col = cols_menu[k-1]
+                    if col in usadas:
+                        print(f"  [QC] Advertencia: la columna '{col}' ya fue asignada a otro esencial. Elegí otra.")
+                        sel = input(f"→ Elegí columna para **{can}**: ").strip()
+                        continue
+                    asignadas[can] = ("col", col)
+                    usadas.add(col)
+                    ok = True
+                    break
+            except Exception:
+                pass
+            sel = input("  [QC] Entrada inválida. Debe ser un número de la lista (o Enter=omitir): ").strip()
+            if not sel:
+                pendientes.append(can)
+                asignadas[can] = ("omitido", None)
+                ok = True
+
+    # (Tipado numérico mínimo para lo que sí se asignó)
+    tipar_numericos = {"lat", "long", "azimut"}
+
+    # Reconocimiento mínimo de tipos numéricos (para lat/lon/azimut)
+    tipar_numericos = {"lat", "long", "azimut", "duracion"}
+
+    # --- NO ESENCIALES (opcional: columna, valor fijo o omitir) ---
+    print("\n[QC] === Mapeo NO ESENCIALES ===")
+    print(_menu_horizontal(cols_menu, per_line=6))
+    print("  Podés: elegir número, escribir 'F <valor fijo>' o Enter=omitir.")
+    for can in no_esenciales:
+        while True:
+            sel = input(f"→ Elegí columna para {can} (n / 'F valor' / Enter=omitir — '?' para ver menú): ").strip()
+            if sel == "?":
+                print(_menu_horizontal(cols_menu, per_line=6))
+                continue
+            break
+
+        if not sel:
+            asignadas[can] = ("omitido", None)
+            continue
+        if sel.upper().startswith("F "):
+            val = sel[2:].strip()
+            asignadas[can] = ("fijo", val)
+            continue
+        # número de columna
+        try:
+            k = int(sel)
+            if 1 <= k <= len(cols_menu):
+                col = cols_menu[k-1]
+                asignadas[can] = ("col", col)
+            else:
+                asignadas[can] = ("omitido", None)
+        except:
+            asignadas[can] = ("omitido", None)
+        # --- Resumen final de mapeo ---
+        print("\n[QC] === Resumen de mapeo ===")
+        for k,(t,v) in asignadas.items():
+            if t == "col":
+                print(f"  {k:12s} <- columna '{v}'")
+            elif t == "fijo":
+                print(f"  {k:12s} <- fijo '{v}'")
+            else:
+                print(f"  {k:12s} <- omitido")
+
+        if pendientes:
+            print("\n[QC] Aviso: omitiste canónicos ESENCIALES:", ", ".join(pendientes))
+            print("Podés volver a ejecutar para completar esos campos, o continuar bajo tu responsabilidad.")
+
+
+    # --- Aplicar mapeo al DataFrame ---
+    df = df.copy()
+    for can, (tipo, val) in asignadas.items():
+        if tipo == "col":
+            src = val
+            if src != can:
+                if src in df.columns:
+                    df = df.rename(columns={src: can})
+                else:
+                    # fallback por si difiere solo en espacios/caso
+                    for c in list(df.columns):
+                        if str(c).strip().lower() == str(src).strip().lower():
+                            df = df.rename(columns={c: can})
+                            break
+        elif tipo == "fijo":
+            df[can] = val
+        else:
+            # omitido -> no crear
+            pass
+
+    # Tipado numérico mínimo (robusto)
+    # quitar duplicados por si renombramos a la misma canónica dos veces
+    df = df.loc[:, ~df.columns.duplicated(keep="first")]
+
+    for c in tipar_numericos:  # {"lat","lon","azimut"}
+        if c in df.columns:
+            try:
+                serie = df[c]
+                # Si por alguna razón viene 2D, exprimimos a 1D
+                if hasattr(serie, "squeeze"):
+                    serie = serie.squeeze()
+                df[c] = pd.to_numeric(serie, errors="coerce")
+            except Exception as e:
+                print(f"[QC] Aviso: no se pudo convertir '{c}' a numérico ({e}); se deja como está.")
+
+    # Resumen final
+    print("\n[QC] === Resumen de mapeo ===")
+    for can in esenciales + no_esenciales:
+        t, v = asignadas.get(can, ("omitido", None))
+        if t == "col":
+            print(f"  {can:<12} <- columna '{v}'")
+        elif t == "fijo":
+            print(f"  {can:<12} <- valor fijo '{v}'")
+        else:
+            print(f"  {can:<12} <- omitido")
+
+    # Vista previa (3 filas)
+    try:
+        print("\n[QC] Vista previa (3 filas):")
+        print(df.head(3)[[c for c in esenciales + no_esenciales if c in df.columns]])
+    except Exception:
+        pass
+
+    # --- Aviso post-mapeo: columnas recomendadas omitidas (remapeo rápido) ---
+    recomendadas = ["duracion"]  # podés sumar "alias","usuario","abonado" si querés
+    falt = [c for c in recomendadas if c not in df.columns]
+    if falt:
+        print("\n[QC] Aviso: omitiste asignar -> " + ", ".join(falt))
+        resp = input("¿Querés mapearlas ahora? (s/N): ").strip().lower()
+        if resp == "s":
+            for can in list(falt):
+                sel = input(f"→ Elegí columna para {can} (n / 'F valor' / Enter=omitir): ").strip()
+                if not sel:
+                    continue
+                if sel.upper().startswith("F "):
+                    df[can] = sel[2:].strip()
+                    continue
+                try:
+                    k = int(sel)
+                    # usamos el mismo menú mostrado arriba (cols_menu)
+                    if 1 <= k <= len(cols_menu):
+                        col = cols_menu[k-1]
+                        if col != can and col in df.columns:
+                            df = df.rename(columns={col: can})
+                except:
+                    pass
+            # limpia duplicados por si renombramos sobre nombres existentes
+            df = df.loc[:, ~df.columns.duplicated(keep="first")]
+
+    # Saneo mínimo para que no salgan vacíos
+    if "antena" not in df.columns and "siteid" in df.columns:
+        df = df.rename(columns={"siteid": "antena"})
+    df = df.loc[:, ~df.columns.duplicated(keep="first")]
+
+    # [QC] Confirmación post-mapeo
+    while True:
+        print("\n[QC] Confirmar mapeo — S=Confirmar y continuar; N=Volver a mapear; R=Remapear uno:")
+        op = input("→ Opción (S/N/R): ").strip().upper()
+
+        if op in ("S", ""):
+            break  # continuar flujo normal
+
+        elif op == "N":
+            print("[QC] Reiniciando mapeo completo...")
+            return _wizard_qc_mapeo(df, esenciales, no_esenciales)
+
+        elif op == "R":
+            # elegir canónico a remapear (menú claro y orden fijo)
+            orden_fijo = ["tel","lat","lon","fecha","hora","azimut","imei","antena",
+                          "interaccion","contacto","alias","usuario","abonado",
+                          "celda","direccion","imsi","duracion"]
+            todos_base = list(dict.fromkeys((esenciales + no_esenciales)))
+            todos = [c for c in orden_fijo if c in todos_base] + [c for c in todos_base if c not in orden_fijo]
+
+            print("\n[QC] ¿Qué canónico querés remapear?")
+            print("  " + "  |  ".join(f"[{i+1}] {c}" for i, c in enumerate(todos)))
+
+            target = input("→ Escribí **número o nombre** (ej. 4 o fecha): ").strip()
+
+            # Resolver selección a nombre de canónico (can)
+            can = None
+            if target.isdigit():
+                idx = int(target)
+                if 1 <= idx <= len(todos):
+                    can = todos[idx-1]
+                else:
+                    print("[QC] Número fuera de rango."); 
+                    continue
+            else:
+                # aceptar nombre exacto (case-insensitive)
+                t = target.lower()
+                for c in todos:
+                    if c.lower() == t:
+                        can = c
+                        break
+                if not can:
+                    print("[QC] Canónico inválido. Usá número o nombre de la lista.")
+                    continue
+
+            # Confirmación explícita de lo que se va a remapear
+            print(f"[QC] Remapearás: [{todos.index(can)+1}] {can}. ¿Confirmás? (s/N): ", end="")
+            if input().strip().lower() != "s":
+                continue
+
+            # mostrar menú de columnas
+            print(_menu_horizontal(cols_menu, per_line=6))
+
+            if can in esenciales:
+                # remapeo de ESENCIALES (solo número / no 'F')
+                sel = input(f"→ Elegí columna para **{can}** (número — '?' menú / Enter=omitir): ").strip()
+                if sel == "?":
+                    print(_menu_horizontal(cols_menu, per_line=6)); 
+                    continue
+                if not sel:
+                    asignadas[can] = ("omitido", None)
+                else:
+                    try:
+                        k = int(sel)
+                        if 1 <= k <= len(cols_menu):
+                            col = cols_menu[k-1]
+                            # liberar anterior si era 'col'
+                            prev = asignadas.get(can)
+                            if prev and prev[0] == "col":
+                                try:
+                                    usadas.discard(prev[1])
+                                except Exception:
+                                    pass
+                            if col in usadas:
+                                print(f"  [QC] '{col}' ya está usada por otro esencial.")
+                                continue
+                            asignadas[can] = ("col", col)
+                            usadas.add(col)
+                        else:
+                            asignadas[can] = ("omitido", None)
+                    except:
+                        asignadas[can] = ("omitido", None)
+
+            else:
+                # remapeo de NO ESENCIALES (n / 'F valor' / Enter)
+                sel = input(f"→ Elegí columna para {can} (n / 'F valor' / Enter=omitir — '?' menú): ").strip()
+                if sel == "?":
+                    print(_menu_horizontal(cols_menu, per_line=6)); 
+                    continue
+                if not sel:
+                    asignadas[can] = ("omitido", None)
+                elif sel.upper().startswith("F "):
+                    val = sel[2:].strip()
+                    asignadas[can] = ("fijo", val)
+                else:
+                    try:
+                        k = int(sel)
+                        if 1 <= k <= len(cols_menu):
+                            col = cols_menu[k-1]
+                            asignadas[can] = ("col", col)
+                        else:
+                            asignadas[can] = ("omitido", None)
+                    except:
+                        asignadas[can] = ("omitido", None)
+
+            # re-imprimir resumen y volver a pedir confirmación
+            print("\n[QC] === Resumen de mapeo ===")
+            for k,(t,v) in asignadas.items():
+                if t == "col":
+                    print(f"  {k:<12} <- columna '{v}'")
+                elif t == "fijo":
+                    print(f"  {k:<12} <- valor fijo '{v}'")
+                else:
+                    print(f"  {k:<12} <- omitido")
+
+        else:
+            print("[QC] Opción inválida. Escribí S, N o R.")
+
+    return df, asignadas
+
+from simplekml import Kml
+from collections import Counter
+
+# --- LOGS: helper para registrar degrade/mapas/omisiones ---
+from datetime import datetime
+from datetime import datetime
+
+LOGS: list[str] = []
+LOG_PLACEHOLDERS: set[str] = set()   # <<< GLOBAL, una sola vez
+
+def log(msg: str):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    s = f"[{ts}] {msg}"
+    print(s)
+    LOGS.append(s)
+
+
+# === NORMALIZADOR-1 (inicio) ==============================================
+
+_MOJIBAKE_TOKENS = ('Ã', 'Â', '�')
+
+def _fix_mojibake_text(s):
+    """Corrige mojibake típico (UTF-8 mal decodificado como latin-1) y limpia espacios."""
+    if not isinstance(s, str) or not s:
+        return s
+    if any(t in s for t in _MOJIBAKE_TOKENS):
+        # Intento 1: recodificar latin1 -> utf-8
+        try:
+            s_try = s.encode('latin1', errors='strict').decode('utf-8', errors='strict')
+            s = s_try
+        except Exception:
+            # Intento 2: reemplazos comunes de emergencia
+            s = (s.replace('Ã¡','á').replace('Ã©','é').replace('Ãí','í')
+                   .replace('Ã³','ó').replace('Ãº','ú').replace('Ã±','ñ')
+                   .replace('Â','')
+                   .replace('ÃÁ','Á').replace('Ã‰','É').replace('ÃÍ','Í')
+                   .replace('Ã“','Ó').replace('Ãš','Ú').replace('Ã‘','Ñ')
+                   .replace('EstaciÃ³n', 'Estación').replace('MetapÃ¡n','Metapán'))
+    # Normaliza Unicode y espacios
+    s = unicodedata.normalize('NFKC', s)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+# Abreviaturas comunes (case-insensitive)
+_DEFAULT_REEMPLAZOS_REGEX = [
+    (re.compile(r'\bNvo\.?\b', flags=re.IGNORECASE), 'Nuevo'),
+    (re.compile(r'\bNva\.?\b', flags=re.IGNORECASE), 'Nueva'),
+    (re.compile(r'\bSta\.?\b', flags=re.IGNORECASE), 'Santa'),
+    (re.compile(r'\bSto\.?\b', flags=re.IGNORECASE), 'Santo'),
+    (re.compile(r'\bSn\.?\b',  flags=re.IGNORECASE), 'San'),
+    # Toponimia frecuente:
+    (re.compile(r'\bV(?:alle)?\s+Nvo\.?\b', flags=re.IGNORECASE), 'Valle Nuevo'),
+]
+
+def _aplicar_reemplazos_regex(s, reglas_regex=None):
+    if not isinstance(s, str) or not s:
+        return s
+    seq = reglas_regex or _DEFAULT_REEMPLAZOS_REGEX
+    for pat, repl in seq:
+        s = pat.sub(repl, s)
+    return s
+
+def normalizar_texto(s, reglas=None):
+    """Arregla mojibake, normaliza Unicode y aplica abreviaturas/reglas (regex o literales)."""
+    if not isinstance(s, str):
+        return s
+    s = _fix_mojibake_text(s)
+    # Reglas de config.json (si existen): claves pueden ser regex
+    if reglas and isinstance(reglas, dict):
+        for k, v in reglas.items():
+            try:
+                s = re.sub(k, v, s, flags=re.IGNORECASE)
+            except re.error:
+                s = s.replace(k, v)
+    # Reglas por defecto
+    s = _aplicar_reemplazos_regex(s)
+    return s
+
+def normalizar_columnas_texto(df, columnas=None, reglas=None):
+    """
+    Aplica normalización a columnas de texto (por defecto, todas las 'object').
+    Respeta NaN/None sin convertirlos a 'None'.
+    """
+    if df is None:
+        return df
+    try:
+        cols = columnas or [c for c in df.columns if df[c].dtype == 'object']
+        if not cols:
+            return df
+        return df.assign(**{c: df[c].map(lambda x: normalizar_texto(x, reglas)) for c in cols})
+    except Exception:
+        return df
+# === NORMALIZADOR-1 (fin) ==================================================
+
+
+# =========================
+# Fallbacks de importación
+# =========================
+try:
+    from validaciones import validar_datos, guardar_errores  # OK si existe
+except Exception:
+    # Fallback mínimo (no rompe el flujo)
+    from datetime import datetime
+
+    def validar_columnas(dataframe, columnas_esperadas):
+        return [col for col in columnas_esperadas if col not in dataframe.columns]
+
+    def validar_datos(df, columnas_esenciales):
+        errores = []
+        faltantes = validar_columnas(df, columnas_esenciales)
+        if faltantes:
+            errores.append(f"[FALLBACK] Faltan columnas esenciales: {', '.join(faltantes)}")
+
+        # Garantizar fecha/hora como texto tolerante (sin convertir si no hay)
+        if 'fecha' in df.columns:
+            try:
+                df['fecha'] = pd.to_datetime(df['fecha'], errors='coerce', dayfirst=True)
+                mask = df['fecha'].isna()
+                df.loc[~mask, 'fecha'] = df.loc[~mask, 'fecha'].dt.strftime("%d/%m/%Y")
+                df.loc[mask, 'fecha'] = "Sin Inf."
+            except Exception:
+                df['fecha'] = "Sin Inf."
+
+        if 'hora' in df.columns:
+            try:
+                horas = pd.to_datetime(df['hora'].astype(str).str[:8], format="%H:%M:%S", errors="coerce")
+                maskh = horas.isna()
+                df.loc[~maskh, 'hora'] = horas.dt.strftime("%H:%M:%S")
+                df.loc[maskh, 'hora'] = "Sin Inf."
+            except Exception:
+                df['hora'] = "Sin Inf."
+
+        # Coordenadas tolerantes
+        for c in ('lat', 'long'):
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors='coerce')
+        if 'lat' in df.columns and 'long' in df.columns:
+            maskc = df['lat'].isna() | df['long'].isna()
+            if maskc.any():
+                errores.append(f"[FALLBACK] {maskc.sum()} filas con coordenadas inválidas.")
+                df[['lat', 'long']] = df[['lat', 'long']].astype(object)
+                df.loc[maskc, ['lat', 'long']] = "Sin Inf."
+        return df, errores
+
+    def guardar_errores(errores, carpeta_salida, nombre_base):
+        os.makedirs(carpeta_salida, exist_ok=True)
+        # ahora: usar siempre el BASE unificado
+        archivo_errores = os.path.join(carpeta_salida, "errores.txt")
+        with open(archivo_errores, "w", encoding="utf-8") as f:
+            if errores:
+                f.write(f"[{datetime.now().isoformat(sep=' ', timespec='seconds')}] Errores detectados:\n")
+                for e in errores:
+                    f.write(f"- {e}\n")
+            else:
+                f.write(f"[{datetime.now().isoformat(sep=' ', timespec='seconds')}] No se detectaron errores.\n")
+        return archivo_errores
+
+try:
+    from utilidades import seleccionar_archivo, seleccionar_carpeta
+except Exception:
+    # Fallback por consola (sin Tk)
+    def seleccionar_archivo():
+        ruta = input("Ruta del archivo Excel (.xlsx/.xls): ").strip('"').strip()
+        return ruta if ruta else None
+
+    def seleccionar_carpeta():
+        ruta = input("Ruta de la carpeta de salida (Enter = actual): ").strip('"').strip()
+        return ruta if ruta else os.getcwd()
+
+# =========================
+# Configuración externa
+# =========================
+# --- ANTI-COLISIONES DE COLUMNAS (fusiona duplicadas por primer valor no vacío) ---
+def _dedupe_columns(df):
+    from collections import Counter
+
+    cols = list(df.columns)
+    if not cols:
+        return df
+
+    counts = Counter(cols)
+    dup_names = [n for n, c in counts.items() if c > 1]
+    if not dup_names:
+        return df
+
+    for name in dup_names:
+        same = [c for c in df.columns if c == name]
+        if len(same) <= 1:
+            continue
+        base = df[same[0]].copy()
+
+        # Toma el primer valor NO vacío/NO blanco por fila
+        for extra in same[1:]:
+            s = df[extra]
+            # consideramos vacío: NaN o string en blanco
+            mask_blank = base.isna() | (base.astype(str).str.strip() == "")
+            base = base.where(~mask_blank, s)
+
+        # Sobrescribe la columna final y descarta las duplicadas extra
+        df[name] = base
+        df = df.drop(columns=same[1:])
+
+    return df
+# === HASHES + ENTORNO (helpers) — INICIO ====================================
+def _sha256_de_archivo(path: str) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _escribe_hashes_txt(dest_path: str, pares: list[tuple[str, str]]):
+    """Escribe HASHES.txt en dest_path con formato: SHA256  <hex>  <ruta_relativa>"""
+    lines = []
+    for abs_p, rel_p in pares:
+        try:
+            hexa = _sha256_de_archivo(abs_p)
+            lines.append(f"SHA256  {hexa}  {rel_p}")
+        except Exception as e:
+            lines.append(f"# ERROR hashing {rel_p}: {e}")
+    with open(dest_path, "w", encoding="utf-8") as fw:
+        fw.write("\n".join(lines) + "\n")
+def _copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> str | None:
+    """
+    Copia el logo a la carpeta de salida y devuelve el **nombre de archivo**
+    (basename) que usará el HTML. Si no hay logo o falla, devuelve None.
+    """
+    try:
+        if not logo_src:
+            return None
+
+        # Acepta ruta absoluta o relativa; normalizamos
+        logo_abs = os.path.abspath(logo_src)
+        if not os.path.exists(logo_abs):
+            # si viene relativa a la carpeta del script, probamos ahí
+            base = os.path.dirname(os.path.abspath(__file__))
+            logo_abs = os.path.join(base, logo_src)
+            if not os.path.exists(logo_abs):
+                return None
+
+        os.makedirs(carpeta_salida, exist_ok=True)
+        dest = os.path.join(carpeta_salida, os.path.basename(logo_abs))
+
+        # Evitar copiar sobre sí mismo
+        if os.path.abspath(logo_abs) != os.path.abspath(dest):
+            shutil.copy2(logo_abs, dest)
+
+        return os.path.basename(dest)
+    except Exception:
+        return None
+
+
+DEFAULT_CONFIG = {
+    "kml": {
+        "azimuth_km": 1.5,
+        "cone": {"half_degrees": 35, "fill_color": "7fffffff"},
+        "line": {"color": "ffff00ff", "width": 5},
+        "description": [
+            # Bloque 2: Tel + identidad (agregamos Alias; cambiamos etiqueta de Usuario)
+            [["Tel","tel"], ["IMEI","imei"], ["Alias","alias"], ["Nombre del Usuario","usuario"], ["Abonado","abonado"]],
+            # Bloque 3: datos de antena/posiciones
+            [["Antena","antena"], ["Detalle","detalle"], ["Lat","lat"], ["Long","long"], ["Azimut","azimut"], ["Celda","celda"], ["LAC","lac"]],
+            # Bloque 4: interacción + duración (SIN líneas separadas de Tel/Nombre Contacto)
+            [["Interacción","interaccion"], ["Duración","duracion"]]
+        ]
+    }
+}
+
+# === SECCIÓN: CONFIGURACIÓN Y SINÓNIMOS (carga CONFIG, construye RENAME_MAP) ===
+def cargar_config():
+    """Carga config.json; si no existe o falla, usa DEFAULT_CONFIG y garantiza claves mínimas."""
+    base = os.path.dirname(os.path.abspath(__file__))
+    ruta_cfg = os.path.join(base, "config.json")
+    try:
+        with open(ruta_cfg, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # merge superficial con defaults
+        cfg = DEFAULT_CONFIG.copy()
+        cfg.update(data or {})
+        # merge de sección kml
+        if "kml" in data:
+            cfg["kml"].update(data["kml"])
+        # Blindaje: asegurar que 'Alias' aparezca en el bloque 2 de la descripción
+        try:
+            desc = cfg["kml"]["description"]
+            if isinstance(desc, list) and len(desc) >= 2:
+                bloque2 = desc[1]  # Tel/IMEI/…
+                if isinstance(bloque2, list):
+                    etiquetas = [etq for etq, _ in bloque2 if isinstance(etq, str)]
+                    if "Alias" not in etiquetas:
+                        # Insertar después de IMEI (posición 2)
+                        bloque2.insert(2, ["Alias", "alias"])
+        except Exception:
+            pass
+        return cfg
+    except Exception:
+        return DEFAULT_CONFIG
+
+# === SINONIMOS: MERGE + PERSISTENCIA (inicio) ==============================
+import tempfile
+
+def _normalize_key_for_synonyms(s: str) -> str:
+    s = "" if s is None else str(s)
+    s = unicodedata.normalize('NFKD', s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    s = re.sub(r'\s+', ' ', s).strip().lower()
+    return s
+
+def cfg_build_rename_map(CONFIG: dict) -> dict:
+    """Construye el mapa de sinónimos de columnas a partir de CONFIG; normaliza y registra conteos."""
+    rename_map = {}
+    schema = (CONFIG or {}).get('schema', {})
+    fields = schema.get('fields', {}) if isinstance(schema, dict) else {}
+    for canonico, spec in (fields or {}).items():
+        sinos = set()
+        if isinstance(spec, dict):
+            for raw in spec.get('synonyms', []) or []:
+                sinos.add(_normalize_key_for_synonyms(raw))
+            sinos.add(_normalize_key_for_synonyms(canonico))
+        rename_map[canonico] = sinos
+    user_syn = (CONFIG or {}).get('synonyms_user', {}) or {}
+    for raw, mapped in user_syn.items():
+        if raw.startswith('_'):
+            continue
+        c_norm = _normalize_key_for_synonyms(mapped)
+        r_norm = _normalize_key_for_synonyms(raw)
+        if c_norm not in rename_map:
+            rename_map[c_norm] = set()
+        rename_map[c_norm].add(r_norm)
+    try: log(f"[synonyms] Construido rename_map: {sum(len(v) for v in rename_map.values())} entradas totales.")
+    except Exception: pass
+    return rename_map
+
+def _atomic_write_json(path: str, data: dict):
+    import json, os
+    from datetime import datetime
+    base_dir = os.path.dirname(os.path.abspath(path))
+    os.makedirs(base_dir, exist_ok=True)
+    try:
+        if os.path.exists(path):
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup = f"{path}.backup.{ts}.json"
+            with open(path, "r", encoding="utf-8") as fr, open(backup, "w", encoding="utf-8") as fw:
+                fw.write(fr.read())
+    except Exception:
+        pass
+    fd, tmp_path = tempfile.mkstemp(prefix="cfg_", suffix=".json", dir=base_dir)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, path)
+
+def cfg_add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cfg: str = None) -> dict:
+    if not isinstance(CONFIG, dict):
+        return CONFIG
+    canonico = (canonico or "").strip()
+    encabezado_crudo = (encabezado_crudo or "").strip()
+    if not canonico or not encabezado_crudo:
+        return CONFIG
+    if "synonyms_user" not in CONFIG or not isinstance(CONFIG["synonyms_user"], dict):
+        CONFIG["synonyms_user"] = {}
+    if encabezado_crudo not in CONFIG["synonyms_user"]:
+        CONFIG["synonyms_user"][encabezado_crudo] = canonico
+        try:
+            base = os.path.dirname(os.path.abspath(__file__))
+            ruta_cfg = ruta_cfg or os.path.join(base, "config.json")
+            _atomic_write_json(ruta_cfg, CONFIG)
+            try: log(f"[INFO][synonyms] Añadido '{encabezado_crudo}' → '{canonico}' (persistido en config.json).")
+            except Exception: pass
+        except Exception as e:
+            try: log(f"[WARN][synonyms] No se pudo guardar config.json: {e}")
+            except Exception: pass
+    return CONFIG
+# === SINONIMOS: MERGE + PERSISTENCIA (fin) =================================
+
+CONFIG = cargar_config()
+OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejecución)
+
+def _solicitar_color_tema(CONFIG):
+    """
+    Pide el color tema:
+      - Si existe style.palette en config.json, muestra un menú numerado.
+      - Acepta número (1..N), 0 = predeterminado, Enter = predeterminado.
+      - También acepta un HEX manual (#RRGGBB o RRGGBB).
+      - Actualiza CONFIG["style"]["theme_hex"] con la elección.
+    """
+    style = CONFIG.get("style", {}) if isinstance(CONFIG, dict) else {}
+    default_hex = style.get("theme_hex", "#ff00ff")
+    palette = style.get("palette") or []   # lista de [nombre, "#hex"]
+
+    # Construir el prompt
+    print("")  # pequeña separación visual
+    if palette:
+        print("Colores sugeridos (visibles en Google Earth):")
+        for i, item in enumerate(palette, start=1):
+            try:
+                nombre, hexv = item[0], item[1]
+            except Exception:
+                # por si el ítem no tiene la forma esperada
+                continue
+            print(f"  [{i}] {nombre}  {hexv}")
+        print(f"  [0] Usar el predeterminado ({default_hex})")
+
+        resp = input("Elegí número o pegá un HEX (Enter = predeterminado): ").strip()
+    else:
+        # Sin paleta configurada, conservamos el comportamiento clásico
+        resp = input(f"Ingresá color tema en hex (Enter = {default_hex}): ").strip()
+
+    # Normalizar elección
+    if resp == "":
+        elegido = default_hex
+    else:
+        # ¿opción numérica?
+        if resp.isdigit():
+            idx = int(resp)
+            if idx == 0 and palette:
+                elegido = default_hex
+            elif 1 <= idx <= len(palette):
+                elegido = str(palette[idx - 1][1]).strip()
+            else:
+                print("Opción fuera de rango; usaré el color predeterminado.")
+                elegido = default_hex
+        else:
+            # ¿HEX manual?
+            if re.fullmatch(r"#?[0-9a-fA-F]{6}", resp):
+                elegido = resp if resp.startswith("#") else f"#{resp}"
+            else:
+                print("Formato de color no válido; usaré el color predeterminado.")
+                elegido = default_hex
+
+    # Actualizar CONFIG y confirmar
+    style["theme_hex"] = elegido
+    CONFIG["style"] = style
+    print(f"Color tema: {elegido}")
+    return CONFIG
+
+
+    # Acepta #RRGGBB, RRGGBB, #RGB o RGB
+    if re.fullmatch(r'#?[0-9a-fA-F]{6}', resp) or re.fullmatch(r'#?[0-9a-fA-F]{3}', resp):
+        if not resp.startswith("#"):
+            resp = "#" + resp
+        style["theme_hex"] = resp
+        print(f"Color tema seleccionado: {resp}")
+    else:
+        print(f"Valor inválido. Se usará {pred}.")
+    return CONFIG
+
+# =========================
+# Geometría / KML helpers
+# =========================
+# --- Helpers de color KML (aabbggrr) desde #RRGGBB ---
+def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
+    """
+    Convierte '#RRGGBB' o 'RRGGBB' a 'aabbggrr' (KML).
+    alpha: 0-255 (0 = transparente, 255 = opaco)
+    """
+    s = (hex_rgb or "").strip().lstrip("#")
+    # Soporta forma corta #RGB
+    if len(s) == 3:
+        s = "".join(ch*2 for ch in s)
+    if len(s) != 6:
+        # fallback seguro (blanco opaco)
+        return "ffffffff"
+    try:
+        a = max(0, min(255, int(alpha)))
+    except Exception:
+        a = 255
+    rr, gg, bb = s[0:2], s[2:4], s[4:6]
+    # KML = AABBGGRR (ojo: orden BGR)
+    return f"{a:02x}{bb}{gg}{rr}".lower()
+
+def grados_a_radianes(grados: float) -> float:
+    return grados * math.pi / 180.0
+
+def calcular_punto_final(lat: float, lon: float, azimut: float, distancia_km: float):
+    """Calcula el punto final moviéndose 'distancia_km' desde (lat, lon) con rumbo 'azimut' (grados)."""
+    R = 6371.0  # Radio terrestre en km
+    lat_rad = grados_a_radianes(lat)
+    lon_rad = grados_a_radianes(lon)
+    azimut_rad = grados_a_radianes(azimut)
+
+    lat_final = math.asin(
+        math.sin(lat_rad) * math.cos(distancia_km / R)
+        + math.cos(lat_rad) * math.sin(distancia_km / R) * math.cos(azimut_rad)
+    )
+    lon_final = lon_rad + math.atan2(
+        math.sin(azimut_rad) * math.sin(distancia_km / R) * math.cos(lat_rad),
+        math.cos(distancia_km / R) - math.sin(lat_rad) * math.sin(lat_final)
+    )
+    return math.degrees(lat_final), math.degrees(lon_final)
+
+def generar_cono(kml: Kml, lat: float, lon: float, azimut: float, distancia_km: float, angulo_lateral: int, color: str):
+    """Genera un polígono tipo 'cono' centrado en (lat, lon), abierto en el azimut ± angulo_lateral."""
+    poligono = kml.newpolygon(name=f"Cono Azimut {azimut}°")
+    puntos_cono = []
+
+    for angulo in range(-angulo_lateral, angulo_lateral + 1, 5):
+        azimut_actual = azimut + angulo
+        lat_p, lon_p = calcular_punto_final(lat, lon, azimut_actual, distancia_km)
+        puntos_cono.append((lon_p, lat_p))
+
+    puntos_cono.append((lon, lat))  # cerrar polígono
+    poligono.outerboundaryis = puntos_cono
+
+    poligono.style.polystyle.color = color
+    poligono.style.polystyle.fill = 1
+    poligono.style.polystyle.outline = 1
+
+# =========================
+# Análisis de antenas (tolerante)
+# =========================
+def analizar_antenas(df: pd.DataFrame, archivo_salida: str):
+    resumen = []
+
+    if "antena" not in df.columns:
+        resumen.append("No se encontró la columna 'antena' tras la normalización de encabezados.\n")
+        resumen.append("Sugerencia: ajustar 'rename_map' para mapear el nombre real de la columna a 'antena'.\n\n")
+        try:
+            validas = df[(df.get("lat").notna()) & (df.get("long").notna())]
+            resumen.append(f"Filas con coordenadas no vacías: {len(validas)}\n")
+        except Exception:
+            pass
+        with open(archivo_salida, "w", encoding="utf-8") as f:
+            f.writelines(resumen)
+        return
+
+    conteo_antenas = df["antena"].value_counts(dropna=False)
+    top_5_antenas = conteo_antenas.head(5)
+
+    resumen.append("Top 5 Antenas más activadas:\n")
+    for antena, activaciones in top_5_antenas.items():
+        detalles = df[df["antena"] == antena].iloc[0]
+        resumen.append(
+            f"Antena: {antena}\n"
+            f"Activaciones: {activaciones}\n"
+            f"Latitud: {detalles.get('lat', 'Sin Inf.')}\n"
+            f"Longitud: {detalles.get('long', 'Sin Inf.')}\n"
+            f"Azimut: {detalles.get('azimut', 'Sin Inf.')}\n"
+        )
+
+        azimuts = df[df["antena"] == antena]["azimut"].value_counts(dropna=False)
+        resumen.append("  Desglose por azimut:\n")
+        for azimut, cantidad in azimuts.items():
+            resumen.append(f"    Azimut {azimut}: {cantidad} activaciones\n")
+        resumen.append("\n")
+
+        rangos_horarios = {
+        "Madrugada (00:00-05:59)": ("00:00:00", "05:59:59"),
+        "Mañana (06:00-11:59)": ("06:00:00", "11:59:59"),
+        "Tarde (12:00-17:59)": ("12:00:00", "17:59:59"),
+        "Noche (18:00-23:59)": ("18:00:00", "23:59:59"),
+    }
+
+
+    resumen.append("Activaciones por rango horario:\n")
+    if "hora" in df.columns:
+        df_hora = df.copy()
+        df_hora["hora"] = df_hora["hora"].astype(str).str[:8]
+    else:
+        df_hora = df.copy()
+        df_hora["hora"] = "Sin Inf."
+
+    for rango, (inicio, fin) in rangos_horarios.items():
+        if inicio < fin:
+            activaciones = df_hora[(df_hora["hora"] >= inicio) & (df_hora["hora"] <= fin)]
+        else:
+            activaciones = df_hora[(df_hora["hora"] >= inicio) | (df_hora["hora"] <= fin)]
+        resumen.append(f"{rango}: {len(activaciones)} activaciones\n")
+
+        if "antena" in activaciones.columns:
+            antenas_rango = activaciones["antena"].value_counts().head(3)
+            resumen.append(f"  Antenas más activas en {rango}:\n")
+            for antena, cantidad in antenas_rango.items():
+                detalles = df[df["antena"] == antena].iloc[0]
+                resumen.append(
+                    f"    Antena: {antena}, Activaciones: {cantidad}, "
+                    f"Latitud: {detalles.get('lat', 'Sin Inf.')}, "
+                    f"Longitud: {detalles.get('long', 'Sin Inf.')}\n"
+                )
+        resumen.append("\n")
+
+    with open(archivo_salida, "w", encoding="utf-8") as f:
+        f.writelines(resumen)
+
+# =========================
+# Burbuja condicional
+# =========================
+def _tiene_valor(v):
+    if v is None:
+        return False
+    try:
+        if isinstance(v, float) and math.isnan(v):
+            return False
+    except Exception:
+        pass
+    v_str = str(v).strip()
+    if v_str == "" or v_str.lower() in {"sin inf.", "sin inf", "s/i", "sininf", "none", "null", "n/a", "na", "--", "—"}:
+        return False
+    return True
+
+HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
+
+# --- Formateo para burbuja (números, decimales, duración) ---
+def _a_float(v):
+    try:
+        s = str(v).replace(",", ".")
+        f = float(s)
+        return f if math.isfinite(f) else None  # descarta inf y -inf
+    except Exception:
+        return None
+
+def _formatear_valor_para_burbuja(col, val):
+    """
+    Reglas:
+    - lat/long: 6 decimales
+    - azimut/lac: enteros (sin .0) si son numéricos; si no, se dejan tal cual
+    - celda: entero si es numérica; si es texto (p.ej. "C102"), se deja tal cual
+    - duracion: si es numérico -> "Xs"; si ya viene "HH:MM:SS", se deja tal cual; si no es numérico, se deja tal cual
+    - demás: tal cual
+    """
+    col = (col or "").strip().lower()
+    s = str(val).strip()
+
+    # lat/long -> 6 decimales
+    if col in {"lat", "long"}:
+        f = _a_float(val)
+        return None if f is None else f"{f:.6f}"
+
+    # azimut / lac -> enteros si son numéricos; si no, se deja el texto
+    if col in {"azimut", "lac"}:
+        f = _a_float(val)
+        return s if f is None else str(int(round(f)))
+
+    # celda -> entero si es numérico; si no, se deja el texto (p.ej., "C102")
+    if col == "celda":
+        f = _a_float(val)
+        return s if f is None else str(int(round(f)))
+
+    # imei -> cadena limpia sin .0 ni notación científica
+    if col == "imei":
+        s_clean = str(val).strip()
+        try:
+            # caso 123456789012345.0 -> 123456789012345
+            m = re.fullmatch(r'(\d+)\.0+', s_clean)
+            if m:
+                return m.group(1)
+            # caso notación científica: 3.579E14 -> 357900000000000
+            if re.fullmatch(r'\d+(?:\.\d+)?[eE][+-]?\d+', s_clean):
+                from decimal import Decimal
+                d = Decimal(s_clean)
+                s_clean = format(d, 'f').rstrip('0').rstrip('.')
+                return s_clean
+            # si ya son solo dígitos, devolver tal cual
+            if re.fullmatch(r'\d+', s_clean):
+                return s_clean
+        except Exception:
+            # ante cualquier cosa rara, devuelve lo que venga
+            return s_clean
+        return s_clean
+
+    # duracion -> si es numérica (segundos) => HH:MM:SS; si ya trae "HH:MM[:SS]" se deja
+    if col == "duracion":
+        if ":" in s:
+            return s
+        f = _a_float(val)
+        if f is None:
+            return s
+        f = int(round(f))
+        h = f // 3600
+        m = (f % 3600) // 60
+        sec = f % 60
+        return f"{h:02d}:{m:02d}:{sec:02d}"
+
+
+    # default: como string
+    return s
+
+# --- Descripción compacta para la burbuja ---
+def _armar_descripcion_compacta(campos: dict, count_azimut=None) -> str:
+    P = []
+    # Campos opcionales: omitir si faltan (sin "—")
+    def fmt(col):
+        v = campos.get(col, None)
+        if not _tiene_valor(v):
+            return None
+        return _formatear_valor_para_burbuja(col, v)
+
+    
+    # Fila 1: Fecha · Hora
+    f = fmt("fecha"); h = fmt("hora")
+    if f or h:
+        l1 = []
+        if f: l1.append(f"<b>Fecha:</b> {f}")
+        if h: l1.append(f"<b>Hora:</b> {h}")
+        P.append(" &middot; ".join(l1))
+        P.append(HR_COMPACT)
+
+
+    # Fila 2 + 3a + 3b: Número/IMEI + Alias/Usuario + Abonado (un solo separador al final)
+    grupo_identidad_tuvo_datos = False
+
+    # Fila 2: Número, IMEI
+    tel = campos.get("tel", None)
+    imei_fmt = fmt("imei")
+    l2 = []
+    if _tiene_valor(tel):
+        l2.append(f"<b>Número:</b> {str(tel).strip()}")
+    if imei_fmt:
+        l2.append(f"registrado en <b>IMEI:</b> {imei_fmt}")
+    if l2:
+        P.append(", ".join(l2))
+        grupo_identidad_tuvo_datos = True
+
+    # Fila 3a: Alias · Usuario
+    alias = campos.get("alias", None)
+    usuario = campos.get("usuario", None)
+    l3a = []
+    if _tiene_valor(alias):
+        l3a.append(f"<b>Alias:</b> {str(alias).strip()}")
+    if _tiene_valor(usuario):
+        l3a.append(f"<b>Usuario:</b> {str(usuario).strip()}")
+    if l3a:
+        P.append(" &middot; ".join(l3a))
+        grupo_identidad_tuvo_datos = True
+
+    # Fila 3b: Abonado
+    abon = campos.get("abonado", None)
+    if _tiene_valor(abon):
+        P.append(f"<b>Abonado:</b> {str(abon).strip()}")
+        grupo_identidad_tuvo_datos = True
+
+    # Separador del grupo identidad (si hubo algo)
+    if grupo_identidad_tuvo_datos:
+        P.append(HR_COMPACT)
+
+    # Fila 4: Antena (COMPLETA) + Ubicación + Radio (fusionado)
+    ant_full = campos.get("antena_completa", None)
+    ant_titulo = campos.get("antena", None)
+    ant_line = ant_full if _tiene_valor(ant_full) else ant_titulo
+
+    lat = fmt("lat"); lon = fmt("long")
+    az  = fmt("azimut")
+    # Fallback: si 'azimut' de la fila vino vacío o no se pudo formatear,
+    # usa el azimut ENTERO ya normalizado que traemos en 'azimut_i'
+    if not az and campos.get("azimut_i") is not None:
+        try:
+            az = str(int(campos["azimut_i"]))
+        except Exception:
+            az = str(campos["azimut_i"])
+    celda = fmt("celda"); lac = fmt("lac")
+
+    l4 = []
+    if _tiene_valor(ant_line):
+        l4.append(f"<b>Antena:</b> {str(ant_line).strip()}")
+    if lat:  l4.append(f"<b>Lat:</b> {lat}")
+    if lon:  l4.append(f"<b>Long:</b> {lon}")
+    if az:
+        az_txt = f"<b>Azimut:</b> {az}°"
+        if count_azimut is not None:
+            try:
+                nveces = int(count_azimut)
+            except Exception:
+                nveces = count_azimut
+            az_txt += f" (<b>{nveces} veces</b>)"
+        l4.append(az_txt)      
+    if celda: l4.append(f"<b>Celda:</b> {celda}")
+    if lac:   l4.append(f"<b>LAC:</b> {lac}")
+    seccion_ubicacion_tuvo_datos = False
+    if l4:
+        P.append(", ".join(l4))
+        seccion_ubicacion_tuvo_datos = True
+
+        # Dirección (opcional, debajo de Fila 4)
+    direccion = fmt("direccion")
+    if direccion is not None:
+        P.append(f"<b>Dirección:</b> {direccion}")
+        seccion_ubicacion_tuvo_datos = True
+
+
+    # Separador tras ubicación/dirección (si hubo algo)
+    if seccion_ubicacion_tuvo_datos:
+        P.append(HR_COMPACT)
+
+
+        # Fila 5: Interacción — contacto · Duración
+    inter = fmt("interaccion")
+    telc  = fmt("tel_contacto")
+    dur   = fmt("duracion")
+    l5 = []
+
+    if inter is not None:
+        t = f"<b>Interacción:</b> {inter}"
+        # Solo agregamos el tel_contacto si NO es "—"
+        if (telc is not None) and (str(telc).strip() != "—"):
+            t += f" — {str(telc).strip()}"
+        l5.append(t)
+
+    if dur:
+        l5.append(f"<b>Duración:</b> {dur}")
+
+    if l5:
+
+        P.append(" &middot; ".join(l5))
+
+    return "<br>".join(P)
+
+def _agregar_bloque(partes, fila, pares):
+    bloque = []
+    for etiqueta, col in pares:
+        val = fila.get(col, None)
+        if _tiene_valor(val):
+            # Caso especial: Interacción + número de contacto en la misma línea (si existe)
+            if col == "interaccion":
+                val_fmt = _formatear_valor_para_burbuja(col, val)
+                extra = ""
+                telc = fila.get("tel_contacto", None)
+                if _tiene_valor(telc):
+                    extra = f" — {str(telc).strip()}"
+                bloque.append(f"<b>{etiqueta}:</b> {val_fmt}{extra}<br>")
+                continue
+
+            # Resto de columnas (con formateo)
+            val_fmt = _formatear_valor_para_burbuja(col, val)
+            if val_fmt is None or (isinstance(val_fmt, str) and not val_fmt.strip()):
+                continue
+            bloque.append(f"<b>{etiqueta}:</b> {val_fmt}<br>")
+    if bloque:
+        partes.extend(bloque)
+        partes.append("<hr>")
+
+# =========================
+# Generación de KML (usa CONFIG)
+# =========================
+def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_float, CONFIG, azimuts_extra=None):
+    # --- Sanitizar descripción: omitir campos vacíos o marcadores “sin valor” ---
+    # Afecta todas las capas que llamen a _crear_feature_kml (por_rango_horario, top_3_*, etc.)
+    try:
+        if descripcion:
+            parts = re.split(r'<br\s*/?>', str(descripcion))
+
+            # 1) Omitir líneas vacías / marcadores
+            parts = [
+                p for p in parts
+                if p and p.strip() and not any(tok in p for tok in (
+                    "> SinInf", "> Sin Inf.", "> None", "> nan", "> NaN"
+                ))
+            ]
+
+            # 2) Normalizar IDs (TEL/IMEI): quitar .0 al final del número
+            def _fix_id_line(s: str) -> str:
+                if ("<b>IMEI" in s) or ("<b>Número" in s) or ("<b>Numero" in s):
+                    return re.sub(r'(\d+)\.0\b', r'\1', s)
+                return s
+
+            parts = [_fix_id_line(p) for p in parts]
+            descripcion = "<br>".join(parts)
+    except Exception:
+        pass
+
+    # --- Normalizar y validar azimut (permitir 0°) ---
+    try:
+        az = float(azimut_float)
+    except Exception:
+        return  # no dibujar si no es numérico
+    if isinstance(az, float) and math.isnan(az):
+        return
+    # Llevar a [0, 360)
+    az = az % 360.0
+    az_int = int(round(az)) % 360
+
+    """
+    Crea el punto + (opcional) línea y cono con estilos REUSABLES en un solo lugar.
+    - Color/estilo se toma de CONFIG['style'] si existe; si no, usa defaults.
+    - Reutiliza estilos (pin/linea/cono) para hacer el KML más liviano.
+    """
+    import simplekml as sk
+
+    # Fallback local por si _hex_to_kml_color no está definido en el módulo
+    try:
+        _hex_to_kml_color
+    except NameError:
+        def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
+            s = (hex_rgb or "").strip().lstrip("#")
+            if len(s) == 3:
+                s = "".join(ch*2 for ch in s)
+            if len(s) != 6:
+                return "ffffffff"
+            try:
+                a = max(0, min(255, int(alpha)))
+            except Exception:
+                a = 255
+            rr, gg, bb = s[0:2], s[2:4], s[4:6]
+            return f"{a:02x}{bb}{gg}{rr}".lower()
+
+    # ---------- 1) Inicializar estilos reusables 1 sola vez ----------
+    global _REUSABLE_STYLES
+    if "_REUSABLE_STYLES" not in globals():
+        _REUSABLE_STYLES = None
+
+    if _REUSABLE_STYLES is None:
+        style_cfg = {}
+        try:
+            style_cfg = CONFIG.get("style", {}) if isinstance(CONFIG, dict) else {}
+        except Exception:
+            style_cfg = {}
+        theme_hex = style_cfg.get("theme_hex", "#ff00ff")
+        pin_scale = style_cfg.get("pin_scale", 1.1)
+        line_width = style_cfg.get("line_width", 5)
+        cone_opac = style_cfg.get("cone_opacity", 0.35)
+
+        # Colores KML (AABBGGRR)
+        pin_color  = _hex_to_kml_color(theme_hex, 255)
+        line_color = _hex_to_kml_color(theme_hex, 255)
+        cone_color = _hex_to_kml_color(theme_hex, int(max(0, min(1.0, float(cone_opac))) * 255))
+
+        # Estilo del PIN
+        s_pin = sk.Style()
+        s_pin.iconstyle.color = pin_color
+        s_pin.iconstyle.scale = pin_scale
+        s_pin.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/paddle/wht-blank.png"
+        s_pin.labelstyle.color = pin_color
+
+        # Estilo de la LÍNEA
+        s_line = sk.Style()
+        s_line.linestyle.color = line_color
+        s_line.linestyle.width = line_width
+
+        # Estilo del CONO (polígono)
+        s_cone = sk.Style()
+        s_cone.polystyle.color = cone_color
+        s_cone.polystyle.fill = 1
+        s_cone.polystyle.outline = 1
+
+        _REUSABLE_STYLES = {
+            "pin": s_pin,
+            "line": s_line,
+            "cone": s_cone,
+        }
+
+    # ---------- 2) Crear el punto ----------
+    p = container.newpoint(name=nombre_punto, coords=[(lon, lat)])
+    if descripcion:
+        p.description = f'<div style="line-height:1.10; font-size:14px">{descripcion}</div>'
+    p.style = _REUSABLE_STYLES["pin"]
+
+    # ---------- 3) Si hay azimut, dibujar LÍNEA y CONO con estilos ----------
+    try:
+        az = float(azimut_float) if azimut_float is not None else float("nan")
+    except Exception:
+        az = float("nan")
+
+    if not (isinstance(az, float) and math.isnan(az)):
+        # Distancia y ángulo del cono (defaults si CONFIG no trae)
+        try:
+            az_dist_km = CONFIG.get("kml", {}).get("azimuth_km", 1.5)
+            cone_half  = CONFIG.get("kml", {}).get("cone", {}).get("half_degrees", 35)
+        except Exception:
+            az_dist_km = 1.5
+            cone_half = 35
+
+        # Calcular punto final de la línea de azimut
+        latf, lonf = calcular_punto_final(lat, lon, az, float(az_dist_km))
+
+        # LÍNEA
+        linea = container.newlinestring(
+            name=f"Azimut {int(round(az))}°",
+            coords=[(lon, lat), (lonf, latf)]
+        )
+        linea.style = _REUSABLE_STYLES["line"]
+
+        # CONO (polígono)
+        coords_cono = []
+        paso = 5
+        for ang in range(-int(cone_half), int(cone_half) + 1, paso):
+            lat_p, lon_p = calcular_punto_final(lat, lon, az + ang, float(az_dist_km))
+            coords_cono.append((lon_p, lat_p))
+        coords_cono.append((lon, lat))
+        pol = container.newpolygon(name=f"Cono Azimut {int(round(az))}°")
+        pol.outerboundaryis = coords_cono
+        pol.style = _REUSABLE_STYLES["cone"]
+        
+        # --- Azimuts secundarios (línea y cono; mismo pin) ---
+        if azimuts_extra:
+            for az_s in azimuts_extra:
+                try:
+                    az_s = float(az_s)
+                except:
+                    continue
+
+                # Línea secundaria
+                latf2, lonf2 = calcular_punto_final(lat, lon, az_s, float(az_dist_km))
+                linea2 = container.newlinestring(
+                    name=f"Azimut {int(round(az_s))}° (sec.)",
+                    coords=[(lon, lat), (lonf2, latf2)]
+                )
+                linea2.style = _REUSABLE_STYLES["line"]  # si querés, luego la hacemos más tenue
+
+                # Cono secundario
+                coords_cono2 = []
+                paso = 5
+                for ang in range(-int(cone_half), int(cone_half) + 1, paso):
+                    lat_p2, lon_p2 = calcular_punto_final(lat, lon, az_s + ang, float(az_dist_km))
+                    coords_cono2.append((lon_p2, lat_p2))
+                coords_cono2.append((lon, lat))
+
+                pol2 = container.newpolygon(name=f"Cono Azimut {int(round(az_s))}° (sec.)")
+                pol2.outerboundaryis = coords_cono2
+                pol2.style = _REUSABLE_STYLES["cone"]  # luego bajamos opacidad si querés
+
+# === SECCIÓN: GENERACIÓN KML/KMZ (placemarks, carpetas, top_n, estilos) ===
+def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
+    """Genera KML/KMZ a partir del DataFrame procesado según la configuración activa."""
+    from collections import Counter, defaultdict  # import local para no tocar la cabecera
+    kml = Kml()
+    descartadas = 0
+
+    # 1) Fecha/Hora tolerantes (sin warning)
+    if "fecha" in df.columns:
+        try:
+            df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce", dayfirst=True).dt.strftime("%d/%m/%Y")
+        except Exception:
+            df["fecha"] = "Sin Inf."
+    else:
+        df["fecha"] = "Sin Inf."
+
+    if "hora" in df.columns:
+        try:
+            df["hora"] = df["hora"].astype(str).str[:8]
+        except Exception:
+            df["hora"] = "Sin Inf."
+    else:
+        df["hora"] = "Sin Inf."
+
+    # 2) Orden si se puede
+    try:
+        df = df.sort_values(by=["fecha", "hora"])
+    except Exception:
+        pass
+
+    # 3) Preparar descripción por fila y normalizar azimut a ENTERO
+    desc_spec = CONFIG["kml"]["description"]
+    items = []  # elementos base para recrear puntos en varias carpetas
+
+    for _, row in df.iterrows():
+    # Coordenadas válidas
+            # Coordenadas válidas (numéricas y en rango)
+        lat_raw = row.get("lat", None); lon_raw = row.get("long", None)
+        if lat_raw in ("Sin Inf.", "S/I", None, "") or lon_raw in ("Sin Inf.", "S/I", None, ""):
+            continue
+        try:
+            lat = float(lat_raw)
+            lon = float(lon_raw)
+        except Exception:
+            continue
+
+        # Descartar (0,0) y fuera de rango
+        if (abs(lat) < 1e-9 and abs(lon) < 1e-9):
+            continue
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            continue
+
+        # Azimut (puede faltar). Guardamos float y ENTERO para dedup.
+
+        azimut_float = None
+        azimut_int = None
+        try:
+            az = row.get("azimut", None)
+            if az is not None and str(az).strip() not in {"", "Sin Inf.", "S/I"}:
+                azimut_float = float(az)
+                azimut_int = int(round(azimut_float))
+        except Exception:
+            azimut_float = None
+            azimut_int = None
+
+        # Nombre y descripción
+        nombre_punto = row.get("antena", "Antena") if str(row.get("antena", "")).strip() else "Antena"
+        partes = []
+        for bloque in desc_spec:
+            _agregar_bloque(partes, row, [(etq, col) for etq, col in bloque])
+        if partes and partes[-1] == "<hr>":
+            partes.pop()
+        descripcion = "\n".join(partes) if partes else None
+
+        # Clasificación por rango horario (Preset A SV)
+        rango = _clasificar_rango_sv(row.get("hora", None))
+
+        items.append({
+            "antena": nombre_punto,
+            "antena_completa": row.get("antena", None),
+
+            "lon": lon, "long": lon, "lat": lat,
+            "azimut_f": azimut_float,   # para dibujar línea/cono
+            "azimut_i": azimut_int,     # para deduplicar y mostrar
+            "rango": rango,
+
+            # Identidad
+            "alias": row.get("alias", None),
+            "usuario": row.get("usuario", None),
+            "abonado": row.get("abonado", None),
+
+            # Contacto principal
+            "tel": row.get("tel", None),
+            "imei": row.get("imei", None),
+
+            # B-party / destino
+            "tel_contacto": row.get("tel_contacto", row.get("contacto", None)),
+
+            # Temporal
+            "fecha": row.get("fecha", None),
+            "hora": row.get("hora", None),
+
+            # Red / radio
+            "azimut": row.get("azimut", None),
+            "celda": row.get("celda", None),
+            "lac": row.get("lac", None),
+
+            # Dirección / detalle
+            "direccion": row.get("direccion", row.get("detalle", None)),
+
+            # Evento
+            "interaccion": row.get("interaccion", None),
+            "duracion": row.get("duracion", None),
+
+            # Compatibilidad (por ahora no se usa; no estorba)
+            "desc": descripcion,
+        })
+
+
+    # 4) Estructura de salida: plana (flat=True) o por carpetas (default)
+    pair_counter_all = Counter((it["antena"], it["azimut_i"]) for it in items)
+
+    if flat:
+        # --- Modo plano: todo colgado de la raíz (sin subcarpetas) ---
+        for it in items:
+            n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
+            desc_comp = _armar_descripcion_compacta(it, n_all)
+            _crear_feature_kml(kml, it["antena"], it["lon"], it["lat"], desc_comp, it["azimut_f"], CONFIG)
+
+        # === GUARDAR SALIDAS (KMZ en misma carpeta; KML opcional) — INICIO ===
+        solo_kmz = bool(CONFIG.get("salida", {}).get("solo_kmz", False))
+
+        # Escribir KML solo si NO está activado solo_kmz
+        if not solo_kmz:
+            try:
+                kml.save(archivo_salida_kml)
+            except Exception:
+                pass
+
+        # KMZ siempre junto al archivo base, sin subcarpetas
+        try:
+            kmz_path = os.path.splitext(archivo_salida_kml)[0] + ".kmz"
+            kml.savekmz(kmz_path)
+        except Exception:
+            pass
+
+        # Nota: mantenemos el retorno original para no romper llamadas aguas arriba
+        return archivo_salida_kml, descartadas
+        # === GUARDAR SALIDAS — FIN ===
+
+
+    # --- Estructura por carpetas (comportamiento existente) ---
+    nombre_raiz = os.path.splitext(os.path.basename(archivo_salida_kml))[0]
+    raiz = kml.newfolder(name=nombre_raiz)
+
+    f_todas = raiz.newfolder(name="todas_las_antenas")
+    folders_por_fecha = {}
+
+    def obtener_carpeta_fecha(fecha_dt):
+        from datetime import datetime
+        if isinstance(fecha_dt, str):
+            try:
+                fecha_dt = datetime.fromisoformat(fecha_dt)
+            except Exception:
+                try:
+                    fecha_dt = datetime.strptime(fecha_dt, "%d/%m/%Y")
+                except:
+                    fecha_dt = datetime.strptime(fecha_dt, "%Y-%m-%d")
+        fecha_str = f"{fecha_dt.timetuple().tm_yday:03d}-{fecha_dt.strftime('%Y-%m-%d')}"
+        if fecha_str not in folders_por_fecha:
+            folders_por_fecha[fecha_str] = f_todas.newfolder(name=fecha_str)
+        return folders_por_fecha[fecha_str]
+
+    f_rangos = raiz.newfolder(name="por_rango_horario")
+    rango_folders = {
+        "manana":    f_rangos.newfolder(name=RANGOS_SV["manana"][0]),
+        "tarde":     f_rangos.newfolder(name=RANGOS_SV["tarde"][0]),
+        "noche":     f_rangos.newfolder(name=RANGOS_SV["noche"][0]),
+        "madrugada": f_rangos.newfolder(name=RANGOS_SV["madrugada"][0]),
+    }
+    f_top_global = raiz.newfolder(name="top_3_las_mas_activadas")
+    f_top_por_rango = raiz.newfolder(name="top_3_por_rango")
+    top_rango_folders = {
+        "manana":    f_top_por_rango.newfolder(name=RANGOS_SV["manana"][0]),
+        "tarde":     f_top_por_rango.newfolder(name=RANGOS_SV["tarde"][0]),
+        "noche":     f_top_por_rango.newfolder(name=RANGOS_SV["noche"][0]),
+        "madrugada": f_top_por_rango.newfolder(name=RANGOS_SV["madrugada"][0]),
+    }
+
+    # 5) Siempre TODO en "todas_las_antenas" (sin deduplicar)
+    from datetime import datetime
+
+    # --- Crear carpetas por fecha en orden cronológico ---
+    fechas_unicas = sorted({datetime.strptime(it["fecha"], "%Y-%m-%d") if "-" in it["fecha"] else datetime.strptime(it["fecha"], "%d/%m/%Y") for it in items})
+    for fch in fechas_unicas:
+        obtener_carpeta_fecha(fch)
+
+    for it in items:
+        n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
+        desc_comp = _armar_descripcion_compacta(it, n_all)
+        _crear_feature_kml(obtener_carpeta_fecha(it["fecha"]), it["antena"], it["lon"], it["lat"], desc_comp, it["azimut_f"], CONFIG)
+
+    # 6) Preparar contadores para deduplicación por (antena, azimut ENTERO)
+    pair_global = Counter((it["antena"], it["azimut_i"]) for it in items)
+    ant_global = Counter(it["antena"] for it in items)
+
+    items_by_rango = defaultdict(list)
+    for it in items:
+        if it["rango"] in rango_folders:
+            items_by_rango[it["rango"]].append(it)
+    pair_por_rango = {r: Counter((it["antena"], it["azimut_i"]) for it in lst) for r, lst in items_by_rango.items()}
+    ant_por_rango  = {r: Counter(it["antena"] for it in lst) for r, lst in items_by_rango.items()}
+
+    # Helper interno para crear con dedup + contador en burbuja
+    def _crear_dedup(container, iterable, pair_counter):
+        # Agrupar por (antena, lat, lon)
+        grupos = {}
+        for it in iterable:
+            key = (it["antena"], it["lat"], it["lon"])
+            az = str(it.get("azimut_f", "SinInf")).strip()
+            if key not in grupos:
+                grupos[key] = {"items": [], "azimuts": {}, "antena": it["antena"], "lat": it["lat"], "lon": it["lon"]}
+            grupos[key]["items"].append(it)
+            grupos[key]["azimuts"][az] = grupos[key]["azimuts"].get(az, 0) + 1
+
+        # Crear un solo pin por antena
+        for (antena, lat, lon), datos in grupos.items():
+            total = sum(datos["azimuts"].values())
+            az_principal = max(datos["azimuts"], key=datos["azimuts"].get)
+            az_sec = [az for az, _c in sorted(datos["azimuts"].items(), key=lambda t: t[1], reverse=True) if az != az_principal]
+            cuenta_principal = datos["azimuts"][az_principal]
+            secundarios = [f"{az}° ({c})" for az, c in datos["azimuts"].items() if az != az_principal]
+
+            # --- Normalización de claves y valores (tolerante a NaN, espacios y tildes) ---
+            def _sin_tildes(s):
+                return (s.replace("á","a").replace("é","e").replace("í","i")
+                        .replace("ó","o").replace("ú","u").replace("Á","A")
+                        .replace("É","E").replace("Í","I").replace("Ó","O")
+                        .replace("Ú","U").replace("ñ","n").replace("Ñ","N"))
+
+            def _norm_key(k):
+                return _sin_tildes(str(k).strip().lower())
+
+            def _norm_val(v):
+                try:
+                    # cubre None, NaN y strings vacíos
+                    if v is None: return "SinInf"
+                    if isinstance(v, float) and math.isnan(v): return "SinInf"
+                    s = str(v).strip()
+                    return "SinInf" if s == "" or s.lower() == "nan" else s
+                except:
+                    s = str(v).strip()
+                    return "SinInf" if s == "" else s
+
+            def getv_group(*cands):
+                cand_norm = [_norm_key(c) for c in cands]
+                for it_row in datos["items"]:
+                    row = {_norm_key(k): _norm_val(v) for k, v in it_row.items()}
+                    for cn in cand_norm:
+                        val = row.get(cn, "SinInf")
+                        if val != "SinInf":
+                            return val
+                return "SinInf"
+
+            numero   = getv_group('tel','numero','msisdn_origen','msisdn','telefono')
+            imei     = getv_group('imei','imei_origen')
+            alias    = getv_group('alias','alias_usuario')
+            usuario  = getv_group('nombre_usuario','usuario')
+            abonado  = getv_group('abonado','nombre_abonado')
+            celda    = getv_group('cod_celda_inicial','celda')
+            direccion= getv_group('ubicacion_inicio','direccion')
+
+            # --- Formato limpio de azimuts (sin .0) ---
+            def _fmt_az(v):
+                try:
+                    f = float(v)
+                    return str(int(f)) if f.is_integer() else str(f).rstrip('0').rstrip('.')
+                except:
+                    return str(v)
+
+            az_p_disp = _fmt_az(az_principal)
+
+            # secundarios ordenados por conteo, excluyendo el principal
+            secundarios_text = ", ".join(f"{_fmt_az(a)}° ({c})"
+                                        for a, c in sorted(((a, c) for a, c in datos["azimuts"].items() if a != az_principal),
+                                                            key=lambda t: t[1], reverse=True))
+
+            desc_core = f"""
+    <b>Total de activaciones:</b> {total}<br>
+    <hr>
+    <b>Número:</b> {numero}<br>
+    <b>IMEI:</b> {imei}<br>
+    <b>Alias:</b> {alias}<br>
+    <b>Usuario:</b> {usuario}<br>
+    <b>Abonado:</b> {abonado}<br>
+    <hr>
+    <b>Lat:</b> {lat} &nbsp; <b>Long:</b> {lon}<br>
+    <b>Celda:</b> {celda}<br>
+    <b>Dirección:</b> {direccion}<br>
+    <hr>
+    <b>Azimut principal:</b> {az_p_disp}° ({cuenta_principal} veces)<br>
+    <b>Azimuts secundarios:</b> {secundarios_text if secundarios_text else 'Ninguno'}
+    """
+
+            _crear_feature_kml(container, antena, lon, lat, desc_core, az_principal, CONFIG, azimuts_extra=az_sec)
+
+    # 7) Por rango horario (deduplicado por antena+azimut ENTERO)
+    for clave, folder in rango_folders.items():
+        lst = items_by_rango.get(clave, [])
+        if lst:
+            _crear_dedup(folder, lst, pair_por_rango.get(clave, {}))
+
+    # 8) Top 3 Global (por antena), deduplicando por azimut ENTERO
+    top3_global = ant_global.most_common(3)
+    for i, (ant, _) in enumerate(top3_global, start=1):
+        sub = f_top_global.newfolder(name=f"{i}_{ant}")
+        lst = [it for it in items if it["antena"] == ant]
+        _crear_dedup(sub, lst, pair_global)
+
+    # 9) Top 3 por rango (por antena), deduplicando por azimut ENTERO
+    for clave, padre in top_rango_folders.items():
+        c = ant_por_rango.get(clave, None)
+        if not c:
+            continue
+        top3_r = c.most_common(3)
+        items_r = items_by_rango.get(clave, [])
+        for i, (ant, _) in enumerate(top3_r, start=1):
+            sub = padre.newfolder(name=f"{i}_{ant}")
+            lst = [it for it in items_r if it["antena"] == ant]
+            _crear_dedup(sub, lst, pair_por_rango.get(clave, {}))
+
+    # 10) Guardar (KMZ en misma carpeta; KML opcional)
+    solo_kmz = bool(CONFIG.get("salida", {}).get("solo_kmz", False))
+
+    if not solo_kmz:
+        try:
+            kml.save(archivo_salida_kml)
+        except Exception:
+            pass
+
+    try:
+        kmz_path = os.path.splitext(archivo_salida_kml)[0] + ".kmz"
+        kml.savekmz(kmz_path)
+    except Exception:
+        pass
+
+    # Conservamos el mismo contrato de retorno
+    return archivo_salida_kml, descartadas
+
+
+HTML_SECCION_INTERACCIONES = ""
+HTML_SECCION_ANTENAS = ""
+# === HTML-INTERACCIONES-1 (inicio) ========================================
+def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
+    """
+    Construye una sección HTML con 'Interacciones de los últimos N días registrados en bitácora'.
+    - Subsecciones por fecha (dd/mm/aaaa), orden: más reciente -> más antiguo.
+    - Por cada fecha: tabla por contacto con #interacciones, duración acumulada, antena top y sus coords/azimut.
+    - Si una fecha no tiene antenas válidas: muestra nota.
+    """
+
+    # Helpers
+    def _pick_col(df, candidatos):
+        for c in candidatos:
+            if c in df.columns:
+                return c
+        return None
+
+    def _to_datetime_series(df):
+        # Intento 1: combinación fecha + hora
+        if 'fecha' in df.columns and 'hora' in df.columns:
+            try:
+                return pd.to_datetime(df['fecha'].astype(str).str.strip() + ' ' + df['hora'].astype(str).str.strip(),
+                                      dayfirst=True, errors='coerce')
+            except Exception:
+                pass
+        # Intento 2: columnas comunes
+        for c in ['datetime', 'fecha_hora', 'timestamp', 'fec_hor', 'fechaHora']:
+            if c in df.columns:
+                s = pd.to_datetime(df[c], dayfirst=True, errors='coerce')
+                if s.notna().any():
+                    return s
+        # Intento 3: solo fecha
+        if 'fecha' in df.columns:
+            s = pd.to_datetime(df['fecha'], dayfirst=True, errors='coerce')
+            return s
+        return pd.Series(pd.NaT, index=df.index)
+
+    def _fmt_hms(total_seconds):
+        try:
+            total_seconds = float(total_seconds)
+        except Exception:
+            return "00:00:00"
+        if np.isnan(total_seconds):
+            return "00:00:00"
+        total_seconds = int(round(total_seconds))
+        h = total_seconds // 3600
+        m = (total_seconds % 3600) // 60
+        s = total_seconds % 60
+        return f"{h:02d}:{m:02d}:{s:02d}"
+
+    # Column mapping
+    columnas_config = columnas_config or {}
+    col_contacto = _pick_col(df, [
+        columnas_config.get('tel_contacto', 'tel_contacto'),
+        columnas_config.get('destino', 'destino'),
+        columnas_config.get('b_party', 'b_party'),
+        columnas_config.get('to', 'to'),
+        columnas_config.get('callee', 'callee'),
+        columnas_config.get('contacto', 'contacto'),
+    ]) or 'tel_contacto'  # si no existe, más abajo se maneja
+
+    col_duracion = _pick_col(df, [
+        columnas_config.get('duracion', 'duracion'),
+        'dur', 'duration', 'segundos', 'tiempo'
+    ])
+    col_antena = _pick_col(df, [
+        columnas_config.get('antena', 'antena'),
+        'nombre_antena', 'site_name', 'cell_name'
+    ])
+    col_lat = _pick_col(df, [
+        columnas_config.get('lat', 'lat'),
+        'latitud', 'latitude'
+    ])
+    col_long = _pick_col(df, [
+        columnas_config.get('long', 'long'),
+        'lon', 'longitud', 'lng', 'longitude'
+    ])
+    col_azimut = _pick_col(df, [
+        columnas_config.get('azimut', 'azimut'),
+        'azimuth', 'azi', 'angulo'
+    ])
+
+    # === TOP-ANTENA-1A: bbox y validadores de coordenadas ===
+    # Intentar leer bounding box (SV) desde config; si no, usar fallback
+    try:
+        _bbox_cfg = None
+        if 'CONFIG' in globals() and isinstance(CONFIG, dict):
+            _bbox_cfg = CONFIG.get("geografia", {}).get("sv_bbox", None)
+    except Exception:
+        _bbox_cfg = None
+
+    if not (isinstance(_bbox_cfg, dict) and all(k in _bbox_cfg for k in ("lat_min","lat_max","lon_min","lon_max"))):
+        # Aproximación para El Salvador
+        _bbox_cfg = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
+
+    def _valid_latlon_vals(lt, lg):
+        """True si lat/lon son numéricas, no NaN, no (0,0) y dentro del bbox SV."""
+        try:
+            lt = float(lt); lg = float(lg)
+            if np.isnan(lt) or np.isnan(lg):
+                return False
+            if abs(lt) < 1e-9 and abs(lg) < 1e-9:
+                return False
+            return (_bbox_cfg["lat_min"] <= lt <= _bbox_cfg["lat_max"]) and (_bbox_cfg["lon_min"] <= lg <= _bbox_cfg["lon_max"])
+        except Exception:
+            return False
+
+    def _es_valida_latlon_row(row):
+        """Versión por fila: usa nombres de columnas detectados arriba."""
+        if col_lat and col_long and (col_lat in row) and (col_long in row):
+            return _valid_latlon_vals(row[col_lat], row[col_long])
+        return False
+    # === TOP-ANTENA-1A (fin) ===
+
+    # Si no hay df razonable, retorna vacío (no rompe HTML)
+    if df is None or df.empty:
+        return ""
+
+    # Construcción de datetime y fecha
+    dt = _to_datetime_series(df)
+    df_local = df.copy()
+    df_local['_dt'] = dt
+    df_local['_fecha'] = df_local['_dt'].dt.date
+    df_local = df_local[df_local['_fecha'].notna()]
+    if df_local.empty:
+        return ""
+
+    # Últimos N días distintos a partir del máximo
+    fechas_ord = sorted(df_local['_fecha'].dropna().unique().tolist(), reverse=True)
+    if not fechas_ord:
+        return ""
+    # Configurable por CONFIG si existe
+    try:
+        if 'CONFIG' in globals() and isinstance(CONFIG, dict):
+            dias_cfg = CONFIG.get("html", {}).get("interacciones_ultimos_dias", None)
+            if isinstance(dias_cfg, int) and dias_cfg > 0:
+                dias = dias_cfg
+    except Exception:
+        pass
+    fechas_sel = fechas_ord[:dias]
+
+    # Si no hay columna de contacto, crea una genérica SIN DETERMINAR
+    if col_contacto not in df_local.columns:
+        df_local['_contacto'] = 'SIN DETERMINAR'
+    else:
+        df_local['_contacto'] = df_local[col_contacto].fillna('SIN DETERMINAR').astype(str).str.strip()
+        df_local.loc[df_local['_contacto'] == '', '_contacto'] = 'SIN DETERMINAR'
+
+    # Duración en segundos: si viene string tipo hh:mm:ss, conviértelo
+    if col_duracion and col_duracion in df_local.columns:
+        ser_dur = df_local[col_duracion]
+        if pd.api.types.is_numeric_dtype(ser_dur):
+            df_local['_dur_sec'] = pd.to_numeric(ser_dur, errors='coerce').fillna(0)
+        else:
+            # Parse formatos comunes
+            def _parse_dur(x):
+                x = str(x).strip()
+                if not x or x.lower() in ('nan', 'none'):
+                    return 0
+                if x.isdigit():
+                    return float(x)
+                parts = x.split(':')
+                try:
+                    parts = [int(p) for p in parts]
+                    if len(parts) == 3:
+                        return parts[0]*3600 + parts[1]*60 + parts[2]
+                    if len(parts) == 2:
+                        return parts[0]*60 + parts[1]
+                except Exception:
+                    pass
+                return 0
+            df_local['_dur_sec'] = ser_dur.map(_parse_dur)
+    else:
+        df_local['_dur_sec'] = 0
+
+    # HTML build
+    out = []
+    out.append('<section id="interacciones-recientes">')
+    out.append('<h2>Interacciones de los últimos días registrados en bitácora</h2>')
+    out.append(f'<p>Nota: En esta sección se muestra el consolidado de interacciones salientes y entrantes de los ultimos <strong>{len(fechas_sel)}</strong> día(s) que registra la bitácora.</p>')
+
+    # Recorre fechas seleccionadas
+    for d in fechas_sel:
+        df_d = df_local[df_local['_fecha'] == d]
+        # ¿Fecha sin antenas válidas?
+        antenas_validas = False
+        if col_lat and col_long and (col_lat in df_d.columns) and (col_long in df_d.columns):
+            antenas_validas = df_d[col_lat].notna().any() and df_d[col_long].notna().any()
+
+        out.append(f'<h3>{pd.to_datetime(d).strftime("%d/%m/%Y")}</h3>')
+        # KPIs del día: totales, duración, antenas únicas y % sin antena válida
+        total_dia = int(len(df_d))
+
+        # Duración total del día (usa el helper _fmt_hms que ya existe)
+        dur_total_dia = _fmt_hms(df_d['_dur_sec'].sum() if '_dur_sec' in df_d.columns else 0)
+
+        # Antenas únicas (solo válidas si tenemos lat/long y no son 0.0)
+        def _es_valida_latlon(row):
+            try:
+                lt = float(row[col_lat]) if (col_lat and col_lat in df_d.columns) else None
+                lg = float(row[col_long]) if (col_long and col_long in df_d.columns) else None
+                if lt is None or lg is None:
+                    return False
+                return not (np.isnan(lt) or np.isnan(lg) or (abs(lt) < 1e-9 and abs(lg) < 1e-9))
+            except Exception:
+                return False
+
+        if total_dia > 0:
+            if col_antena and (col_antena in df_d.columns):
+                _valid_rows = df_d[df_d.apply(_es_valida_latlon, axis=1)]
+                antenas_unicas = int(_valid_rows[col_antena].dropna().astype(str).nunique()) if not _valid_rows.empty else 0
+            else:
+                antenas_unicas = 0
+            # % sin antena válida (faltan lat/long o son 0.0)
+            if col_lat and col_long and (col_lat in df_d.columns) and (col_long in df_d.columns):
+                sin_antena_cnt = int((~df_d.apply(_es_valida_latlon, axis=1)).sum())
+            else:
+                sin_antena_cnt = total_dia  # si no hay columnas, consideramos 100% sin antena válida
+            pct_sin_antena = (sin_antena_cnt / total_dia) * 100.0
+        else:
+            antenas_unicas = 0
+            pct_sin_antena = 0.0
+
+        # Render KPI compacto debajo del título del día
+        out.append(
+            f'<p class="kpis-dia">'
+            f'<span><strong>Interacciones:</strong> {total_dia}</span>'
+            f' &nbsp;|&nbsp; <span><strong>Duración:</strong> {dur_total_dia}</span>'
+            f' &nbsp;|&nbsp; <span><strong>Antenas únicas:</strong> {antenas_unicas}</span>'
+            f' &nbsp;|&nbsp; <span><strong>Sin antena válida:</strong> {pct_sin_antena:.0f}%</span>'
+            f'</p>'
+        )
+
+        if not antenas_validas:
+            out.append('<p><em>Nota:</em> Esta fecha no registró antenas válidas en la bitácora.</p>')
+
+        # Agrupación por contacto
+        if df_d.empty:
+            out.append('<p>Sin interacciones registradas.</p>')
+            continue
+
+        # Antena top por contacto (modo)
+        def _antena_top(gr):
+            """Devuelve la antena top SOLO entre filas con coords válidas (bbox/NaN/0.0),
+            junto con lat, lon y azimut de esa antena; si no hay válidas, devuelve None."""
+            if not (col_antena and (col_antena in gr.columns)):
+                return None, None, None, None
+
+            # Filtrar filas con coordenadas válidas (usa los validadores de 4.1)
+            if (col_lat in gr.columns) and (col_long in gr.columns):
+                gr_valid = gr[gr.apply(_es_valida_latlon_row, axis=1)]
+            else:
+                gr_valid = gr.iloc[0:0]  # vacío
+
+            if not gr_valid.empty:
+                # Top por frecuencia de antena entre las VÁLIDAS
+                vc = gr_valid[col_antena].dropna().astype(str).value_counts()
+                if not vc.empty:
+                    top_name = vc.index[0]
+                    fila = gr_valid[gr_valid[col_antena].astype(str) == top_name].iloc[0]
+                    lt = fila[col_lat] if col_lat in gr_valid.columns else None
+                    lg = fila[col_long] if col_long in gr_valid.columns else None
+                    az = fila[col_azimut] if col_azimut in gr_valid.columns else None
+                    return top_name, lt, lg, az
+
+            # Si no hay ninguna válida, devolvemos None y la fila mostrará "—"
+            return None, None, None, None
+
+
+
+        # Agregado por contacto
+        agg = (df_d
+               .groupby('_contacto', dropna=False)
+               .agg(interacciones=('_contacto', 'size'),
+                    dur_total=('_dur_sec', 'sum'))
+               .reset_index())
+
+        # Orden: más interacciones, luego mayor duración
+        agg = agg.sort_values(['interacciones', 'dur_total'], ascending=[False, False])
+
+        # Render tabla
+        out.append('<div class="tabla-scroll">')
+        out.append('<table class="tabla-compacta">')
+        out.append('<thead><tr>'
+                   '<th>Contacto</th>'
+                   '<th># Interacciones</th>'
+                   '<th>Duración acumulada</th>'
+                   '<th>Antena (top)</th>'
+                   '<th>Latitud</th>'
+                   '<th>Longitud</th>'
+                   '<th>Azimut</th>'
+                   '</tr></thead><tbody>')
+
+        for _, row in agg.iterrows():
+            contacto = str(row['_contacto'])
+            inter = int(row['interacciones'])
+            dur_hms = _fmt_hms(row['dur_total'])
+            # Extrae antena top de las filas del contacto en el día
+            gr = df_d[df_d['_contacto'] == row['_contacto']]
+            ant, lt, lg, az = _antena_top(gr)
+            # Antena formateada (con link a Google Maps si hay lat/lon válidas)
+            def _ant_fmt(ant, lt, lg):
+                try:
+                    if ant and (lt is not None) and (lg is not None):
+                        lt_f = float(lt); lg_f = float(lg)
+                        # np ya está importado arriba en esta función
+                        if not (np.isnan(lt_f) or np.isnan(lg_f)):
+                            url = f"https://www.google.com/maps?q={lt_f:.6f},{lg_f:.6f}"
+                            return f'<a href="{url}" target="_blank" rel="noopener">{ant}</a>'
+                except Exception:
+                    pass
+                return (ant or "—")
+
+            ant_fmt = _ant_fmt(ant, lt, lg)
+
+
+            def _fmt_coord(v):
+                try:
+                    if v is None or (isinstance(v, float) and np.isnan(v)):
+                        return '—'
+                    return f"{float(v):.6f}"
+                except Exception:
+                    return '—'
+
+            az_fmt = '—'
+            if az is not None:
+                try:
+                    az_f = float(az)
+                    az_fmt = f"{int(round(az_f))}"
+                except Exception:
+                    az_fmt = str(az) if str(az).strip() else '—'
+
+            # Resalte opcional si interacciones >= 3
+            clase = ' class="resalte"' if inter >= 3 else ''
+
+            out.append(f'<tr{clase}>'
+                       f'<td>{contacto}</td>'
+                       f'<td>{inter}</td>'
+                       f'<td>{dur_hms}</td>'
+                       f'<td>{ant_fmt}</td>'
+                       f'<td>{_fmt_coord(lt)}</td>'
+                       f'<td>{_fmt_coord(lg)}</td>'
+                       f'<td>{az_fmt}</td>'
+                       '</tr>')
+
+        out.append('</tbody></table></div>')
+        # === ALERTAS-2: avisos por fecha (concentración, movilidad, calidad) ===
+        # Helper: distancia (km)
+        def _haversine_km(lat1, lon1, lat2, lon2):
+            from math import radians, sin, cos, sqrt, atan2
+            R = 6371.0
+            lat1, lon1, lat2, lon2 = map(float, (lat1, lon1, lat2, lon2))
+            dlat = radians(lat2 - lat1)
+            dlon = radians(lon2 - lon1)
+            a = sin(dlat/2)**2 + cos(radians(lat1))*cos(radians(lat2))*sin(dlon/2)**2
+            c = 2 * atan2(sqrt(a), sqrt(1 - a))
+            return R * c
+
+        # Helper: enmascarar contacto si está activado en CONFIG
+        def _mask_contact(s):
+            try:
+                if 'CONFIG' in globals() and isinstance(CONFIG, dict):
+                    cfg = CONFIG.get("html", {})
+                    if cfg.get("enmascarar_contactos", False):
+                        ult = int(cfg.get("enmascarar_ultimos", 4))
+                        s = str(s)
+                        return ("*" * max(0, len(s) - ult)) + s[-ult:]
+            except Exception:
+                pass
+            return str(s)
+
+        alertas = []
+
+        # 1) Concentración por interacciones
+        if total_dia > 0 and not agg.empty:
+            agg_sorted = agg.sort_values(['interacciones', 'dur_total'], ascending=[False, False])
+            top_row_inter = agg_sorted.iloc[0]
+            prop_inter = top_row_inter['interacciones'] / total_dia
+            if prop_inter >= 0.60:
+                alertas.append(
+                    f"Concentración (interacciones): {_mask_contact(top_row_inter['_contacto'])} acumula "
+                    f"{prop_inter:.0%} del día ({int(top_row_inter['interacciones'])}/{total_dia})."
+                )
+
+        # 1b) Concentración por duración
+        sum_dur = float(df_d['_dur_sec'].sum()) if '_dur_sec' in df_d.columns else 0.0
+        if sum_dur > 0 and not agg.empty:
+            agg_sorted_d = agg.sort_values(['dur_total', 'interacciones'], ascending=[False, False])
+            top_row_dur = agg_sorted_d.iloc[0]
+            prop_dur = float(top_row_dur['dur_total']) / sum_dur if sum_dur else 0.0
+            if prop_dur >= 0.60:
+                alertas.append(
+                    f"Concentración (duración): {_mask_contact(top_row_dur['_contacto'])} acumula "
+                    f"{prop_dur:.0%} del día ({_fmt_hms(top_row_dur['dur_total'])} de {_fmt_hms(sum_dur)})."
+                )
+
+        # 2) Movilidad: top 2 celdas válidas separadas > 2 km
+        try:
+            if col_antena and (col_lat in df_d.columns) and (col_long in df_d.columns):
+                dfv = df_d[df_d.apply(_es_valida_latlon_row, axis=1)]
+                if not dfv.empty:
+                    top2 = (dfv.groupby(col_antena)
+                            .agg(cnt=(col_antena, 'size'),
+                                    lat=(col_lat, 'mean'),
+                                    lon=(col_long, 'mean'))
+                            .sort_values('cnt', ascending=False)
+                            .head(2)
+                            .reset_index())
+                    if len(top2) >= 2:
+                        a1, a2 = str(top2.loc[0, col_antena]), str(top2.loc[1, col_antena])
+                        dist_km = _haversine_km(top2.loc[0, 'lat'], top2.loc[0, 'lon'],
+                                                top2.loc[1, 'lat'], top2.loc[1, 'lon'])
+                        if dist_km >= 2.0:
+                            alertas.append(f"Movilidad: '{a1}' ↔ '{a2}' ≈ {dist_km:.1f} km (top 2 celdas del día).")
+        except Exception:
+            pass
+
+        # 3) Calidad: % sin antena válida alto
+        try:
+            if total_dia > 0 and pct_sin_antena >= 30:
+                alertas.append(f"Calidad: {pct_sin_antena:.0f}% de {total_dia} registros sin antena válida.")
+        except Exception:
+            pass
+
+        # Render de alertas si hay al menos una
+        if alertas:
+            out.append('<div class="alertas-dia"><ul>')
+            for a in alertas:
+                out.append(f'<li class="alerta-item">{a}</li>')
+            out.append('</ul></div>')
+        # === ALERTAS-2 (fin) ===
+
+
+
+    # Estilos mínimos (reusa tu CSS si ya existe; acá defensivo)
+    out.append("""
+<style>
+#interacciones-recientes .tabla-compacta { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+#interacciones-recientes .tabla-compacta th, 
+#interacciones-recientes .tabla-compacta td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+#interacciones-recientes .tabla-compacta th { background: #f2f2f2; }
+#interacciones-recientes .tabla-scroll { overflow-x: auto; }
+#interacciones-recientes tr.resalte { font-weight: 600; }
+</style>
+""")
+    out.append("""
+<style>
+#interacciones-recientes .kpis-dia { margin: 4px 0 10px 0; font-size: 0.95rem; color: #333; }
+#interacciones-recientes .kpis-dia span { display: inline-block; margin-right: 10px; }
+</style>
+""")
+    out.append("""
+<style>
+#interacciones-recientes .alertas-dia { margin: 8px 0 18px 0; }
+#interacciones-recientes .alertas-dia ul { margin: 0 0 0 18px; padding: 0; }
+#interacciones-recientes .alerta-item { color: #b45309; }
+</style>
+""")
+
+    out.append('</section>')
+    return "".join(out)
+def _construir_seccion_todos_contactos(df, columnas_config=None):
+    """
+    Sección HTML 'Todos los contactos':
+    columnas: # | Contacto | Conteo llamadas | Minutos acumulados
+    """
+    try:
+        if df is None or df.empty:
+            return ""
+
+        cols_cfg = columnas_config or {}
+        candidatos = [
+            cols_cfg.get("tel_contacto"), "tel_contacto", "contacto",
+            "telefono_contacto", "numero_contacto", "destino", "origen"
+        ]
+        c_col = next((c for c in candidatos if c and c in df.columns), None)
+        if not c_col:
+            return ""
+
+        # Normalizar contacto a dígitos (dejamos '+', quitamos separadores)
+        s = df[c_col].astype(str).str.strip()
+        s = s.str.replace(r"[^\d+]", "", regex=True)
+        s = s.str.replace(r"^\+?0+(?=\d)", "", regex=True)
+
+        d = df.loc[s != ""].copy()
+        if d.empty:
+            return ""
+        d["_c_norm"] = s[s != ""]
+
+        # Segundos (_sec)
+        if "_sec" in d.columns:
+            sec = pd.to_numeric(d["_sec"], errors="coerce").fillna(0)
+        elif "duracion" in d.columns:
+            d_dur = d["duracion"].astype(str).str.strip()
+            td = pd.to_timedelta(
+                d_dur.where(d_dur.str.contains(":"), None), errors="coerce"
+            )
+            sec = td.dt.total_seconds()
+            sec = sec.fillna(pd.to_numeric(d_dur, errors="coerce")).fillna(0)
+        else:
+            sec = 0
+        d["_sec"] = pd.to_numeric(sec, errors="coerce").fillna(0).astype(int)
+
+        g = d.groupby("_c_norm", dropna=False)
+        tb = (
+            pd.DataFrame({
+                "contacto": g.size().index,
+                "conteo": g.size().values,
+                "minutos": (g["_sec"].sum() / 60.0).round().astype(int).values
+            })
+            .sort_values(["conteo", "minutos"], ascending=False)
+            .reset_index(drop=True)
+        )
+
+        out = []
+        out.append('<section id="todos-contactos">')
+        out.append('<h2>Todos los contactos</h2>')
+        out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
+        out.append('<thead><tr>'
+                   '<th>#</th><th>Contacto</th><th>Conteo llamadas</th><th>Minutos acumulados</th>'
+                   '</tr></thead><tbody>')
+        for i, row in tb.iterrows():
+            out.append(
+                "<tr>"
+                f"<td class='mono'>{i+1}</td>"
+                f"<td class='mono'>{row['contacto']}</td>"
+                f"<td class='mono'>{int(row['conteo']):,}</td>"
+                f"<td class='mono'>{int(row['minutos']):,}</td>"
+                "</tr>"
+            )
+        out.append("</tbody></table></div></section>")
+        return "\n".join(out)
+    except Exception:
+        return ""
+
+
+# === HTML-INTERACCIONES-1 (fin) ===========================================
+# === RANGOS-UTILS (desde config, soporta cruces de medianoche) ===
+from datetime import time as _time, datetime as _dt
+
+def _parse_hhmmss_to_minutes(s: str | None) -> int | None:
+    """Convierte 'HH:MM' o 'HH:MM:SS' a minutos desde 00:00. Devuelve None si no se puede."""
+    if s is None:
+        return None
+    s = str(s).strip()
+    if not s:
+        return None
+    try:
+        parts = s.split(":")
+        hh = int(parts[0])
+        mm = int(parts[1]) if len(parts) > 1 else 0
+        # ignorar segundos si vienen
+        return hh * 60 + mm
+    except Exception:
+        return None
+
+def _minutes_from_any(hora) -> int | None:
+    """
+    Acepta: datetime.time, datetime.datetime, pandas.Timestamp, str 'HH:MM(:SS)'.
+    Devuelve minutos desde 00:00 o None.
+    """
+    try:
+        # pandas.Timestamp o datetime
+        if hasattr(hora, "hour") and hasattr(hora, "minute"):
+            return int(hora.hour) * 60 + int(hora.minute)
+        if isinstance(hora, _time):
+            return hora.hour * 60 + hora.minute
+        # string
+        return _parse_hhmmss_to_minutes(str(hora))
+    except Exception:
+        return None
+
+def _construir_rangos_cfg(rangos_cfg: list[dict]) -> list[tuple[str, int, int]]:
+    """
+    rangos_cfg: [{"nombre":..., "inicio":"HH:MM(:SS)", "fin":"HH:MM(:SS)"}, ...]
+    Retorna lista [(nombre, m_ini, m_fin)] en minutos.
+    """
+    res = []
+    for r in rangos_cfg:
+        n = str(r.get("nombre", "")).strip() or "Rango"
+        mi = _parse_hhmmss_to_minutes(r.get("inicio"))
+        mf = _parse_hhmmss_to_minutes(r.get("fin"))
+        if mi is None or mf is None:
+            continue
+        res.append((n, mi, mf))
+    return res
+
+def _en_rango(minutos: int, ini: int, fin: int) -> bool:
+    """
+    True si 'minutos' cae dentro del rango [ini..fin] en minutos.
+    Soporta cruce de medianoche: si ini > fin, el rango pasa por 00:00.
+    """
+    if ini <= fin:
+        return ini <= minutos <= fin
+    # Cruce de medianoche: ejemplo 18:01–01:00 -> minutos >= ini O minutos <= fin
+    return minutos >= ini or minutos <= fin
+
+def etiqueta_rango(hora, rangos_cfg: list[dict], default: str = "Sin rango") -> str:
+    """
+    Devuelve el 'nombre' del rango del config que contiene 'hora'.
+    'hora' puede ser time/datetime/Timestamp o str 'HH:MM(:SS)'.
+    """
+    m = _minutes_from_any(hora)
+    if m is None:
+        return default
+    rangos = _construir_rangos_cfg(rangos_cfg)
+    for nombre, mi, mf in rangos:
+        if _en_rango(m, mi, mf):
+            return nombre
+    return default
+# === FIN RANGOS-UTILS ===
+
+
+def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str, nombre_salida: str, hoja: str | None = None, nombre_bitacora: str | None = None) -> str:
+    """
+    Genera un informe HTML sencillo (portada + KPIs + enlaces) en la misma carpeta del KML.
+    Retorna la ruta del HTML generado.
+    """
+    from datetime import datetime
+    
+    # --- Datos base / rutas ---
+    kml_name = os.path.basename(archivo_kml)  # nombre base, p.ej. "caso.kml"
+    kmz_name = os.path.splitext(kml_name)[0] + ".kmz"
+
+    if bool(CONFIG.get("salida", {}).get("separar_kml_kmz", False)):
+        # El HTML se guarda en carpeta_salida (raíz). KML está en /kml y KMZ en /kmz
+        kml_href = os.path.join("kml", kml_name) if os.path.basename(os.path.dirname(archivo_kml)).lower() == "kml" else kml_name
+        kmz_rel  = os.path.join("kmz", kmz_name)
+        kmz_abs  = os.path.join(carpeta_salida, kmz_rel)
+        kmz_exists = os.path.exists(kmz_abs)
+        kmz_link = f' | <a href="{kmz_rel}" download>Descargar KMZ</a>' if kmz_exists else ""
+    else:
+        kml_href = kml_name
+        kmz_abs  = os.path.join(carpeta_salida, kmz_name)
+        kmz_exists = os.path.exists(kmz_abs)
+        kmz_link = f' | <a href="{kmz_name}" download>Descargar KMZ</a>' if kmz_exists else ""
+
+    # --- Métricas rápidas ---
+    total = int(len(df))
+    # coords válidas
+    lat_num = pd.to_numeric(df.get("lat", pd.Series(dtype=float)), errors="coerce")
+    lon_num = pd.to_numeric(df.get("long", pd.Series(dtype=float)), errors="coerce")
+    valid_coord = int((lat_num.notna() & lon_num.notna()).sum())
+    coord_validas = int(valid_coord)
+    coord_invalidas = int(total - coord_validas)
+
+    # antenas únicas (mismo filtro que la tabla: sin nombres inválidos y con coords válidas)
+    if "antena" in df.columns:
+        s_ant = df["antena"].astype(str).str.strip()
+        invalid_names = {"", "0", "null", "none", "nan", "sin inf", "sin inf.", "s/i"}
+        m_name = ~s_ant.str.lower().isin(invalid_names)
+
+        latn = pd.to_numeric(df.get("lat", pd.Series(dtype=float)), errors="coerce")
+        lonn = pd.to_numeric(df.get("long", pd.Series(dtype=float)), errors="coerce")
+        m_coord = (
+            latn.notna() & lonn.notna() &
+            ~((latn.fillna(0) == 0) & (lonn.fillna(0) == 0)) &
+            latn.between(-90, 90) & lonn.between(-180, 180)
+        )
+        activaciones_total = len(df)
+        coord_validas   = int(m_coord.sum())
+        coord_invalidas = int(activaciones_total - coord_validas)
+
+
+        ant_series_f = s_ant[m_name & m_coord]
+        ant_uniq = int(ant_series_f.nunique()) if not ant_series_f.empty else 0
+
+        if not ant_series_f.empty:
+            vc = ant_series_f.value_counts()
+            top_antena = vc.index[0]
+            top_count = int(vc.iloc[0])
+            top_pct = (top_count / len(ant_series_f) * 100.0)
+        else:
+            top_antena, top_count, top_pct = "—", 0, 0.0
+    else:
+        ant_uniq = 0
+        top_antena, top_count, top_pct = "—", 0, 0.0
+        print(f"Antenas únicas (KPI): {ant_uniq} — Top antena: {top_antena} ({top_count})")
+
+    # celdas únicas (robusto: usa LAC+CID si ambos; si no, el que exista)
+    cel_label = "Celdas (CID) únicas"
+    cel_uniq = 0
+    try:
+        has_cid = any(c in df.columns for c in ["celda", "cid", "cellid", "cell_id"])
+        has_lac = any(c in df.columns for c in ["lac", "lac_id", "lacid"])
+        if has_cid and has_lac:
+            ccol = next(c for c in ["celda", "cid", "cellid", "cell_id"] if c in df.columns)
+            lcol = next(c for c in ["lac", "lac_id", "lacid"] if c in df.columns)
+            s_c = df[ccol].dropna().astype(str).str.strip()
+            s_l = df[lcol].dropna().astype(str).str.strip()
+            m_c = s_c != ""
+            m_l = s_l != ""
+            if (m_c.any() and m_l.any()):
+                cel_label = "Parejas LAC+CID únicas"
+                cel_uniq = int(df.loc[m_c.index[m_c] & m_l.index[m_l], [lcol, ccol]].drop_duplicates().shape[0])
+            elif m_c.any():
+                cel_label = "Celdas (CID) únicas"
+                cel_uniq = int(s_c[m_c].nunique())
+            elif m_l.any():
+                cel_label = "LAC únicas"
+                cel_uniq = int(s_l[m_l].nunique())
+        elif has_cid:
+            ccol = next(c for c in ["celda", "cid", "cellid", "cell_id"] if c in df.columns)
+            s_c = df[ccol].dropna().astype(str).str.strip()
+            s_c = s_c[s_c != ""]
+            cel_uniq = int(s_c.nunique()) if not s_c.empty else 0
+        elif has_lac:
+            lcol = next(c for c in ["lac", "lac_id", "lacid"] if c in df.columns)
+            s_l = df[lcol].dropna().astype(str).str.strip()
+            s_l = s_l[s_l != ""]
+            cel_label = "LAC únicas"
+            cel_uniq = int(s_l.nunique()) if not s_l.empty else 0
+    except Exception:
+        pass
+
+    # rango de fechas/horas (visual dd/mm/aaaa HH:MM — dd/mm/aaaa HH:MM)
+    rango_str = "Sin datos"
+
+    def _fmt_dt(ts):
+        return ts.strftime("%d/%m/%Y %H:%M")
+
+    if "fecha" in df.columns:
+        # Preferir combinar fecha+hora si existe 'hora'
+        dt = None
+        try:
+            if "hora" in df.columns and df["hora"].notna().any():
+                dt = pd.to_datetime(
+                    df["fecha"].astype(str).str.strip() + " " + df["hora"].astype(str).str.strip(),
+                    dayfirst=True, errors="coerce"
+                ).dropna()
+            else:
+                # Solo fecha: tomar 00:00 para el inicio y 23:59 para el fin
+                fechas = pd.to_datetime(df["fecha"], dayfirst=True, errors="coerce").dropna()
+                if not fechas.empty:
+                    fmin = fechas.min().normalize()                        # 00:00
+                    fmax = (fechas.max().normalize() + pd.Timedelta(hours=23, minutes=59))
+                    rango_str = f"{_fmt_dt(fmin)} — {_fmt_dt(fmax)}"
+                else:
+                    rango_str = "Sin datos"
+        except Exception:
+            dt = None
+
+        if dt is not None and not dt.empty:
+            min_ts, max_ts = dt.min(), dt.max()
+            rango_str = f"{_fmt_dt(min_ts)} — {_fmt_dt(max_ts)}"
+        elif dt is None:
+            # ya se resolvió arriba (solo fecha) o quedó Sin datos
+            rango_str = rango_str if 'rango_str' in locals() else "Sin datos"
+    else:
+        rango_str = "Sin datos"
+
+
+    # color tema para acentos (del CONFIG si está)
+    try:
+        theme_hex = CONFIG.get("style", {}).get("theme_hex", "#ff00ff")
+    except Exception:
+        theme_hex = "#ff00ff"
+
+    # fecha/hora generación
+    gen_dt = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+    # --- Identificación del número analizado (se omite lo que no exista) ---
+    def _first_nonempty_in(df: pd.DataFrame, cols: list[str]):
+        for c in cols:
+            if c in df.columns:
+                s = df[c].dropna().astype(str).str.strip()
+                s = s[s != ""]
+                if not s.empty:
+                    return s.iloc[0]
+        return None
+
+    def _nunique_in(df: pd.DataFrame, cols: list[str]) -> int:
+        n = 0
+        for c in cols:
+            if c in df.columns:
+                s = df[c].dropna().astype(str).str.strip()
+                s = s[s != ""]
+                n = max(n, int(s.nunique())) if not s.empty else n
+        return n
+    
+    def _unique_values_in(df: pd.DataFrame, cols: list[str], max_items: int = 8):
+        vals = []
+        for c in cols:
+            if c in df.columns:
+                s = df[c].dropna().astype(str).str.strip()
+                s = s[s != ""]
+                if not s.empty:
+                    vals.extend(s.tolist())
+
+        # de-duplicar manteniendo orden
+        seen = set()
+        uniq = []
+        for v in vals:
+            if v not in seen:
+                seen.add(v)
+                uniq.append(v)
+        if not uniq:
+            return [], 0
+        extra = max(0, len(uniq) - max_items)
+        return uniq[:max_items], extra
+
+    def _fmt_imei_item(x: str) -> str:
+        try:
+            f = float(str(x))
+            if f.is_integer():
+                return str(int(f))
+        except Exception:
+            pass
+        return str(x)
+
+    def _row_html(label: str, single: str | None, n: int, lst: list[str], extra: int, mono: bool = False) -> str:
+        if n > 1 and lst:
+            cls = 'list mono' if mono else 'list'
+            items = "".join(f"<li>{v}</li>" for v in lst)
+            more  = f"<li>… y {extra} más</li>" if extra > 0 else ""
+            return f"<tr><td><b>{label}:</b></td><td><ul class=\"{cls}\">{items}{more}</ul></td></tr>\n"
+        elif single:
+            return f"<tr><td><b>{label}:</b></td><td>{single}</td></tr>\n"
+        else:
+            return ""
+        
+    def _luhn_check(num: str) -> bool:
+        """Valida IMEI de 15 dígitos con Luhn."""
+        s = 0
+        parity = len(num) % 2
+        for i, ch in enumerate(num):
+            d = ord(ch) - 48  # int(ch)
+            if (i % 2) == parity:
+                d *= 2
+                if d > 9:
+                    d -= 9
+            s += d
+        return (s % 10) == 0
+
+    def _is_valid_imei(val: str) -> bool:
+        """
+        Acepta:
+          - IMEI de 15 dígitos (Luhn OK).
+          - IMEISV de 16 dígitos (sin checkdigit) si los primeros 14 no son todo ceros.
+        Rechaza: vacío, '0', 'null', 'none', 'nan', 'sin inf', 's/i', todos ceros, longitudes != 15/16 o no numérico.
+        """
+        raw = str(val).strip().lower()
+        if raw in {"", "0", "null", "none", "nan", "sin inf.", "sin inf", "s/i"}:
+            return False
+        # conservar solo dígitos
+        s = "".join(ch for ch in raw if ch.isdigit())
+        if not s or set(s) == {"0"}:
+            return False
+        if len(s) == 15:
+            return _luhn_check(s)
+        if len(s) == 16:  # IMEISV
+            return not set(s[:14]) == {"0"}
+        return False
+
+    tel_cols    = ["tel","telefono","numero","msisdn","a_number","origen","from","callingnumber","num"]
+    alias_cols  = ["alias","alias_usuario","apodo"]
+    user_cols   = ["usuario","nombre_usuario","suscriptor","user_name"]
+    abon_cols   = ["abonado","titular","owner","subscriber"]
+    imei_cols   = ["imei","imei1","imei_1"]
+
+    # [IMSI] columnas canónicas
+    imsi_cols  = ["imsi","imsi1","imsi_1","imsi_origen"]
+
+    tel_val     = _first_nonempty_in(df, tel_cols)
+    alias_val   = _first_nonempty_in(df, alias_cols)
+    user_val    = _first_nonempty_in(df, user_cols)
+    abon_val    = _first_nonempty_in(df, abon_cols)
+    imei_raw    = _first_nonempty_in(df, imei_cols)
+
+    # [IMSI] obtener valor único (similar a IMEI)
+    imsi_raw = _first_nonempty_in(df, imsi_cols)
+    if imsi_raw is not None:
+        try:
+            f = float(str(imsi_raw))
+            if f.is_integer():
+                imsi_val = str(int(f))
+            else:
+                imsi_val = str(imsi_raw)
+        except Exception:
+            imsi_val = str(imsi_raw)
+    else:
+        imsi_val = None
+
+
+    # Si faltan alias/usuario/abonado, pedir un valor único y aplicarlo a toda la hoja
+    def _ask_if_missing(label_visible: str, current_value, col_name: str):
+        try:
+            val_actual = (str(current_value).strip() if current_value is not None else "")
+        except Exception:
+            val_actual = ""
+        if val_actual:
+            return current_value  # ya había algo
+        try:
+            entrada = ""
+        except Exception:
+            entrada = ""
+        if entrada:
+            # crear/llenar la columna para que figure en HTML/KML
+            try:
+                df[col_name] = entrada
+            except Exception:
+                pass
+            return entrada
+        return current_value
+
+    alias_val = _ask_if_missing("alias", alias_val, "alias")
+    user_val  = _ask_if_missing("nombre_usuario", user_val, "usuario")
+    abon_val  = _ask_if_missing("abonado", abon_val, "abonado")
+
+    # IMEI: quitar .0 si vino como float
+    if imei_raw is not None:
+        try:
+            f = float(str(imei_raw))
+            if f.is_integer():
+                imei_val = str(int(f))
+            else:
+                imei_val = str(imei_raw)
+        except Exception:
+            imei_val = str(imei_raw)
+    else:
+        imei_val = None
+
+    # Si hay múltiples valores en alguna columna, mostrar "múltiples (N)"
+    tel_n  = _nunique_in(df, tel_cols)
+    ali_n  = _nunique_in(df, alias_cols)
+    usr_n  = _nunique_in(df, user_cols)
+    abo_n  = _nunique_in(df, abon_cols)
+    ime_n  = _nunique_in(df, imei_cols)
+    # [IMSI] conteo de valores únicos
+    imsi_n  = _nunique_in(df, imsi_cols)
+
+
+    def _fmt_uni(val, n):
+        if n > 1:   return f"múltiples ({n})"
+        if val:     return val
+        return None
+
+    tel_disp   = _fmt_uni(tel_val,  tel_n)
+    alias_disp = _fmt_uni(alias_val, ali_n)
+    user_disp  = _fmt_uni(user_val, usr_n)
+    abon_disp  = _fmt_uni(abon_val, abo_n)
+    imei_disp  = _fmt_uni(imei_val,  ime_n)
+    # [IMSI] display único
+    imsi_disp = _fmt_uni(imsi_val, imsi_n)
+
+
+    # Listas de valores (para cuando hay múltiples)
+    tel_list,  tel_more  = _unique_values_in(df, tel_cols,  max_items=8)
+    ali_list,  ali_more  = _unique_values_in(df, alias_cols, max_items=8)
+    usr_list,  usr_more  = _unique_values_in(df, user_cols, max_items=8)
+    abo_list,  abo_more  = _unique_values_in(df, abon_cols, max_items=8)
+    imei_list, imei_more = _unique_values_in(df, imei_cols, max_items=20)
+    
+    # limpiar “.0” y filtrar inválidos (0, null/none/nan, todos ceros, Luhn malo, etc.)
+    imei_list = [_fmt_imei_item(x) for x in imei_list]
+    imei_list = [x for x in imei_list if _is_valid_imei(x)]
+    if not imei_list:
+        imei_disp = None
+        imei_more = 0
+    
+    # [IMSI] lista de valores (múltiples)
+    imsi_list, imsi_more = _unique_values_in(df, imsi_cols, max_items=20)
+
+    # limpieza ligera
+    _tmp = []
+    for x in imsi_list:
+        try:
+            s = str(x).strip()
+            try:
+                f = float(s)
+                if f.is_integer():
+                    s = str(int(f))
+            except Exception:
+                pass
+            s = re.sub(r"\D", "", s)
+            if 14 <= len(s) <= 16:
+                _tmp.append(s)
+        except Exception:
+            continue
+    imsi_list = _tmp
+    if not imsi_list:
+        imsi_disp = None
+        imsi_more = 0
+
+
+    ident_rows = ""
+    ident_rows = ""
+    # 1) Número telefónico (antes decía "Número analizado")
+    ident_rows += _row_html("Número telefónico", tel_disp,  tel_n,  tel_list,  tel_more,  mono=True)
+    # [IMSI] fila en Metadatos (entre Número y IMEI)
+    ident_rows += _row_html("IMSI", imsi_disp, imsi_n, imsi_list, imsi_more, mono=True)
+    # 2) IMEI (subimos esta fila para que quede inmediatamente debajo del número)
+    ident_rows += _row_html("IMEI",             imei_disp,  ime_n,  imei_list, imei_more, mono=True)
+    # 3) Alias
+    ident_rows += _row_html("Alias",            alias_disp, ali_n,  ali_list,  ali_more,  mono=False)
+    # 4) Usuario
+    ident_rows += _row_html("Usuario",          user_disp,  usr_n,  usr_list,  usr_more,  mono=False)
+    # 5) Abonado
+    ident_rows += _row_html("Abonado",          abon_disp,  abo_n,  abo_list,  abo_more,  mono=False)
+
+
+    # --- Top contactos (por conteo y por duración) ---
+    def _to_seconds_any(x) -> float:
+        """Convierte '1128' o '00:18:48' a segundos. Tolerante."""
+        try:
+            s = str(x).strip()
+            if not s or s.lower() in {"nan","none","null","sin inf.","sin inf","s/i"}:
+                return 0.0
+            if ":" in s:
+                parts = s.split(":")
+                if len(parts) == 3:
+                    h,m,sec = parts
+                    return float(int(h))*3600 + float(int(m))*60 + float(int(sec))
+                if len(parts) == 2:
+                    m,sec = parts
+                    return float(int(m))*60 + float(int(sec))
+            # num directo (segundos)
+            return float(pd.to_numeric(s, errors="coerce") or 0.0)
+        except Exception:
+            return 0.0
+
+    # detectar columna de contacto
+    contact_cols = [
+        "tel_contacto","contacto","destino","b_number","bnumber","numero_contacto",
+        "callednumber","to","receptor","receptor_numero","numero_destino"
+    ]
+    dur_cols = ["duracion","duration","segundos","tiempo"]
+    c_col = next((c for c in contact_cols if c in df.columns), None)
+    d_col = next((c for c in dur_cols if c in df.columns), None)
+    note_no_dur = "<p class='small' style='color:#666;background:#f7f7f7;border:1px solid #eee;padding:.5rem .75rem;border-radius:6px'>Se omite por no disponer de la columna <code>duracion</code>.</p>"
+    note_zero_dur = "<p class='note muted'>No hay minutos acumulados &gt; 0 en el período; se omite la tabla.</p>"
+
+    if not d_col:
+        log("HTML: se omitió la subtabla 'Por minutos acumulados' por falta de 'duracion'.")
+
+
+    top_contactos_cnt_html = "<p class='small'>No hay columna de contacto.</p>"
+    top_contactos_dur_html = note_no_dur if not d_col else "<p class='small'>No hay columna de contacto.</p>"
+
+    if c_col:
+        # Top N de contactos según config
+        try:
+            _topC = 10
+            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('contactos'):
+                _topC = int(OVERRIDE_TOPS.get('contactos'))
+            elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
+                _topC = int(CONFIG.get("html", {}).get("top_contactos_n", 10))
+
+        except Exception:
+            _topC = 10
+        d = df.copy()
+        d["_contacto"] = d[c_col].astype(str).str.strip()
+        d = d[(d["_contacto"] != "") & d["_contacto"].notna()]
+
+        if not d.empty:
+            # segundos de duración
+            if d_col:
+                d["_sec"] = d[d_col].map(_to_seconds_any)
+            else:
+                d["_sec"] = 0.0
+
+            # normalizar teléfono: dejar solo dígitos para agrupar (pero mostrar el original si querés luego)
+            d["_c_norm"] = d["_contacto"].str.replace(r"\D+", "", regex=True)
+            d.loc[d["_c_norm"] == "", "_c_norm"] = d["_contacto"]  # si quedó vacío, usa el texto crudo
+
+
+            # por conteo (con % + barra + índice)
+            g_cnt = (
+                d.groupby("_c_norm", dropna=False)
+                .size()
+                .sort_values(ascending=False)
+                .head(int(_topC))
+            )
+            total_cnt = int(len(d))
+            rows = []
+            for i, (k, n) in enumerate(g_cnt.items(), start=1):
+                pct = (float(n) / total_cnt * 100.0) if total_cnt else 0.0
+                rows.append(
+                    f"<tr>"
+                    f"<td class='right mono'>{i}</td>"
+                    f"<td class='mono'>{k}</td>"
+                    f"<td class='mono'>{int(n):,} <span class='small'>({pct:.1f}%)</span></td>"
+                    f"</tr>"
+                )
+                rows.append(
+                    f"<tr class='barrow'><td colspan='3'>"
+                    f"<div class='bar'><div class='fill' style='width:{pct:.1f}%;'></div></div>"
+                    f"</td></tr>"
+                )
+            if rows:
+                top_contactos_cnt_html = (
+                    "<table class='tbl'>"
+                    "<thead><tr><th class='right'>#</th><th>Contacto</th><th>Interacciones</th></tr></thead>"
+                    "<tbody>" + "".join(rows) + "</tbody></table>"
+                )
+
+            # por duración (con % + barra + índice)
+            if d_col:
+                g_dur = (
+                    d.groupby("_c_norm", dropna=False)["_sec"]
+                    .sum()
+                    .sort_values(ascending=False)
+                    .head(int(_topC))
+                )
+                def _fmt_hms(sec):
+                    sec = int(round(sec))
+                    h = sec // 3600; m = (sec % 3600) // 60; s = sec % 60
+                    return f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
+
+                # justo después de: total_sec = float(d["_sec"].sum())
+                total_sec = float(pd.to_numeric(d["_sec"], errors="coerce").fillna(0).sum())
+
+                if total_sec <= 0:
+                    top_contactos_dur_html = note_zero_dur
+                    log("HTML: se omitió 'Por minutos acumulados' porque la suma total de 'duracion' es 0.")
+                else:
+                    rows = []
+                    for i, (k, tot) in enumerate(g_dur.items(), start=1):
+                        pct = (float(tot) / total_sec * 100.0) if total_sec > 0 else 0.0
+                        rows.append(
+                            f"<tr>"
+                            f"<td class='right mono'>{i}</td>"
+                            f"<td class='mono'>{k}</td>"
+                            f"<td class='mono'>{_fmt_hms(tot)} <span class='small'>({pct:.1f}%)</span></td>"
+                            f"</tr>"
+                        )
+                        rows.append(
+                            f"<tr class='barrow'><td colspan='3'>"
+                            f"<div class='bar'><div class='fill' style='width:{pct:.1f}%;'></div></div>"
+                            f"</td></tr>"
+                        )
+                    if rows:
+                        top_contactos_dur_html = (
+                            "<table class='tbl'>"
+                            "<thead><tr><th class='right'>#</th><th>Contacto</th><th>Duración total</th></tr></thead>"
+                            "<tbody>" + "\n".join(rows) + "</tbody></table>"
+                        )
+
+            # si no hay d_col o total_sec == 0, dejamos la nota en top_contactos_dur_html
+
+
+    # HTML (sencillo, sin frameworks)
+    html_path = os.path.join(carpeta_salida, f"{nombre_salida}_informe.html")
+    # --- Top antenas (tabla) ---
+    top_tab_html = "<p class='small'>No se encontraron antenas.</p>"
+    if "antena" in df.columns:
+        df_a = df.copy()
+        df_a["antena"] = df_a.get("antena", "").astype(str).str.strip()
+        _invalid_names = {"", "0", "null", "none", "nan", "sin inf", "sin inf.", "s/i"}
+        df_a = df_a[~df_a["antena"].str.lower().isin(_invalid_names)]
+
+        if not df_a.empty:
+            # timestamp (fecha + hora si existe)
+            if "fecha" in df_a.columns:
+                hora_str = df_a.get("hora", "").astype(str).str[:8]
+                ts = pd.to_datetime(
+                    df_a["fecha"].astype(str).str.strip() + " " + hora_str,
+                    errors="coerce", dayfirst=True
+                )
+                df_a["_ts"] = ts
+            else:
+                df_a["_ts"] = pd.NaT
+
+            # azimut entero (para frecuencia)
+            az = pd.to_numeric(df_a.get("azimut", pd.Series(dtype=float)), errors="coerce").round().astype("Int64")
+            df_a["_az_i"] = az
+
+            # coords numéricas
+            df_a["_lat"] = pd.to_numeric(df_a.get("lat", pd.Series(dtype=float)), errors="coerce")
+            df_a["_lon"] = pd.to_numeric(df_a.get("long", pd.Series(dtype=float)), errors="coerce")
+            _mask_zerozero = df_a["_lat"].fillna(0).eq(0) & df_a["_lon"].fillna(0).eq(0)
+            _mask_out = ~df_a["_lat"].between(-90, 90) | ~df_a["_lon"].between(-180, 180)
+            df_a = df_a[~(_mask_zerozero | _mask_out)]
+
+
+        # Construimos entradas y ordenamos por conteo (desc)
+        entries = []
+        for antenna, g in df_a.groupby("antena", dropna=False):
+            cnt = int(len(g))
+            lat_v = g["_lat"].dropna()
+            lon_v = g["_lon"].dropna()
+            lat_s = f"{lat_v.iloc[0]:.6f}" if not lat_v.empty else "—"
+            lon_s = f"{lon_v.iloc[0]:.6f}" if not lon_v.empty else "—"
+            azvc = g["_az_i"].dropna().value_counts().head(3)
+            az_s = ", ".join([f"{int(k)}° ({int(v)})" for k, v in azvc.items()]) if not azvc.empty else "—"
+            entries.append((cnt, antenna, lat_s, lon_s, az_s))
+
+        entries.sort(key=lambda x: x[0], reverse=True)
+        antenas_unicas = len(entries)
+
+        rows = []
+        for idx, (cnt, antenna, lat_s, lon_s, az_s) in enumerate(entries, start=1):
+            # Si hay coordenadas válidas, convertir la antena en link a Google Maps
+            if lat_s != "—" and lon_s != "—":
+                ant_cell = f'<a href="https://www.google.com/maps?q={lat_s},{lon_s}" target="_blank" rel="noopener">{antenna}</a>'
+            else:
+                ant_cell = antenna
+
+            rows.append(
+                f"<tr>"
+                f"<td class='mono'>{idx}</td>"
+                f"<td>{ant_cell}</td>"
+                f"<td class='mono nowrap'>{lat_s}</td>"
+                f"<td class='mono nowrap'>{lon_s}</td>"
+                f"<td class='mono'>{cnt:,}</td>"
+                f"<td>{az_s}</td>"
+                f"</tr>"
+            )
+
+
+        if rows:
+            top_tab_html = (
+                "<table class='tbl'>"
+                "<thead><tr>"
+                "<th>#</th><th>Antena</th><th>Lat</th><th>Long</th><th>Conteo</th><th>Azimuts frecuentes</th>"
+                "</tr></thead><tbody>"
+                + "".join(rows) +
+                "</tbody></table>"
+            )
+
+
+        # --- Contactos recientes (últimos 5 días del período) ---
+        # Detectar columnas
+        contacto_cols = [
+            "tel_contacto","contacto","destino","b_number","bnumber",
+            "numero_contacto","callednumber","to","receptor","receptor_numero","numero_destino"
+        ]
+        tipo_cols = ["interaccion","tipo_interaccion","interaction","tipo"]
+        dur_cols  = ["duracion","duration","segundos","tiempo"]
+
+        c_col = next((c for c in contacto_cols if c in df.columns), None)
+        t_col = next((c for c in tipo_cols if c in df.columns), None)
+        d_col = next((c for c in dur_cols  if c in df.columns), None)
+
+        # Datetime robusto
+        df_dt = df.copy()
+        if "fecha" in df.columns and "hora" in df.columns:
+            df_dt["_dt"] = pd.to_datetime(
+                df["fecha"].astype(str).str.strip() + " " + df["hora"].astype(str).str[:8],
+                dayfirst=True, errors="coerce"
+            )
+        elif "fecha" in df.columns:
+            df_dt["_dt"] = pd.to_datetime(df["fecha"], dayfirst=True, errors="coerce")
+        elif "hora" in df.columns:
+            today = pd.Timestamp.today().normalize()
+            df_dt["_dt"] = pd.to_datetime(
+                today.strftime("%Y-%m-%d") + " " + df["hora"].astype(str).str[:8],
+                errors="coerce"
+            )
+        else:
+            df_dt["_dt"] = pd.NaT
+
+        max_dt = df_dt["_dt"].max()
+        recent_html = ""
+        if pd.notna(max_dt) and c_col:
+            start = max_dt - pd.Timedelta(days=5)
+            r = df_dt[df_dt["_dt"].between(start, max_dt)].copy()
+            # Limpia contactos "vacíos"
+            r[c_col] = r[c_col].astype(str).str.strip()
+            r = r[(r[c_col] != "") & r[c_col].notna()]
+
+            # Formateo
+            r["_dt_str"] = r["_dt"].dt.strftime("%d/%m/%Y %H:%M:%S")
+            def _fmt_sec(x):
+                try:
+                    s = str(x).strip()
+                    if ":" in s:
+                        return s  # ya viene HH:MM:SS
+                    v = float(pd.to_numeric(s, errors="coerce") or 0.0)
+                except Exception:
+                    v = 0.0
+                v = int(round(v))
+                h = v // 3600; m = (v % 3600) // 60; s2 = v % 60
+                return f"{h:02d}:{m:02d}:{s2:02d}" if h > 0 else f"{m:02d}:{s2:02d}"
+
+            # Orden por fecha descendente y límite para no hacer pesado el HTML
+            r = r.sort_values("_dt", ascending=False).head(200)
+
+            filas = []
+            for _, rr in r.iterrows():
+                dt_s  = rr.get("_dt_str", "") or ""
+                tipo  = rr.get(t_col, "") if t_col else ""
+                cont  = rr.get(c_col, "")
+                dur_s = _fmt_sec(rr.get(d_col, "")) if d_col else ""
+                filas.append(
+                    f"<tr>"
+                    f"<td class='mono'>{dt_s}</td>"
+                    f"<td>{tipo}</td>"
+                    f"<td class='mono'>{cont}</td>"
+                    f"<td class='mono'>{dur_s}</td>"
+                    f"</tr>"
+                )
+
+            if filas:
+                recent_html = ""
+
+
+    # === TOPC (para títulos "Top N" en HTML) ===
+    try:
+        if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('contactos'):
+            _topC = int(OVERRIDE_TOPS.get('contactos'))
+        elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
+            _topC = int(CONFIG.get("html", {}).get("top_contactos_n", 10))
+        else:
+            _topC = 10
+    except Exception:
+        _topC = 10
+
+
+    html = f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Informe de Bitácora — {nombre_salida}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root {{ 
+  --accent: {theme_hex};
+}}
+* {{ box-sizing: border-box; }}
+body {{
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  margin: 20px;
+  color: #222;
+}}
+h1 {{ margin: 0 0 6px 0; font-size: 20px; }}
+h2 {{ margin: 18px 0 10px; font-size: 16px; color: #333; }}
+.small {{ color:#666; font-size: 12px; }}
+.badge {{ display:inline-block; padding:2px 8px; border-radius:999px; background: var(--accent); color:white; font-size:12px; }}
+.kpis {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px,1fr));
+  gap: 10px;
+  margin-top: 10px;
+}}
+.card {{
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  padding: 10px;
+}}
+.card .n {{
+  font-size: 18px; font-weight: 700; color:#111; margin: 2px 0 6px;
+}}
+.card .label {{ color:#555; font-size: 12px; }}
+.links a {{ color: var(--accent); text-decoration: none; }}
+.links a:hover {{ text-decoration: underline; }}
+.meta table {{ border-collapse: collapse; font-size: 12px; }}
+.meta td {{ padding: 2px 6px; vertical-align: top; }}
+hr {{ border:0; border-top:1px solid #ddd; margin:14px 0; }}
+
+/* tablas */
+table.tbl{{width:100%;border-collapse:collapse;font-size:12px}}
+table.tbl th,table.tbl td{{border:1px solid #e6e6e6;padding:6px 8px;text-align:left}}
+table.tbl th{{background:#fafafa}}
+.nowrap{{white-space:nowrap}}
+.mono{{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}}
+
+/* listas compactas */
+ul.list{{margin:4px 0 0 16px;padding:0}}
+ul.list li{{font-size:12px; line-height:1.2}}
+.two{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}}
+.sub{{font-size:12px;color:#666;margin-top:2px}}
+.grid2{{display:grid;grid-template-columns:1fr 1fr;gap:16px}}
+.right{{text-align:right}}
+.bar{{height:8px;background:#eee;border-radius:4px}}
+.bar .fill{{height:100%;background:var(--accent,#ff00ff);border-radius:4px}}
+/* === TIPOGRAFÍA BASE (normalizada) === */
+:root{{ --fs-base: 15px; --lh-base: 1.45; }}
+html, body{{ font-size: var(--fs-base); line-height: var(--lh-base); }}
+main, section, p, li, td, th, div, span{{ font-size: inherit; line-height: inherit; }}
+.mono{{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: inherit; }}
+small{{ font-size: 0.92em; }}
+table{{ font-size: 1em; }}
+/* encabezados de sección */
+/* encabezados de sección */
+section > h2{{background:#000;color:#fff;padding:8px 10px;border-radius:6px;margin:18px 0 10px}}
+/* separador visual entre secciones */
+section{{margin-top:22px}}
+.barrow td{{padding-top:0}}
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand-row" style="display:flex;align-items:center;gap:16px;padding:8px 0;justify-content:flex-start;">
+  <!-- Logo a la izquierda -->
+  <img src="logo_tz.png"
+       alt="{(CONFIG.get('branding', {}) or {}).get('logo_alt', 'TZ Analysis')}"
+       style="width:{(CONFIG.get('branding', {}) or {}).get('logo_width', '120px')};display:block;">
+
+  <!-- Texto a la derecha -->
+  <div style="line-height:1.25;">
+    <div style="font-size:22px;font-weight:700;margin:0;">
+      TZ Analysis — {CONFIG.get('brand', {}).get('version', 'Versión 1.0.0')}
+    </div>
+
+    <h1 style="font-size:20px;font-weight:700;margin:4px 0 0 0;">
+      Informe de Bitácora — <span class="badge">{nombre_salida}</span>
+    </h1>
+
+    <div class="small" style="margin-top:4px;">
+      Generado: {gen_dt}{' — Hoja: ' + hoja if hoja else ''}
+    </div>
+  </div>
+</div>
+  </header>
+
+  <section class="meta">
+    <h2>Metadatos</h2>
+    <table>
+        <tr><td><b>Bitácora telefónica:</b></td><td class="mono">{nombre_bitacora or '—'}</td></tr>
+        <tr><td><b>Hoja analizada:</b></td><td class="mono">{hoja or '—'}</td></tr>
+        <tr><td><b>Periodo analizado:</b></td><td class="mono">{rango_str}</td></tr>
+        {ident_rows}
+    </table>
+
+  </section>
+
+  <section>
+    <h2>Indicadores</h2>
+    <div class="kpis">
+      <div class="card">
+        <div class="n">{total:,}</div>
+        <div class="label">Registros totales</div>
+      </div>
+      <div class="kpi">
+        <div class="num">{coord_validas:,}</div>
+        <div class="lbl">Con coordenadas válidas</div>
+        <div class="sub">({coord_invalidas:,} inválidas)</div>
+      </div>
+
+      <div class="card">
+        <div class="n">{ant_uniq:,}</div>
+        <div class="label">Antenas únicas</div>
+      </div>
+      <div class="card">
+        <div class="n">{cel_uniq:,}</div>
+        <div class="label">{cel_label}</div>
+      </div>
+      <div class="card">
+        <div class="n">{top_antena}</div>
+        <div class="label">Top antena ({top_count:,} — {top_pct:.1f}%)</div>
+      </div>
+    </div>
+  </section>
+
+    <section>
+    <h2>Top antenas</h2>
+    {top_tab_html}
+  </section>
+  
+    <section>
+    <h2>Contactos con más comunicación</h2>
+    <div class="two">
+      <div>
+        <h3 class="small">Por número de interacciones <span class="sub">(Top {_topC})</span></h3>
+        {top_contactos_cnt_html}
+      </div>
+      <div>
+        <h3 class="small">Por minutos acumulados <span class="sub">(Top {_topC})</span></h3>
+        {top_contactos_dur_html}
+      </div>
+    </div>
+  </section>
+
+</body>
+</html>
+"""
+    # --- TÍTULO H1 desde config.brand (name + version) ---
+    try:
+        _brand = CONFIG.get("brand", {}) if isinstance(CONFIG, dict) else {}
+        _bname = str(_brand.get("name", "")).strip()
+        _bver  = str(_brand.get("version", "")).strip()
+        if _bname and _bver:
+            _title = f"{_bname} — {_bver}"
+        elif _bname:
+            _title = _bname
+        elif _bver:
+            _title = _bver
+        else:
+            _title = ""
+        _h1 = f'<h1 class="title">{_title}</h1>' if _title else ""
+    except Exception:
+        _h1 = ""
+
+    # --- TÍTULO H1 desde config.brand (name + version) ---
+    try:
+        _brand = CONFIG.get("brand", {}) if isinstance(CONFIG, dict) else {}
+        _bname = str(_brand.get("name", "")).strip()
+        _bver  = str(_brand.get("version", "")).strip()
+        if _bname and _bver:
+            _title = f"{_bname} — {_bver}"
+        elif _bname:
+            _title = _bname
+        elif _bver:
+            _title = _bver
+        else:
+            _title = ""
+
+        # ⬇️ Dejar SOLO este if, con pass adentro
+        if _title:
+            # Desactivado: no inyectar el H1 centrado
+            pass
+
+    except Exception:
+        pass
+
+        # === HTML-TOC-1: índice de navegación sticky (sin KML/KMZ) ===
+    try:
+        # 1) Asegurar IDs de secciones para poder enlazar
+        html = html.replace('<section class="meta">', '<section id="meta" class="meta">')
+        html = html.replace('<section>\n    <h2>Top antenas</h2>', '<section id="top-antenas">\n    <h2>Top antenas</h2>')
+        html = html.replace('<h2 id="interacciones">Interacciones y contactos</h2>', '<h2 id="interacciones">Contactos con más comunicación</h2>')
+        html = html.replace('<h2>Contactos con más comunicación</h2>', '<h2 id="interacciones">Contactos con más comunicación</h2>')
+        html = html.replace('<h2>Antenas por rango horario</h2>', '<h2 id="rangos">Antenas por rango horario</h2>')
+        # "Todos los contactos" ya sale con id="todos-contactos" cuando existe
+
+        # 2) Construir links solo de las secciones presentes (orden deseado)
+        _links = []
+        if 'id="meta"' in html:
+            _links.append('<a href="#meta">Metadatos</a>')
+        if 'id="resumen-antenas"' in html:
+            _links.append('<a href="#resumen-antenas">Antenas más activadas</a>')
+        if 'id="interacciones"' in html:
+            _links.append('<a href="#interacciones">Contactos con más comunicación</a>')
+        # Aceptar dos posibles IDs para rangos horarios
+        _id_rangos = None
+        if 'id="antenas-rangos"' in html:
+            _id_rangos = 'antenas-rangos'
+        elif 'id="rangos"' in html:
+            _id_rangos = 'rangos'
+        if _id_rangos:
+            _links.append(f'<a href="#{_id_rangos}">Antenas por rango horario</a>')
+        if 'id="interacciones-recientes"' in html:
+            _links.append('<a href="#interacciones-recientes">Interacciones recientes</a>')
+        if 'id="top-antenas"' in html:
+            _links.append('<a href="#top-antenas">Todas las antenas</a>')
+        if 'id="todos-contactos"' in html:
+            _links.append('<a href="#todos-contactos">Todos los contactos</a>')
+
+        if _links:
+            _toc_html = '<nav id="toc" class="toc" style="position:sticky; top:0; z-index:999; background:#fff; border-bottom:1px solid #e5e7eb; box-shadow:0 2px 6px rgba(0,0,0,.06); padding:8px 12px;">' + ' ... '.join(_links) + '</nav>'
+
+            # 3) CSS para la barra sticky
+            _css_toc = """
+.toc{position:sticky;top:0;background:#fff;padding:8px 0 10px;margin:6px 0 10px;border-bottom:1px solid #eee;z-index:999}
+.toc a{margin-right:10px;text-decoration:none;color:var(--accent);font-size:13px}
+.toc a:hover{text-decoration:underline}
+"""
+            # Inyectar CSS dentro del <style>
+            html = html.replace("</style>", _css_toc + "</style>", 1)
+            # 4) Insertar el TOC inmediatamente después del </header>
+            html = html.replace("</header>", "</header>\n  " + _toc_html, 1)
+    except Exception:
+        pass
+    # === HTML-TOC-1 (fin) ===
+
+    # === HTML-BRANDING-1: Marca de agua (usa config.branding) ===
+    try:
+        _br = (CONFIG or {}).get("branding", {}) if "CONFIG" in globals() else {}
+        _mw_on   = bool(_br.get("mostrar_marca_agua", True))
+        _mw_txt  = str(_br.get("marca_agua_texto", "CONFIDENCIAL"))
+        _mw_opac = float(_br.get("marca_agua_opacidad", 0.08))
+        _mw_print= bool(_br.get("marca_agua_en_impresion", True))
+
+        if _mw_on and _mw_txt:
+            _css_wm = f"""
+.wm{{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%) rotate(-28deg);color:#000;opacity:{_mw_opac};font-size:72px;font-weight:800;letter-spacing:.15em;white-space:nowrap;pointer-events:none;user-select:none;z-index:0}}
+@media print{{ .wm{{display:{'block' if _mw_print else 'none'};position:fixed}} }}
+"""
+            # inyectar CSS en <style>
+            html = html.replace("</style>", _css_wm + "</style>", 1)
+            # insertar la marca de agua después del </header>
+            html = html.replace("</header>", "</header>\n  " + f"<div class='wm'>{_mw_txt}</div>", 1)
+    except Exception:
+        pass
+    # === HTML-BRANDING-1 (fin) ===
+
+    # === HTML-TABLA-ESPACIADO-1: Ajustes de "Todos los contactos" (solo CSS) ===
+    try:
+        _css_tc = """
+/* Tabla de 'Todos los contactos' con más respiración */
+#todos-contactos table.tbl{
+  border-collapse:separate !important;
+  border-spacing:18px 8px !important;
+  table-layout:fixed;
+  width:100%;
+}
+#todos-contactos table.tbl th,
+#todos-contactos table.tbl td{
+  padding:12px 20px !important;
+}
+
+/* # (angosta, derecha) */
+#todos-contactos table.tbl th:nth-child(1),
+#todos-contactos table.tbl td:nth-child(1){
+  width:56px !important;
+  text-align:right !important;
+}
+
+/* Contacto (más ancha, con elipsis si se desborda) */
+#todos-contactos table.tbl th:nth-child(2),
+#todos-contactos table.tbl td:nth-child(2){
+  width:300px !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+}
+
+/* Conteo y Minutos (alineadas a la derecha, anchas) */
+#todos-contactos table.tbl th:nth-child(3),
+#todos-contactos table.tbl td:nth-child(3),
+#todos-contactos table.tbl th:nth-child(4),
+#todos-contactos table.tbl td:nth-child(4){
+  width:200px !important;
+  text-align:right !important;
+}
+
+/* Tarjetas visuales por fila (sombra sutil) */
+#todos-contactos table.tbl tbody tr{
+  background:#fff;
+  box-shadow:0 1px 0 #eee;
+}
+#todos-contactos table.tbl thead tr{
+  box-shadow:none;
+}
+"""
+        html = html.replace("</style>", _css_tc + "</style>", 1)
+        # === HTML-RESPONSIVE-1: Tablas en móvil (última columna se parte / scroll si hace falta) ===
+        _css_resp = """
+        <style>
+        @media (max-width: 640px) {
+            section table {
+            width: 100%;
+            border-collapse: collapse;
+            }
+            /* Forzar quiebre de línea en la ÚLTIMA columna (p. ej., Azimut) */
+            section table td:last-child,
+            section table th:last-child {
+            white-space: normal !important;
+            word-break: break-word !important;
+            overflow-wrap: anywhere !important;
+            max-width: 160px;
+            }
+            /* Tipografía un poco más compacta en celdas */
+            section table td,
+            section table th {
+            font-size: 14px;
+            line-height: 1.25;
+            }
+        }
+        @media (max-width: 480px) {
+            /* Si igual no cabe, permitir desplazamiento horizontal suave */
+            section table {
+            display: block;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            }
+            section table td,
+            section table th {
+            min-width: 80px;
+            }
+        }
+        </style>
+        """
+        html = html.replace("</style>", _css_resp + "</style>", 1)
+        
+
+    except Exception:
+        pass
+    # === HTML-TABLA-ESPACIADO-1 (fin) ===
+
+
+
+    # HTML-INTERACCIONES-1: inyectar sección (si fue calculada)
+    try:
+        _html_interacciones = globals().get("HTML_SECCION_INTERACCIONES", "")
+        if isinstance(_html_interacciones, str) and _html_interacciones:
+            if "</main>" in html:
+                html = html.replace("</main>", _html_interacciones + "</main>")
+            elif "</body>" in html:
+                html = html.replace("</body>", _html_interacciones + "</body>")
+            else:
+                html += _html_interacciones
+    except Exception:
+        pass
+
+        # TODOS-CONTACTOS-HTML: inyectar sección si fue calculada
+    try:
+        _html_all = globals().get("HTML_SECCION_TODOS_CONTACTOS", "")
+        if isinstance(_html_all, str) and _html_all:
+            if "</main>" in html:
+                html = html.replace("</main>", _html_all + "</main>")
+            elif "</body>" in html:
+                html = html.replace("</body>", _html_all + "</body>")
+            else:
+                html += _html_all
+    except Exception:
+        pass
+
+
+    # === HTML-ANTENAS-SIMPLE-1: sección Top antenas (computada aquí) ===
+    try:
+        # Top N configurable (override -> config -> 3)
+        try:
+            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
+                _topN = int(OVERRIDE_TOPS.get('antenas'))
+            elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
+                _topN = int(CONFIG.get("html", {}).get("top_antenas_n", 3))
+            else:
+                _topN = 3
+        except Exception:
+            _topN = 3
+
+
+        # Helper para elegir columnas disponibles
+        def _pick_col(_df, candidatos):
+            for c in candidatos:
+                if c in _df.columns:
+                    return c
+            return None
+
+        col_ant = _pick_col(df, ["antena", "nombre_antena", "cell_name"])
+        col_lat = _pick_col(df, ["lat", "latitud", "latitude"])
+        col_lon = _pick_col(df, ["long", "lon", "longitud", "lng", "longitude"])
+        col_az  = _pick_col(df, ["azimut", "azimuth", "azi", "angulo"])
+
+        # BBOX El Salvador (o desde CONFIG si existe)
+        try:
+            _bbox = CONFIG.get("geografia", {}).get("sv_bbox", None) if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else None
+        except Exception:
+            _bbox = None
+        if not (isinstance(_bbox, dict) and all(k in _bbox for k in ("lat_min","lat_max","lon_min","lon_max"))):
+            _bbox = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
+
+        def _valid_latlon(lt, lg):
+            try:
+                lt = float(lt); lg = float(lg)
+                if np.isnan(lt) or np.isnan(lg):
+                    return False
+                if abs(lt) < 1e-9 and abs(lg) < 1e-9:
+                    return False
+                return (_bbox["lat_min"] <= lt <= _bbox["lat_max"]) and (_bbox["lon_min"] <= lg <= _bbox["lon_max"])
+            except Exception:
+                return False
+
+        sec_ant = ""
+        if col_ant:
+            dfv = df.copy()
+            dfv[col_ant] = dfv[col_ant].astype(str).str.strip()
+            # quitar antena '0' o vacías
+            dfv = dfv[dfv[col_ant].notna() & (dfv[col_ant] != "") & (dfv[col_ant] != "0")]
+            # validar coords si existen
+            if (col_lat in dfv.columns) and (col_lon in dfv.columns):
+                dfv = dfv[dfv.apply(lambda r: _valid_latlon(r[col_lat], r[col_lon]), axis=1)]
+
+            if not dfv.empty:
+                top = (dfv.groupby(col_ant)
+                        .size()
+                        .reset_index(name="activaciones")
+                        .sort_values("activaciones", ascending=False)
+                        .head(int(_topN)))
+
+                filas = []
+                for _, r0 in top.iterrows():
+                    ant = str(r0[col_ant])
+                    sub = dfv[dfv[col_ant] == ant]
+
+                    # lat/lon promedio
+                    lt = float(sub[col_lat].astype(float).mean()) if (col_lat in sub.columns) else None
+                    lg = float(sub[col_lon].astype(float).mean()) if (col_lon in sub.columns) else None
+
+                    # azimut dominante + desglose corto
+                    az_dom, desg = "—", "—"
+                    if col_az and (col_az in sub.columns):
+                        vc = (sub[col_az].astype(str).str.strip()
+                                        .replace({"": np.nan, "nan": np.nan})
+                                        .dropna()
+                                        .value_counts())
+                        if not vc.empty:
+                            az_dom = str(vc.index[0])
+                            parts = [f"Azimut {int(float(k))}: {int(v)} {'vez' if int(v)==1 else 'veces'}"
+                                     for k, v in vc.head(3).items()]
+                            desg = " | ".join(parts) + (" …" if len(vc) > 3 else "")
+
+                    # mapa
+                    if (lt is not None) and (lg is not None):
+                        url = f"https://www.google.com/maps?q={lt:.6f},{lg:.6f}"
+                        ant_fmt = f'<a href="{url}" target="_blank" rel="noopener">{ant}</a>'
+                        lt_fmt, lg_fmt = f"{lt:.6f}", f"{lg:.6f}"
+                    else:
+                        ant_fmt, lt_fmt, lg_fmt = ant, "—", "—"
+
+                    filas.append((ant_fmt, int(r0["activaciones"]), lt_fmt, lg_fmt, az_dom, desg))
+
+                # Render simple
+                out = []
+                out.append('<section id="resumen-antenas">')
+                out.append('<h2>Antenas más activadas (Top {n})</h2>'.format(n=_topN))
+                out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
+                out.append('<thead><tr>'
+                        '<th>#</th>'
+                        '<th>Antena</th>'
+                        '<th>Latitud</th>'
+                        '<th>Longitud</th>'
+                        '<th>Activaciones</th>'
+                        '<th>Azimut</th>'
+                        '</tr></thead><tbody>')
+                for idx, (ant_fmt, act, lt_fmt, lg_fmt, az_dom, desg) in enumerate(filas, start=1):
+                    out.append('<tr>'
+                            f'<td>{idx}</td>'
+                            f'<td>{ant_fmt}</td>'
+                            f'<td>{lt_fmt}</td>'
+                            f'<td>{lg_fmt}</td>'
+                            f'<td>{act}</td>'
+                            f'<td>{desg}</td>'
+                            '</tr>')
+                out.append('</tbody></table></div>')
+
+                out.append("""
+    <style>
+    #resumen-antenas .tabla-compacta { border-collapse: collapse; width:100%; font-size:1rem; }
+    #resumen-antenas .tabla-compacta th, #resumen-antenas .tabla-compacta td { border:1px solid #ddd; padding:6px 8px; text-align:left; }
+    #resumen-antenas .tabla-compacta th { background:#f2f2f2; }
+    #resumen-antenas .tabla-scroll { overflow-x:auto; }
+    </style>
+    """)
+                out.append('</section>')
+                sec_ant = "".join(out)
+
+        if sec_ant:
+            anchor = "<h2>Indicadores</h2>"
+            i = html.find(anchor)
+            if i != -1:
+                j = html.find("</section>", i)
+                if j != -1:
+                    html = html[:j+10] + "\n" + sec_ant + html[j+10:]
+                else:
+                    html += sec_ant
+            else:
+                html += sec_ant
+
+
+    except Exception:
+        pass
+    # === FIN HTML-ANTENAS-SIMPLE-1 ===
+
+    # REORDENAR-SECCIONES-1: mover “Top antenas” al final y renombrar
+    try:
+        _hdr = "<h2>Top antenas</h2>"
+        pos = html.find(_hdr)
+        if pos != -1:
+            ini = html.rfind("<section", 0, pos)
+            fin = html.find("</section>", pos)
+            if ini != -1 and fin != -1:
+                bloque = html[ini:fin+10]
+                # renombrar encabezado
+                bloque = bloque.replace(
+                    "<h2>Top antenas</h2>",
+                    "<h2>Todas las antenas que ha activado en el período analizado</h2>"
+                )
+                # quitar del lugar original
+                html = html[:ini] + html[fin+10:]
+                # insertar al final (antes de </body>)
+                if "</body>" in html:
+                    html = html.replace("</body>", bloque + "\n</body>")
+                else:
+                    html += bloque
+    except Exception:
+        pass
+
+    # --- REORDENAR-SECCIONES-1: deja "Top antenas" después de "Indicadores"
+    #     y manda "Todas las antenas..." hasta el final, ANTES de escribir el archivo.
+    try:
+        # === HTML-ANTENAS-RANGOS-1: Antenas por rango horario (debajo del Top antenas) ===
+        sec_ant_rangos = ""
+        try:
+            # --- 1) Detección robusta de columnas ---
+            cols_low = {c.lower(): c for c in df.columns}
+            def pick(*names):
+                for n in names:
+                    c = cols_low.get(n)
+                    if c: return c
+                # búsqueda suavecita por contiene
+                for c in df.columns:
+                    lc = c.lower()
+                    if any(n in lc for n in names):
+                        return c
+                return None
+
+            col_ant = pick("antena", "antenanombre", "antena_nombre")
+            col_lat = pick("lat", "latitud")
+            col_lon = pick("lon", "long", "longitud")
+            col_hora = pick("hora", "time")
+            col_fecha_hora = pick("fecha y hora", "fechahora", "datetime", "timestamp")
+
+            # Si no hay columna de antena, no armamos nada
+            if col_ant:
+                # --- 2) Obtener la hora (0..23) de forma robusta ---
+                def _to_hour_series():
+                    if col_hora is not None:
+                        import warnings
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings("ignore", message="Could not infer format*", category=UserWarning)
+                            s = pd.to_datetime(df[col_hora], errors="coerce").dt.hour
+
+                        if s.isna().mean() > 0.5:
+                            def _hh(x):
+                                try:
+                                    x = str(x)
+                                    hh = int(x.split(":")[0])
+                                    return hh
+                                except:
+                                    return np.nan
+                            s = df[col_hora].map(_hh)
+                        return s
+                    if col_fecha_hora is not None:
+                        return pd.to_datetime(df[col_fecha_hora], errors="coerce").dt.hour
+                    return None
+
+
+                hours = _to_hour_series()
+
+                                # Mañana 06–11:59, Tarde 12–17:59, Noche 18–23:59, Madrugada 00–05:59
+                def _lab(h):
+                    if h is None or np.isnan(h): return None
+                    h = int(h)
+                    if 6 <= h <= 11:        return "Mañana (06:00–11:59)"
+                    if 12 <= h <= 17:       return "Tarde (12:00–17:59)"
+                    if 18 <= h <= 23:       return "Noche (18:00–23:59)"
+                    return "Madrugada (00:00–05:59)"
+
+                labels_orden = [
+                    "Madrugada (00:00–05:59)",
+                    "Mañana (06:00–11:59)",
+                    "Tarde (12:00–17:59)",
+                    "Noche (18:00–23:59)",
+                ]
+
+
+                # --- 4) Utilidades de pretty/geo ---
+                def _fmt(x):
+                    try:
+                        x = float(x)
+                        return f"{x:.6f}"
+                    except:
+                        return "—"
+
+                def _first_valid_geo(sub_ant):
+                    if col_lat and col_lon:
+                        tmp = sub_ant[[col_lat, col_lon]].dropna()
+                        if not tmp.empty:
+                            t2 = tmp[(tmp[col_lat]!=0) | (tmp[col_lon]!=0)]
+                            if not t2.empty:
+                                r = t2.iloc[0]
+                                return float(r[col_lat]), float(r[col_lon])
+                    return (None, None)
+
+                # --- 5) Armar HTML ---
+                out = []
+                out.append('<section id="antenas-rangos">')
+                out.append('<h2>Antenas por rango horario</h2>')
+                out.append('<style>#antenas-rangos h3.sub{background:#f7f7f7;border:1px solid #e6e6e6;border-radius:6px;padding:.5rem .75rem;margin:1rem 0 .5rem}#antenas-rangos .mono{font-family:ui-monospace,Menlo,Consolas,monospace}#antenas-rangos .nowrap{white-space:nowrap}</style>')
+                if hours is not None:
+                    rangos = hours.map(_lab)
+                    for lab in labels_orden:
+                        mask = rangos == lab
+                        total = int(mask.sum())
+                        if total == 0:
+                            continue
+                        sub = df[mask]
+
+                        # --- Filtrar antenas y coordenadas válidas antes del Top N ---
+                        tmp = sub.copy()
+                        # validar lat/lon si existen
+                        tmp["_lat"] = pd.to_numeric(tmp.get(col_lat, pd.Series(dtype=float)), errors="coerce")
+                        tmp["_lon"] = pd.to_numeric(tmp.get(col_lon, pd.Series(dtype=float)), errors="coerce")
+                        valid_geo = (
+                            tmp["_lat"].between(-90, 90) &
+                            tmp["_lon"].between(-180, 180) &
+                            ~((tmp["_lat"].abs() < 1e-9) & (tmp["_lon"].abs() < 1e-9))
+                        )
+                        # limpiar nombre de antena
+                        ant_str = tmp[col_ant].astype(str).str.strip()
+                        valid_ant = (ant_str != "") & (ant_str != "0") & (~ant_str.str.match(r"(?i)(sin\s*inf\.?|s/i)$"))
+
+                        # dataframe ya depurado
+                        sub_valid = tmp[valid_geo & valid_ant].copy()
+
+                        # --- Top N (respeta override/config) ---
+                        try:
+                            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
+                                _topN = int(OVERRIDE_TOPS.get('antenas'))
+                            elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
+                                _topN = int(CONFIG.get("html", {}).get("top_antenas_n", 3))
+                            else:
+                                _topN = 3
+                        except Exception:
+                            _topN = 3
+
+                        conteo = sub_valid[col_ant].value_counts(dropna=False)
+                        top_series = conteo.head(_topN)
+
+
+                        out.append(f'<h3 class="sub">{lab} <span class="sub">({total} activaciones)</span></h3>')
+                        out.append('<table class="tbl"><thead><tr><th>#</th><th>Antena</th><th>Latitud</th><th>Longitud</th><th>Conteo</th><th>Azimuts frecuentes</th></tr></thead><tbody>')
+
+                        for i, (ant, cnt) in enumerate(top_series.items(), start=1):
+                            sub_ant = sub_valid[sub_valid[col_ant] == ant]
+
+                            # Geo (primera coord válida)
+                            lat, lon = _first_valid_geo(sub_ant)
+                            lat_s = _fmt(lat) if lat is not None else "—"
+                            lon_s = _fmt(lon) if lon is not None else "—"
+
+                            # Link a Maps si hay geo
+                            if lat is not None and lon is not None:
+                                ant_html = f'<a href="https://www.google.com/maps?q={lat_s},{lon_s}" target="_blank" rel="noopener">{ant}</a>'
+                            else:
+                                ant_html = f"{ant}"
+
+                            # Azimuts frecuentes (Top 3)
+                            az_s = "—"
+                            if "azimut" in sub_ant.columns:
+                                try:
+                                    azv = pd.to_numeric(sub_ant["azimut"], errors="coerce").round().dropna().astype(int)
+                                    vc = azv.value_counts().head(3)
+                                    if not vc.empty:
+                                        parts = [f"Azimut {int(k)}: {int(v)} {'vez' if int(v)==1 else 'veces'}" for k, v in vc.items()]
+                                        az_s = " | ".join(parts)
+                                except Exception:
+                                    pass
+
+                            out.append(
+                                f"<tr><td class='mono'>{i}</td>"
+                                f"<td>{ant_html}</td>"
+                                f"<td class='mono nowrap'>{lat_s}</td>"
+                                f"<td class='mono nowrap'>{lon_s}</td>"
+                                f"<td class='mono'>{int(cnt):,}</td>"
+                                f"<td>{az_s}</td></tr>"
+    )
+
+                        out.append("</tbody></table>")
+                        
+
+                out.append("</section>")
+                sec_ant_rangos = "\n".join(out)
+                log(f"[DEBUG] Antenas por horario: {len(sec_ant_rangos)} chars")
+        except Exception:
+            sec_ant_rangos = ""
+        # === FIN HTML-ANTENAS-RANGOS-1 ===
+
+        # 1) Mover "Top antenas" inmediatamente después de "Indicadores" (si aún no lo está)
+        idx_ind = html.find("<h2>Indicadores</h2>")
+        idx_top = html.find("<h2>Top antenas</h2>")
+        if idx_ind != -1 and idx_top != -1 and idx_top < idx_ind:
+            fin_top = html.find("</section>", idx_top)
+            bloque_top = html[idx_top: fin_top + 10]  # incluye </section>
+            # quita el bloque de donde estaba
+            html = html[:idx_top] + html[fin_top + 10:]
+            # inserta justo después de la sección "Indicadores"
+            fin_ind = html.find("</section>", idx_ind)
+            html = html[:fin_ind + 10] + "\n  " + bloque_top + "\n  " + html[fin_ind + 10:]
+
+                # REORDENAR-SECCIONES-2: mover "<h2>Contactos con más comunicación" debajo de "Antenas más activadas"
+        try:
+            # 2A) Mover bloque "<h2>Contactos con más comunicación" justo después del resumen de antenas
+            hdr_resumen = "<h2>Antenas más activadas"
+            idx_res = html.find(hdr_resumen)
+            if idx_res != -1:
+                # localizar bloque de "<h2>Contactos con más comunicación"
+                # primero busca con id, si no, por el H2 plano
+                idx_int = html.find('id="interacciones"')
+                if idx_int == -1:
+                    idx_int = html.find("<h2>Contactos con más comunicación")
+                if idx_int != -1:
+                    ini_int = html.rfind("<section", 0, idx_int)
+                    fin_int = html.find("</section>", idx_int)
+                    if ini_int != -1 and fin_int != -1:
+                        bloque_int = html[ini_int:fin_int+10]
+                        # quitar del lugar original
+                        html = html[:ini_int] + html[fin_int+10:]
+                        # insertar después del resumen
+                        fin_res = html.find("</section>", idx_res)
+                        if fin_res != -1:
+                            html = html[:fin_res+10] + "\n" + bloque_int + html[fin_res+10:]
+
+            # 2B) Insertar "Antenas por rango horario" debajo de "Interacciones" (si existe); si no, debajo del resumen
+            if sec_ant_rangos:
+                # intentar ponerlo después del bloque de interacciones recién reubicado
+                i_int = html.find('id="interacciones"')
+                if i_int == -1:
+                    i_int = html.find("<h2>Contactos con más comunicación")
+                if i_int != -1:
+                    j_int = html.find("</section>", i_int)
+                    if j_int != -1:
+                        html = html[:j_int+10] + "\n" + sec_ant_rangos + html[j_int+10:]
+                else:
+                    # fallback: debajo de "Antenas más activadas"
+                    i = html.find(hdr_resumen)
+                    if i != -1:
+                        j = html.find("</section>", i)
+                        if j != -1:
+                            html = html[:j+10] + "\n" + sec_ant_rangos + html[j+10:]
+                    else:
+                        # si no hay ninguna de las dos, mándalo al final
+                        if "</body>" in html:
+                            html = html.replace("</body>", sec_ant_rangos + "\n</body>")
+                        else:
+                            html += sec_ant_rangos
+        except Exception:
+            pass
+
+        # REORDENAR-SECCIONES-3: enviar "Todos los contactos" al final del documento
+        try:
+            idx_tc = html.find('id="todos-contactos"')
+            if idx_tc != -1:
+                ini_tc = html.rfind("<section", 0, idx_tc)
+                fin_tc = html.find("</section>", idx_tc)
+                if ini_tc != -1 and fin_tc != -1:
+                    bloque_tc = html[ini_tc:fin_tc+10]
+                    # quitar del lugar original
+                    html = html[:ini_tc] + html[fin_tc+10:]
+                    # insertarlo ANTES de </body> (última sección)
+                    if "</body>" in html:
+                        html = html.replace("</body>", bloque_tc + "\n</body>", 1)
+                        # === JS: Auto-agregar correlativo (#) a tablas que NO lo tengan ===
+                        _js_autonum = """
+                        <script>
+                        (function() {
+                        try {
+                            var tables = document.querySelectorAll('section table');
+                            tables.forEach(function(t) {
+                            // ¿Ya está marcado con índice? (o ya tiene '#' primero)
+                            var thFirst = t.querySelector('thead tr th:first-child') || t.querySelector('tr:first-child th:first-child');
+                            var hasHash = thFirst && thFirst.textContent && thFirst.textContent.trim() === '#';
+                            if (t.classList.contains('has-index') || hasHash) {
+                                // ya tienen índice (p.ej., Top antenas), solo asegurar clase para el CSS
+                                if (!t.classList.contains('has-index')) t.classList.add('has-index');
+                                return;
+                            }
+
+                            // 1) Insertar TH '#' al inicio del encabezado (crea THEAD si no hay)
+                            var thead = t.querySelector('thead');
+                            if (!thead) {
+                                thead = document.createElement('thead');
+                                var firstRow = t.querySelector('tr');
+                                if (firstRow) {
+                                var trHead = document.createElement('tr');
+                                // Crear celdas de encabezado según número de columnas
+                                var thAuto = document.createElement('th');
+                                thAuto.textContent = '#';
+                                trHead.appendChild(thAuto);
+                                // Duplicar estructura de la primera fila como encabezado (vacío)
+                                var cells = firstRow.children;
+                                for (var i = 0; i < cells.length; i++) {
+                                    var th = document.createElement('th');
+                                    // si la primera fila ya es header, se respetará después
+                                    trHead.appendChild(th);
+                                }
+                                thead.appendChild(trHead);
+                                t.insertBefore(thead, t.firstChild);
+                                }
+                            } else {
+                                // Hay thead: insertamos '#' como primera celda de la primera fila de encabezado
+                                var tr0 = thead.querySelector('tr');
+                                if (tr0) {
+                                var thHash = document.createElement('th');
+                                thHash.textContent = '#';
+                                tr0.insertBefore(thHash, tr0.firstChild);
+                                }
+                            }
+
+                            // 2) Numerar cuerpo: insertar TD (1..n) como primera celda en cada fila del tbody
+                            var rows = t.querySelectorAll('tbody tr');
+                            if (rows.length === 0) { rows = t.querySelectorAll('tr'); } // fallback si no hay tbody
+                            var n = 1;
+                            rows.forEach(function(r) {
+                                var td = document.createElement('td');
+                                td.textContent = String(n++);
+                                // estilos mínimos para que no rompa
+                                td.style.textAlign = 'center';
+                                r.insertBefore(td, r.firstChild);
+                            });
+
+                            // 3) Marcar la tabla para que reciba el CSS de columna angosta
+                            t.classList.add('has-index');
+                            });
+                        } catch(e) { /* silencioso */ }
+                        })();
+                        </script>
+                        """
+                        html = html.replace("</body>", _js_autonum + "</body>", 1)
+                        # === JS: ajustar offset según altura del header y hacer scroll con margen ===
+                        _js_anchor = """
+                        <script>
+                        (function(){
+                        try{
+                            // 1) Medir header y setear --anchor-offset (con pequeño colchón)
+                            var hdr = document.querySelector('header');
+                            var offset = 96; // default
+                            if (hdr){
+                            var rect = hdr.getBoundingClientRect();
+                            offset = Math.round(rect.height + 12); // colchón extra
+                            }
+                            document.documentElement.style.setProperty('--anchor-offset', offset + 'px');
+
+                            // 2) Interceptar clics del TOC para asegurar scroll con offset (cross-browser)
+                            var links = document.querySelectorAll('.toc a[href^="#"]');
+                            links.forEach(function(a){
+                            a.addEventListener('click', function(e){
+                                e.preventDefault();
+                                var id = this.getAttribute('href').slice(1);
+                                var el = document.getElementById(id);
+                                if (!el) return;
+
+                                // Calcular posición considerando el offset
+                                var y = el.getBoundingClientRect().top + window.pageYOffset - offset;
+
+                                // Scroll suave; si no soporta, cae en instantáneo
+                                window.scrollTo({ top: y, behavior: 'smooth' });
+
+                                // Actualizar hash sin saltos “raros”
+                                history.replaceState(null, '', '#' + id);
+                            });
+                            });
+
+                            // 3) Si el usuario llega con hash en la URL, re-posicionar con offset
+                            if (location.hash && document.getElementById(location.hash.slice(1))){
+                            var target = document.getElementById(location.hash.slice(1));
+                            var y = target.getBoundingClientRect().top + window.pageYOffset - offset;
+                            window.scrollTo(0, y);
+                            }
+                        }catch(e){}
+                        })();
+                        </script>
+                        """
+                        html = html.replace("</body>", _js_anchor + "</body>", 1)
+
+                        # === JS: detectar pastillas claras y aplicar .need-contrast ===
+                        _js_contrast = """
+                        <script>
+                        (function(){
+                        try{
+                            // Seleccionamos elementos "chip/pastilla" más comunes en el header/subtítulos
+                            var sels = [
+                            'header .badge','header .chip','header .pill','header .tag',
+                            'header span','header a.badge','header a.chip','header a.pill','header a.tag'
+                            ];
+                            var nodes = document.querySelectorAll(sels.join(','));
+                            var THRESH = 0.85; // luminancia: >0.85 lo consideramos "claro"
+
+                            function parseRGB(s){
+                            // soporta "rgb(r,g,b)" o "rgba(r,g,b,a)"
+                            var m = s.match(/rgba?\\((\\d+),(\\d+),(\\d+)/i);
+                            if(!m) return null;
+                            return {r:+m[1], g:+m[2], b:+m[3]};
+                            }
+                            function relLum(c){
+                            // WCAG relative luminance
+                            function n(x){ x/=255; return (x<=0.03928)? x/12.92 : Math.pow((x+0.055)/1.055,2.4); }
+                            var R=n(c.r), G=n(c.g), B=n(c.b);
+                            return 0.2126*R + 0.7152*G + 0.0722*B;
+                            }
+
+                            nodes.forEach(function(el){
+                            var cs = getComputedStyle(el);
+                            // ignorar elementos sin color de fondo
+                            var bg = cs.backgroundColor;
+                            if(!bg || bg === 'transparent') return;
+                            var rgb = parseRGB(bg);
+                            if(!rgb) return;
+                            var L = relLum(rgb);
+                            if(L > THRESH){
+                                el.classList.add('need-contrast'); // activa borde y texto oscuro
+                            }
+                            });
+                        }catch(e){}
+                        })();
+                        </script>
+                        """
+                        html = html.replace("</body>", _js_contrast + "</body>", 1)
+
+                        # === CSS: columna de correlativo (#) SOLO en tablas con .has-index — AJUSTE FINO (28px móvil) ===
+                        _css_idx = """
+                        <style>
+                        /* Desktop / tablet: compacto (44px) */
+                        .has-index th:first-child,
+                        .has-index td:first-child {
+                            text-align: center !important;
+                            width: 44px;
+                            min-width: 44px;
+                            max-width: 44px;
+                            padding-left: 4px;
+                            padding-right: 4px;
+                        }
+                        /* Móvil vertical: ultra compacto (28px) */
+                        @media (max-width: 640px) {
+                            .has-index th:first-child,
+                            .has-index td:first-child {
+                            width: 28px;
+                            min-width: 28px;
+                            max-width: 28px;
+                            font-size: 12px;
+                            padding-left: 2px;
+                            padding-right: 2px;
+                            }
+                        }
+                        </style>
+                        """
+                        html = html.replace("</style>", _css_idx + "</style>", 1)
+                        # === CSS OVERRIDE (header + menú) para contraste seguro ===
+                        _css_hdr = """
+                        <style>
+                        /* Texto del header en gris oscuro (legible sobre fondo blanco) */
+                        header, header * { color: #444 !important; }
+
+                        /* Enlaces del menú (TOC) dentro del header: gris oscuro y con hover subrayado */
+                        header nav a,
+                        .toc a {
+                            color: #444 !important;
+                            text-decoration: none;
+                        }
+                        header nav a:hover,
+                        .toc a:hover { text-decoration: underline; }
+
+                        /* Pastillas/etiquetas del header: texto oscuro + contorno suave */
+                        header .badge,
+                        header .chip,
+                        header .pill,
+                        header .tag,
+                        header span.badge,
+                        header span.pill {
+                            color: #111 !important;
+                            box-shadow: inset 0 0 0 1px rgba(0,0,0,.28);
+                        }
+                        </style>
+                        """
+                        html = html.replace("</style>", _css_hdr + "</style>", 1)
+                        # === CSS: TOC como botones azules con alto contraste ===
+                        _css_tocbtn = """
+                        <style>
+                        /* Contenedor del TOC: filas envolventes y espacio entre botones */
+                        .toc{
+                            display: flex;
+                            flex-wrap: wrap;
+                            gap: 8px;
+                            margin: 6px 0 10px;
+                        }
+                        /* Cada enlace del TOC luce como botón “pill” azul */
+                        .toc a{
+                            display: inline-block;
+                            background: #0B57D0;             /* azul accesible */
+                            color: #fff !important;           /* texto blanco, alto contraste */
+                            padding: 6px 12px;
+                            border-radius: 9999px;            /* pastilla */
+                            border: 1px solid rgba(0,0,0,.15);
+                            text-decoration: none !important;
+                            font-weight: 500;
+                            line-height: 1.1;
+                            box-shadow: 0 1px 0 rgba(0,0,0,.06);
+                            transition: filter .12s ease, transform .06s ease;
+                        }
+                        .toc a:hover{ filter: brightness(.92); }
+                        .toc a:active{ transform: translateY(1px); }
+                        .toc a:focus{
+                            outline: 2px solid #003C99;       /* foco visible */
+                            outline-offset: 2px;
+                        }
+
+                        /* Móvil: botones un poco más compactos */
+                        @media (max-width: 640px){
+                            .toc{ gap: 6px; }
+                            .toc a{ padding: 5px 10px; font-size: 14px; }
+                        }
+                        </style>
+                        """
+                        html = html.replace("</style>", _css_tocbtn + "</style>", 1)
+                        # === CSS: líneas/bordes para la tabla de "Todos los contactos" ===
+                        _css_tc_lines = """
+                        <style>
+                        /* Solo afecta la sección con id="todos-contactos" */
+                        #todos-contactos table{
+                            width: 100%;
+                            border-collapse: collapse;
+                        }
+                        #todos-contactos thead th{
+                            background: #f7f7f7;
+                            border-top: 1px solid #e6e6e6;
+                            border-bottom: 1px solid #e6e6e6;
+                        }
+                        #todos-contactos tbody td{
+                            border-bottom: 1px solid #eaeaea;
+                        }
+                        /* (Opcional) líneas verticales suaves como en otras tablas */
+                        #todos-contactos th:not(:last-child),
+                        #todos-contactos td:not(:last-child){
+                            border-right: 1px solid #f0f0f0;
+                        }
+                        /* Hover sutil para lectura */
+                        #todos-contactos tbody tr:hover{
+                            background: #fafafa;
+                        }
+                        </style>
+                        """
+                        html = html.replace("</style>", _css_tc_lines + "</style>", 1)
+
+                        # === CSS: margen para anclas y scroll suave ===
+                        _css_anchor = """
+                        <style>
+                        :root { --anchor-offset: 96px; } /* valor seguro; JS lo ajusta a la altura real */
+                        /* Cualquier sección con id (#meta, #antenas, #todos-contactos, etc.) dejará colchón arriba */
+                        section[id] { scroll-margin-top: var(--anchor-offset); }
+
+                        /* Scroll suave nativo (fallback con JS abajo) */
+                        html { scroll-behavior: smooth; }
+                        </style>
+                        """
+                        html = html.replace("</style>", _css_anchor + "</style>", 1)
+
+
+                        # === CSS: contraste para pastillas claras ===
+                        _css_contrast = """
+                        <style>
+                        .need-contrast{
+                            /* contorno discreto para que destaque en fondo blanco */
+                            box-shadow: inset 0 0 0 1px rgba(0,0,0,.28);
+                            color: #111 !important;            /* texto oscuro para legibilidad */
+                        }
+                        </style>
+                        """
+                        html = html.replace("</style>", _css_contrast + "</style>", 1)
+
+
+                    else:
+                        html += bloque_tc
+        except Exception:
+            pass
+
+
+        # REORDENAR-SECCIONES-3: asegurar "Todos los contactos" quede como última sección (antes del pie)
+        try:
+            idx_tc = html.find('<section id="todos-contactos">')
+            if idx_tc != -1:
+                ini_tc = html.rfind("<section", 0, idx_tc)
+                fin_tc = html.find("</section>", idx_tc)
+                if ini_tc != -1 and fin_tc != -1:
+                    bloque_tc = html[ini_tc:fin_tc+10]
+                    # quitar del lugar original
+                    html = html.replace(bloque_tc, "")
+                    # reinsertar al final del <body> (antes del pie legal)
+                    html = html.replace("</body>", bloque_tc + "\n</body>")
+        except Exception:
+            pass
+
+    except Exception:
+        # si algo falla, no bloquees la generación del HTML
+        pass
+
+        # STICKY-HEADER-1: CSS adicional para que el encabezado de las tablas quede fijo al hacer scroll
+    css_sticky = """
+<style>
+/* Encabezados fijos para tablas largas (más contraste) */
+.tbl thead th,
+.tabla-compacta thead th{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #e9ecef !important;   /* gris más oscuro */
+  color:#111;
+  box-shadow: 0 1px 0 rgba(0,0,0,.16);
+  background-clip: padding-box;
+}
+</style>
+
+"""
+    # Inyectar el CSS extra justo antes de cerrar el <body>
+    html = html.replace("</body>", css_sticky + "\n</body>")
+
+    # --- ESCRIBIR ARCHIVO ---
+
+    # === HTML-BRANDING-2: Pie legal + byline (al FINAL del <body>) ===
+    try:
+        br = (CONFIG or {}).get("branding", {}) if 'CONFIG' in globals() else {}
+        _pl_on   = bool(br.get("mostrar_pie_legal", True))
+        _pl_txt  = str(br.get("pie_legal_texto", ""))
+        _by_txt  = str(br.get("byline_texto", ""))
+        _pl_prnt = bool(br.get("pie_legal_en_impresion", True))
+
+        if _pl_on and (_pl_txt or _by_txt):
+            # 1) CSS del pie (lo metemos en <head>)
+            _disp = "block" if _pl_prnt else "none"
+            _css_pl = f"""
+            <style>
+                .legal {{
+                    margin-top:30px;
+                    padding:10px 0;
+                    border-top:1px solid #eee;
+                    color:#666;
+                    font-size:12px;
+                    line-height:1.35;
+                    text-align:center !important;
+                }}
+                .legal .legal-text {{
+                    display:block;
+                    text-align:center !important;
+                }}
+                .legal .by {{
+                    float:none;
+                    display:block;
+                    margin-top:6px;
+                    color:#444;
+                    text-align:center !important;
+                }}
+                @media print {{
+                    .legal {{ display:{_disp} }}
+                }}
+            </style>
+            """
+
+
+
+            html = html.replace("</style>", "</style>" + _css_pl, 1)
+
+            # --- FOOTER legal + byline desde config.branding (robusto) ---
+            try:
+                _branding = CONFIG.get("branding", {}) if isinstance(CONFIG, dict) else {}
+                _legal   = str(_branding.get("pie_legal_texto", "")).strip()
+                _byline  = str(_branding.get("byline_texto", "")).strip()
+
+                # Construir footer solo si hay algo que mostrar
+                _footer_html = ""
+                if _legal or _byline:
+                    _by  = f'<span class="by" style="display:block;text-align:center">{_byline}</span>' if _byline else ""
+                    _txt = f'<span class="legal-text">{_legal}</span>' if _legal else ""
+                    _footer_html = (
+                    f'<footer class="legal" style="text-align:center">'
+                    f'<span class="legal-text" style="display:block;text-align:center">{_txt}</span>'
+                    f'{_by}'
+                    f'</footer>'
+                )
+
+
+                    # 0) Eliminar cualquier footer previo (ambas comillas)
+                    html = html.replace("<footer class='legal'>", "<footer class=\"legal\">")
+                    html = html.replace('<footer class="legal">', "")
+
+                    # 1) Insertar ANTES del cierre de </body> (posición segura)
+                    _tag = "</body>"
+                    _pos = html.rfind(_tag)
+                    if _pos != -1:
+                        html = html[:_pos] + _footer_html + _tag + html[_pos+len(_tag):]
+                    else:
+                        # 2) Si por alguna razón no hay </body>, lo agregamos al final
+                        html += _footer_html
+            except Exception:
+                pass
+
+    except Exception:
+        pass
+    # === HTML-BRANDING-2 (fin) ===
+
+    # FORZAR-ULTIMO: mover "Todos los contactos" al final del documento (antes del footer si existe)
+    try:
+        idx_tc = html.find('id="todos-contactos"')
+        if idx_tc != -1:
+            ini_tc = html.rfind("<section", 0, idx_tc)
+            fin_tc = html.find("</section>", idx_tc)
+            if ini_tc != -1 and fin_tc != -1:
+                bloque_tc = html[ini_tc:fin_tc+10]
+                # quitar del lugar original
+                html = html[:ini_tc] + html[fin_tc+10:]
+
+                # Buscar CUALQUIER footer class="legal" con o sin atributos extra
+                m = re.search(r"<footer\s+class=['\"]legal['\"][^>]*>", html, flags=re.I)
+                foot_i = m.start() if m else -1
+
+
+                if foot_i != -1:
+                    # Insertar ANTES del footer (queda como última sección visible)
+                    html = html[:foot_i] + bloque_tc + html[foot_i:]
+                elif "</body>" in html:
+                    # Fallback: justo antes de </body>
+                    html = html.replace("</body>", bloque_tc + "\n</body>", 1)
+                else:
+                    # Último fallback: al final del documento
+                    html += bloque_tc
+    except Exception:
+        pass
+
+
+        # TOC-REFRESH: reconstruir índice final (orden objetivo) y reemplazar el anterior
+    try:
+        def _has(id_): 
+            return f'id="{id_}"' in html
+
+        _links = []
+        if _has("meta"):
+            _links.append('<a href="#meta">Metadatos</a>')
+        if _has("resumen-antenas"):
+            _links.append('<a href="#resumen-antenas">Antenas más activadas</a>')
+        if _has("interacciones"):
+            _links.append('<a href="#interacciones">Contactos con más comunicación</a>')
+        # Rangos: aceptar cualquiera de los dos IDs posibles
+        if _has("antenas-rangos") or _has("rangos"):
+            _id_rangos = "antenas-rangos" if _has("antenas-rangos") else "rangos"
+            _links.append(f'<a href="#{_id_rangos}">Antenas por rango horario</a>')
+        if _has("interacciones-recientes"):
+            _links.append('<a href="#interacciones-recientes">Interacciones recientes</a>')
+        if _has("top-antenas"):
+            _links.append('<a href="#top-antenas">Todas las antenas</a>')
+        if _has("todos-contactos"):
+            _links.append('<a href="#todos-contactos">Todos los contactos</a>')
+
+        if _links:
+            _toc_html = '<nav id="toc" class="toc" style="position:sticky; top:0; z-index:999; background:#fff; border-bottom:1px solid #e5e7eb; box-shadow:0 2px 6px rgba(0,0,0,.06); padding:8px 12px;">' + ' ... '.join(_links) + '</nav>'
+            # Si ya existe un TOC, reemplazarlo; si no, insertarlo después del </header>
+            i = html.find('<nav id="toc"')
+            if i != -1:
+                j = html.find("</nav>", i)
+                if j != -1:
+                    html = html[:i] + _toc_html + html[j+6:]
+            else:
+                html = html.replace("</header>", "</header>\n  " + _toc_html, 1)
+    except Exception:
+        pass
+
+
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(html)
+
+
+    return html_path
+
+
+
+# --- Anti-hojas: ignorar ocultas y elegir visible ---
+try:
+    import openpyxl  # para detectar hojas ocultas/visibles
+except Exception:
+    openpyxl = None
+
+def _obtener_hojas_visibles(ruta_excel):
+    if openpyxl is None:
+        return None, "NO_OPENPYXL"
+    try:
+        wb = openpyxl.load_workbook(ruta_excel, read_only=True, data_only=True)
+        visibles = [ws.title for ws in wb.worksheets if getattr(ws, "sheet_state", "visible") == "visible"]
+        wb.close()
+        return visibles, None
+    except Exception:
+        return None, "LOAD_FAIL"
+
+def _seleccionar_hoja_visible(ruta_excel):
+    visibles, err = _obtener_hojas_visibles(ruta_excel)
+    if err == "NO_OPENPYXL":
+        print("Aviso: 'openpyxl' no disponible; se usará la primera hoja por defecto.")
+        return None
+    if err == "LOAD_FAIL":
+        print("Aviso: no se pudo inspeccionar hojas; se usará la primera hoja por defecto.")
+        return None
+    if not visibles:
+        print("No hay hojas visibles; se usará la primera hoja por defecto.")
+        return None
+    if len(visibles) == 1:
+        print(f"Hoja visible detectada: {visibles[0]}")
+        return visibles[0]
+
+    print("Hojas visibles detectadas:")
+    for i, name in enumerate(visibles, 1):
+        print(f"  [{i}] {name}")
+    while True:
+        resp = input("Elegí el número de la hoja a procesar (Enter = 1): ").strip()
+        idx = 1 if resp == "" else int(resp) if resp.isdigit() else None
+        if idx and 1 <= idx <= len(visibles):
+            elegido = visibles[idx - 1]
+            print(f"Hoja seleccionada: {elegido}")
+            return elegido
+        print("Ingresá un número válido (1..N).")
+# --- Fallback: listar TODAS las hojas con pandas y seleccionar una ---
+def _listar_todas_hojas(ruta_excel):
+    try:
+        xls = pd.ExcelFile(ruta_excel)
+        return list(xls.sheet_names)
+    except Exception:
+        return None
+
+def _seleccionar_hoja(ruta_excel):
+    """
+    Intenta primero elegir entre hojas VISIBLES (openpyxl).
+    Si no es posible, lista TODAS las hojas (pandas) y deja elegir.
+    Si todo falla, devuelve None y se usará la primera por defecto.
+    """
+    # 1) Intento con hojas visibles
+    try:
+        elegido = _seleccionar_hoja_visible(ruta_excel)
+        if elegido is not None:
+            return elegido
+    except Exception:
+        pass
+
+    # 2) Fallback: todas las hojas
+    hojas = _listar_todas_hojas(ruta_excel)
+    if not hojas:
+        print("No se pudo listar hojas; se usará la primera hoja por defecto.")
+        return None
+
+    if len(hojas) == 1:
+        print(f"Hoja detectada (todas): {hojas[0]}")
+        return hojas[0]
+
+    print("Hojas detectadas (todas):")
+    for i, h in enumerate(hojas, 1):
+        print(f"  [{i}] {h}")
+    while True:
+        resp = input("Elegí el número de la hoja a procesar (Enter = 1): ").strip()
+        if resp == "":
+            elegido = hojas[0]
+            break
+        if resp.isdigit() and 1 <= int(resp) <= len(hojas):
+            elegido = hojas[int(resp) - 1]
+            break
+        print("Número inválido. Probá de nuevo.")
+    print(f"Hoja seleccionada: {elegido}")
+    return elegido
+# --- Normalizadores robustos y pre-flight de esenciales ---
+
+ESENCIALES_IN = ["lat", "long", "azimut", "fecha", "hora", "tel"]
+
+def _es_num(x):
+    try:
+        return (isinstance(x, (int, float, np.number)) and not pd.isna(x))
+    except Exception:
+        return False
+
+def _normalizar_fecha(df: pd.DataFrame) -> list:
+    avisos = []
+    if "fecha" not in df.columns:
+        avisos.append("Pre-flight: no existe columna 'fecha'.")
+        return avisos
+    s = df["fecha"]
+    res = pd.Series([pd.NaT] * len(df), index=s.index, dtype="datetime64[ns]")
+    mask_num = s.apply(_es_num)
+    if mask_num.any():
+        res.loc[mask_num] = pd.to_datetime(s[mask_num], unit="D", origin="1899-12-30", errors="coerce")
+    mask_str = ~mask_num
+    if mask_str.any():
+        res.loc[mask_str] = pd.to_datetime(s[mask_str], errors="coerce", dayfirst=True)
+    df["fecha"] = res.dt.strftime("%d/%m/%Y").fillna("Sin Inf.")
+    return avisos
+
+def _pad_hhmmss(s: str) -> str | None:
+    if s is None: return None
+    t = str(s).strip()
+    if not t or t.lower() in {"sin inf.", "nan", "none"}: return None
+    t = re.sub(r"\s+", "", t).replace(".", ":").replace("-", ":").replace("/", ":")
+    if ":" in t:
+        p = t.split(":")
+        h = (p[0] if p[0] else "00").zfill(2)
+        m = (p[1] if len(p)>1 else "00").zfill(2)
+        s2= (p[2] if len(p)>2 else "00").zfill(2)
+        cand = f"{h}:{m}:{s2}"
+        try:
+            datetime.strptime(cand, "%H:%M:%S")
+            return cand
+        except Exception:
+            return None
+    return None
+
+def _normalizar_hora(df: pd.DataFrame) -> list:
+    avisos = []
+    if "hora" not in df.columns:
+        avisos.append("Pre-flight: no existe columna 'hora'.")
+        return avisos
+    col = df["hora"]
+    res = pd.Series([None]*len(col), index=col.index, dtype="object")
+    dt = pd.to_datetime(col, errors="coerce")
+    mask_ok = dt.notna()
+    if mask_ok.any():
+        res.loc[mask_ok] = dt.loc[mask_ok].dt.strftime("%H:%M:%S")
+    mask_rest = ~mask_ok
+    if mask_rest.any():
+        res.loc[mask_rest] = col.loc[mask_rest].apply(_pad_hhmmss)
+    df["hora"] = res.where(res.notna(), "Sin Inf.")
+    return avisos
+
+def _preflight_esenciales(df: pd.DataFrame) -> list:
+    faltan = [c for c in ESENCIALES_IN if c not in df.columns]
+    return ["Pre-flight: faltan columnas esenciales (IN): " + ", ".join(faltan)] if faltan else []
+# --- Helpers de hora y carpetas/rangos (Preset A SV) ---
+from datetime import time as _time
+
+RANGOS_SV = {
+    "madrugada": ("madrugada_0000-0559", _time(0, 0, 0),  _time(6, 0, 0)),    # 00:00–05:59
+    "manana":    ("manana_0600-1159",    _time(6, 0, 0),  _time(12, 0, 0)),   # 06:00–11:59
+    "tarde":     ("tarde_1200-1759",     _time(12, 0, 0), _time(18, 0, 0)),   # 12:00–17:59
+    "noche":     ("noche_1800-2359",     _time(18, 0, 0), _time(23, 59, 59)), # 18:00–23:59
+}
+
+
+def _hhmmss_to_time_or_none(hh):
+    try:
+        h, m, s = str(hh).strip()[:8].split(":")
+        return _time(int(h), int(m), int(s))
+    except Exception:
+        return None
+
+def _en_rango(t: _time, ini: _time, fin: _time) -> bool:
+    """True si t está en [ini..fin], manejando rangos que cruzan medianoche."""
+    if ini <= fin:
+        return ini <= t <= fin
+    # cruza medianoche: p.ej. 18:01..03:00
+    return (t >= ini) or (t <= fin)
+
+def _clasificar_rango_sv(hhmmss: str):
+    t = _hhmmss_to_time_or_none(hhmmss)
+    if t is None:
+        return None  # sin rango si no hay hora válida
+    for clave, (_, ini, fin) in RANGOS_SV.items():
+        if _en_rango(t, ini, fin):
+            return clave
+    return None
+
+# =========================
+# Flujo principal
+# =========================
+
+def _modo_manual():
+    """
+    Entrada manual de puntos/antenas con validación básica.
+    Genera un KML/KMZ usando los mismos estilos reusables.
+    """
+    global CONFIG
+    from collections import Counter
+
+    # Helpers locales
+    def _input_str(msg, obligatorio=False, maxlen=None):
+        while True:
+            s = input(msg).strip()
+            if s == "" and not obligatorio:
+                return None
+            if s == "" and obligatorio:
+                print("Este campo es obligatorio.")
+                continue
+            if maxlen and len(s) > maxlen:
+                print(f"Máximo {maxlen} caracteres.")
+                continue
+            return s
+
+    def _input_float(msg, obligatorio=False):
+        while True:
+            s = input(msg).strip()
+            if s == "" and not obligatorio:
+                return None
+            try:
+                return float(s.replace(",", "."))
+            except Exception:
+                print("Valor numérico inválido. Ej: 13.71234")
+
+    def _input_int(msg, obligatorio=False, minv=None, maxv=None):
+        while True:
+            s = input(msg).strip()
+            if s == "" and not obligatorio:
+                return None
+            try:
+                val = int(s)
+                if minv is not None and val < minv:
+                    print(f"Debe ser ≥ {minv}."); continue
+                if maxv is not None and val > maxv:
+                    print(f"Debe ser ≤ {maxv}."); continue
+                return val
+            except Exception:
+                print("Ingrese un entero válido.")
+
+    def _listar(items):
+        if not items:
+            print("No hay registros cargados.")
+            return
+        print("\n# | Antena (corta) | Lat, Long | Azimut")
+        for i, it in enumerate(items, 1):
+            a = it.get("antena") or "(sin nombre)"
+            a = (a[:38] + "…") if len(a) > 40 else a
+            lat = it.get("lat")
+            lon = it.get("long")
+            az  = it.get("azimut")
+            print(f"{i:>2} | {a:<40} | {lat},{lon} | {az if az is not None else '-'}")
+        print()
+
+    def _armar_df(items):
+        # Convertimos a DF con los nombres que ya espera tu pipeline
+        df = pd.DataFrame(items)
+        # Tipos
+        for c in ("lat", "long"):
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors="coerce")
+        if "azimut" in df.columns:
+            df["azimut"] = pd.to_numeric(df["azimut"], errors="coerce")
+        # Fecha/Hora si faltan
+        if "fecha" not in df.columns: df["fecha"] = None
+        if "hora"  not in df.columns: df["hora"]  = None
+        return df
+        
+    def _sanear_nombre_archivo(s):
+        s = s or "antenas_manual"
+        # quitar acentos y normalizar
+        s = unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode("ascii")
+        # permitir solo letras, numeros, guion, guion_bajo, punto y espacios
+        s = re.sub(r"[^\w\s.-]", "_", s)
+        # espacios -> guion_bajo, limpiar bordes
+        s = re.sub(r"\s+", "_", s).strip("._")
+        return s or "antenas_manual"
+
+    def _nombre_auto_desde_items(items):
+        # toma el primer tel y el primer alias no vacios
+        tel = next((it.get("tel") for it in items if it.get("tel")), None)
+        alias = next((it.get("alias") for it in items if it.get("alias")), None)
+        partes = []
+        if tel:   partes.append(str(tel))
+        if alias: partes.append(str(alias))
+        base = "_".join(partes) if partes else "antenas_manual"
+        return _sanear_nombre_archivo(base)
+
+    # --------- flujo interactivo ---------
+    items = []
+    print("\nModo MANUAL. Ingresará uno o más puntos/antenas.")
+
+    while True:
+        print("\nMenú:")
+        print("[A] Agregar registro")
+        print("[L] Listar registros")
+        print("[E] Eliminar registro (#)")
+        print("[G] Graficar (generar KML/KMZ)")
+        print("[V] Volver (cancelar)")
+        op = input("Opción: ").strip().upper() or "A"
+
+        if op == "V":
+            print("Volviendo sin generar…")
+            return
+
+        if op == "L":
+            _listar(items)
+            continue
+
+        if op == "E":
+            if not items:
+                print("No hay registros para eliminar.")
+                continue
+            _listar(items)
+            s = input("Número de registro a eliminar: ").strip()
+            if s.isdigit():
+                idx = int(s) - 1
+                if 0 <= idx < len(items):
+                    borr = items.pop(idx)
+                    print(f"Eliminado: {borr.get('antena','(sin nombre)')}")
+                else:
+                    print("Índice fuera de rango.")
+            else:
+                print("Ingrese un número válido.")
+            continue
+
+        if op == "A":
+            print("\n— Nuevo registro —")
+            antena = _input_str("Nombre de la antena (recomendado corto): ", True, 120)
+            detalle = _input_str("Detalle/dirección (opcional): ", False, 500)
+            lat  = _input_float("Latitud (obligatoria): ", True)
+            lon  = _input_float("Longitud (obligatoria): ", True)
+            az   = _input_int("Azimut 0–359 (opcional): ", False, 0, 359)
+
+            # Identidad (opcionales)
+            tel     = _input_str("Tel (opcional): ", False, 50)
+            imei    = _input_str("IMEI (opcional): ", False, 50)
+            alias   = _input_str("Alias (opcional): ", False, 120)
+            usuario = _input_str("Nombre del Usuario (opcional): ", False, 200)
+            abonado = _input_str("Abonado (opcional): ", False, 200)
+
+            # Técnica (opcionales)
+            celda = _input_str("Celda (opcional): ", False, 50)
+            lac   = _input_str("LAC (opcional): ", False, 50)
+
+            # Interacción (opcionales)
+            interaccion  = _input_str("Interacción (opcional): ", False, 80)
+            tel_contacto = _input_str("Tel contacto (opcional): ", False, 50)
+            duracion     = _input_int("Duración en segundos (opcional): ", False, 0)
+
+            items.append({
+                "antena": antena, "detalle": detalle,
+                "lat": lat, "long": lon, "azimut": az,
+                "tel": tel, "imei": imei, "alias": alias,
+                "usuario": usuario, "abonado": abonado,
+                "celda": celda, "lac": lac,
+                "interaccion": interaccion,
+                "tel_contacto": tel_contacto,
+                "duracion": duracion
+            })
+            print("✓ Registro agregado.")
+            continue
+
+        if op == "G":
+            if not items:
+                print("No hay registros para graficar.")
+                continue
+
+            # Carpeta y nombre de salida
+            # [MOVIDO] La selección de carpeta se hará al final del flujo.
+            base_auto = _nombre_auto_desde_items(items)
+            nombre_sugerido = _input_str(
+
+                f"Nombre base del archivo (Enter = {base_auto}): ", False, 120
+            ) or base_auto
+            # (No crear carpeta aquí)
+
+            # Normalizar nombre base y preparar carpeta de salida (manual)
+            nombre_salida = (nombre_sugerido or base_auto)
+            # === Color tema (modo manual, antes de seleccionar carpeta) ===
+            CONFIG = _solicitar_color_tema(CONFIG)
+
+            try:
+                carpeta_base = seleccionar_carpeta()
+            except Exception:
+                carpeta_base = None
+
+            if not carpeta_base:
+                print("[QC] Selección de carpeta cancelada. Operación abortada.")
+                return
+
+            print(f"[QC] Carpeta destino: {carpeta_base}")
+
+            carpeta_salida = os.path.join(carpeta_base, nombre_salida)
+            os.makedirs(carpeta_salida, exist_ok=True)
+
+            # DF y KML
+            df = _armar_df(items)
+
+            # --- RUTAS FINALES KML/KMZ (modo manual) ---
+            # Requiere que ya existan: carpeta_salida y nombre_salida
+            if CONFIG.get("salida", {}).get("separar_kml_kmz", False):
+                carpeta_kml = os.path.join(carpeta_salida, "kml")
+                os.makedirs(carpeta_kml, exist_ok=True)
+                archivo_kml = os.path.join(carpeta_kml, f"{nombre_salida}_mapeo.kml")
+                archivo_kmz = os.path.join(carpeta_kml, f"{nombre_salida}_mapeo.kmz")
+            else:
+                archivo_kml = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kml")
+                archivo_kmz = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
+
+            # Generar el KML/KMZ en modo plano (sin subcarpetas del KML)
+            archivo_kml, desc_coords = generar_kml(df, archivo_kml, flat=True)
+            print(f"KML generado en: {archivo_kml}")
+
+
+            # KMZ (si se pudo generar)
+            if bool(CONFIG.get("salida", {}).get("separar_kml_kmz", False)):
+                kml_dir = os.path.dirname(archivo_kml)
+                base_dir = os.path.dirname(kml_dir) if os.path.basename(kml_dir).lower() == "kml" else kml_dir
+                kmz_dir = os.path.join(base_dir, "kmz")
+                kmz_path = os.path.join(kmz_dir, os.path.splitext(os.path.basename(archivo_kml))[0] + ".kmz")
+            else:
+                kmz_path = os.path.splitext(archivo_kml)[0] + ".kmz"
+
+            if os.path.exists(kmz_path):
+                print(f"KMZ generado en: {kmz_path}")
+
+            print(f"Filas descartadas por coordenadas inválidas: {desc_coords}")
+            print(f"Reporte de errores generado en: {archivo_errores}")
+            return
+
+
+        print("Opción no reconocida.")
+
+# === RUN_TZ_ANALYSIS (INICIO) ================================================
+# Puente público para GUI: recibe parámetros, evita prompts y retorna rutas.
+# Pegar ESTE bloque ENCIMA de `def main():` (sangría cero).
+def run_tz_analysis(
+    ruta_entrada: str,
+    hoja,                          # int o str o None
+    top_antenas: int,
+    top_contactos: int,
+    solo_kmz: bool,
+    carpeta_salida: str | None = None,
+) -> dict:
+    """
+    Retorna diccionario con rutas y log:
+      {"html": path|None, "kmz": path|None, "hashes": path|None, "log": path|None}
+    No imprime a consola; captura el log.
+    """
+    import io, os, sys, time, glob, contextlib
+    from datetime import datetime
+
+    # --- Sanitizar entradas mínimas ---
+    ruta_entrada = (ruta_entrada or "").strip().strip('"')
+    if not ruta_entrada or not os.path.isfile(ruta_entrada):
+        return {"html": None, "kmz": None, "hashes": None, "log": None}
+
+    if carpeta_salida:
+        carpeta_salida = carpeta_salida.strip().strip('"')
+        if not carpeta_salida:
+            carpeta_salida = None
+
+    # --- Preparar overrides (Top N, Solo KMZ) ---
+    #   1) Top N: el script ya contempla OVERRIDE_TOPS si existe en globals()
+    #   2) Solo KMZ: el script consulta CONFIG["salida"]["solo_kmz"]
+    global CONFIG
+    try:
+        if "CONFIG" not in globals() or not isinstance(CONFIG, dict):
+            CONFIG = {}
+        CONFIG.setdefault("salida", {})
+        CONFIG["salida"]["solo_kmz"] = bool(solo_kmz)
+    except Exception:
+        pass
+    globals()["OVERRIDE_TOPS"] = {
+        "antenas": int(top_antenas) if str(top_antenas).isdigit() else 5,
+        "contactos": int(top_contactos) if str(top_contactos).isdigit() else 5,
+    }
+
+    # --- Monkey-patch de funciones interactivas para evitar prompts ---
+    # Guardamos originales para restaurar luego
+    g = globals()
+    _orig = {}
+    def _keep(name, fallback=None):
+        if name in g:
+            _orig[name] = g[name]
+            return g[name]
+        _orig[name] = fallback
+        return fallback
+
+    _keep("_menu_principal")
+    _keep("seleccionar_archivo")
+    _keep("seleccionar_carpeta")
+    _keep("_input_str")
+    _keep("_seleccionar_hoja_visible")
+    _keep("_solicitar_overrides_topn")
+    _keep("_solicitar_color_tema")
+
+    # 1) Modo directo: "1" (bitácora Excel)
+    def _menu_principal_mock():
+        return "1"
+    g["_menu_principal"] = _menu_principal_mock
+
+    # 2) Archivo de entrada (sin diálogo)
+    def _sel_arch_mock():
+        return ruta_entrada
+    g["seleccionar_archivo"] = _sel_arch_mock
+
+    # 3) Carpeta de salida (sin diálogo)
+    def _sel_carp_mock():
+        return carpeta_salida or os.getcwd()
+    g["seleccionar_carpeta"] = _sel_carp_mock
+
+    # 4) Nombre sugerido / otros input_str: devolver vacío = aceptar por defecto
+    def _input_str_mock(msg, *args, **kwargs):
+        return ""
+    g["_input_str"] = _input_str_mock
+
+    # 5) Selección de hoja visible (si el script lo usa)
+    if hoja is not None:
+        def _hoja_mock(_archivo):
+            return hoja
+        g["_seleccionar_hoja_visible"] = _hoja_mock
+
+    # 6) Overrides TopN si el flujo intenta pedirlos
+    def _ovr_mock(_cfg):
+        return globals().get("OVERRIDE_TOPS", None)
+    g["_solicitar_overrides_topn"] = _ovr_mock
+
+    # 7) Color tema: no preguntar; dejar CONFIG tal cual
+    def _color_mock(cfg):
+        return cfg
+    g["_solicitar_color_tema"] = _color_mock
+
+    # --- Silenciar input() durante la ejecución ---
+    import builtins
+    _orig_input_builtin = getattr(builtins, "input", None)
+
+    def _input_mock(*args, **kwargs):
+        # Simula presionar Enter en cualquier prompt
+        return ""
+
+    try:
+        builtins.input = _input_mock
+    except Exception:
+        pass
+
+    # --- Capturar stdout/stderr como log en memoria ---
+    buf = io.StringIO()
+    html_path = kmz_path = hashes_path = log_path = None
+
+    # --- Snapshot de archivos previos para detectar nuevos (HTML/KMZ/HASHES) ---
+    def _snapshot(folder):
+        try:
+            pat = "**/*"
+            return set(glob.glob(os.path.join(folder, pat), recursive=True))
+        except Exception:
+            return set()
+
+    out_root = _sel_carp_mock()
+    before = _snapshot(out_root)
+
+    try:
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            # Ejecutar flujo normal
+            main()
+    except SystemExit:
+        # Algunos abortos elegantes usan SystemExit; igual seguimos capturando
+        pass
+    except Exception as e:
+        print(f"[ERROR] run_tz_analysis: {e}", file=sys.stderr)
+
+    # --- Detectar nuevos archivos generados ---
+    time.sleep(0.05)  # pequeño respiro para flush del FS
+    after = _snapshot(out_root)
+    created = [p for p in (after - before) if os.path.isfile(p)]
+
+    # Heurística simple: tomar los más recientes por extensión
+    def _pick(exts):
+        cands = [p for p in created if os.path.splitext(p)[1].lower() in exts]
+        if not cands:
+            # buscar también en subcarpetas nuevas
+            cands = [p for p in after if os.path.splitext(p)[1].lower() in exts]
+        if not cands:
+            return None
+        cands.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+        return cands[0]
+
+    html_path   = _pick({".html", ".htm"})
+    kmz_path    = _pick({".kmz"})
+    hashes_path = _pick({".txt"})  # HASHES.txt esperado como .txt
+
+    # --- Persistir el log a archivo junto a salidas ---
+    try:
+        base_dir = os.path.dirname(html_path or kmz_path or out_root)
+        os.makedirs(base_dir, exist_ok=True)
+        log_path = os.path.join(base_dir, "ejecucion_log.txt")
+        with open(log_path, "w", encoding="utf-8", errors="ignore") as f:
+            f.write(buf.getvalue())
+    except Exception:
+        log_path = None
+
+    # --- Restaurar originales ---
+    try:
+        for name, fn in _orig.items():
+            if fn is not None:
+                g[name] = fn
+    except Exception:
+        pass
+
+        # Restaurar input() original
+    try:
+        if _orig_input_builtin is not None:
+            builtins.input = _orig_input_builtin
+    except Exception:
+        pass
+
+    return {
+        "html": html_path,
+        "kmz": kmz_path,
+        "hashes": hashes_path,
+        "log": log_path,
+    }
+# === RUN_TZ_ANALYSIS (FIN) ====================================================
+
+# === SECCIÓN: MENÚ PRINCIPAL / ENTRYPOINT (opciones 1/2/3) ===
+def main():
+    """Muestra el menú principal y orquesta el flujo de opciones (1: completo, 2: por tiempo, 3: manual)."""
+    global CONFIG
+    global nombre_salida, hoja, archivo_errores
+    nombre_salida = ""
+    hoja = None
+    archivo_errores = ""
+
+
+    # ===== Menú de modos (único) =====
+    while True:
+        print("\nSeleccione el modo de trabajo:")
+        print("[1] Procesar bitácora completa")
+        print("[2] Procesar por tiempo (día / rango de días / rango de horas)")
+        print("[3] Ingresar antenas manualmente")
+        resp = input("Opción (1/2/3, Enter=1): ").strip() or "1"
+
+        if resp == "3":
+            _modo_manual()        # Al terminar manual, volvemos a mostrar el menú
+            continue
+
+        if resp in ("1", "2"):
+            opcion = resp
+            # Preguntar color SIEMPRE para modos 1/2
+            CONFIG = _solicitar_color_tema(CONFIG)
+            break
+
+        print("[QC] Opción inválida, intenta de nuevo.")
+    
+    # ===== Modo Excel (bitácora) =====
+    archivo_entrada = seleccionar_archivo()
+    if not archivo_entrada:
+        print("No se seleccionó un archivo. Saliendo.")
+        return
+
+    # La carpeta se elegirá al final (previsualización)
+    carpeta_salida = None
+
+    # Selección de hoja visible (si hay varias)
+    hoja = _seleccionar_hoja_visible(archivo_entrada)
+
+    # Carga del Excel (con o sin hoja seleccionada)
+    try:
+        df = pd.read_excel(archivo_entrada, sheet_name=hoja) if hoja else pd.read_excel(archivo_entrada)
+        # Guardar columnas originales para el menú QC (antes de cualquier rename/coalesce)
+        df.attrs["orig_cols"] = list(map(str, df.columns))
+    except Exception as e:
+        print(f"Error al leer el Excel: {e}")
+        return
+
+    # Normalización de encabezados
+    df.columns = (
+        df.columns.astype(str)
+          .str.strip()
+          .str.normalize('NFD').str.encode('ascii', 'ignore').str.decode('ascii')
+          .str.lower()
+          .str.replace(r'[\s\-\/\.]+', '_', regex=True)   # espacios, guiones, diagonales y puntos -> _
+          .str.replace(r'__+', '_', regex=True)           # colapsar múltiples _
+          .str.strip('_')                                 # quitar _ al inicio/fin
+    )
+
+    # Snapshot de columnas originales (antes de cualquier mapeo/rename)
+    cols_originales = list(df.columns)
+
+
+    # === VALIDACIÓN DE SCHEMA (aborto elegante) — INICIO =======================
+    def _coalesce_cols(df, *nombres):
+        """Devuelve el primer nombre de columna que exista en df (case-sensitive actual)."""
+        for n in nombres:
+            if n in df.columns:
+                return n
+        return None
+
+    def _fmt_lista(xs): 
+        return ", ".join(xs) if xs else "(ninguna)"
+
+    def _valida_formato_hora(serie):
+        pat = re.compile(r"^\d{2}:\d{2}:\d{2}$")
+        sample = serie.astype(str).str.strip().str[:8].head(5)
+        ok = sample.apply(lambda v: pat.match(v) is not None).all()
+        return ok, sample.tolist()
+
+    def _valida_fecha_parsible(serie):
+        try:
+            s = pd.to_datetime(serie, errors="coerce", dayfirst=True)
+            return s.notna().any(), [str(v) for v in serie.head(5).tolist()]
+        except Exception:
+            return False, [str(v) for v in serie.head(5).tolist()]
+
+    def _valida_latlon(df):
+        """Al menos una fila con lat/long numéricas razonables (no 0,0; dentro de bbox SV)."""
+        bbox = (CONFIG or {}).get("geografia", {}).get("sv_bbox", None)
+        if not (isinstance(bbox, dict) and all(k in bbox for k in ("lat_min","lat_max","lon_min","lon_max"))):
+            bbox = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}  # fallback SV
+        try:
+            lt = pd.to_numeric(df["lat"], errors="coerce")
+            lg = pd.to_numeric(df[_coalesce_cols(df, "long", "lon")], errors="coerce")
+            mask = (~lt.isna()) & (~lg.isna()) & (lt != 0) & (lg != 0) \
+                & (lt.between(bbox["lat_min"], bbox["lat_max"])) \
+                & (lg.between(bbox["lon_min"], bbox["lon_max"]))
+            return bool(mask.any())
+        except Exception:
+            return False
+
+    def validate_schema_or_abort(df):
+        """
+        Verifica:
+        1) Presencia de esenciales (de config.entradas.columnas_esenciales) con tolerancia lon/long.
+        2) Alternativas de localización (schema.location_alternatives): p.ej., (lat+long) o (antena).
+        3) Tipos mínimos: hora HH:MM:SS, fecha parseable, al menos una fila con lat/long válidas.
+        Si falla: imprime guía, loguea y aborta ejecución (SystemExit).
+        """
+        esenciales_cfg = (CONFIG or {}).get("entradas", {}).get("columnas_esenciales", []) or []
+        # Tolerancia: si piden "long", aceptar "lon" también
+        esenciales = set(esenciales_cfg)
+        if "long" in esenciales and "lon" not in esenciales:
+            esenciales.add("lon")
+
+        headers = list(df.columns)
+        faltan = [c for c in esenciales if c not in headers]
+        # Permitir que si falta long pero hay lon (o viceversa), no cuente como faltante
+        if "long" in faltan and "lon" in headers:
+            faltan.remove("long")
+        if "lon" in faltan and "long" in headers:
+            faltan.remove("lon")
+
+        # Alternativas de localización
+        alts = (CONFIG or {}).get("schema", {}).get("location_alternatives", []) or []
+        # Normalizar posibles 'lon' a 'long' internamente
+        def _alt_ok(alt_group):
+            # Un grupo es válido si TODAS sus columnas existen (tratando lon/long como equivalentes)
+            cols_needed = []
+            for c in alt_group:
+                if c == "lon":  # tu schema trae 'lon' como canónico, pero el pipeline usa 'long'
+                    cols_needed.append(_coalesce_cols(df, "long", "lon"))
+                else:
+                    cols_needed.append(c if c in df.columns else None)
+            return all(col is not None for col in cols_needed)
+
+        hay_alt_loc = any(_alt_ok(g) for g in alts) if alts else True
+
+        problemas = []
+        if faltan:
+            problemas.append(f"- Faltan columnas esenciales: {_fmt_lista(faltan)}")
+        if not hay_alt_loc:
+            problemas.append("- No se cumple ninguna alternativa de localización (p. ej., (lat+long) o (antena)).")
+
+        # Chequeos de tipo mínimos
+        # hora
+        if _coalesce_cols(df, "hora"):
+            ok_hora, smp_h = _valida_formato_hora(df["hora"].astype(str))
+            if not ok_hora:
+                problemas.append(f"- 'hora' debería verse como HH:MM:SS; muestras: {_fmt_lista(smp_h)}")
+
+        # fecha
+        if _coalesce_cols(df, "fecha"):
+            ok_fecha, smp_f = _valida_fecha_parsible(df["fecha"])
+            if not ok_fecha:
+                problemas.append(f"- 'fecha' no es parseable en algunas filas; muestras: {_fmt_lista(smp_f)}")
+
+        # lat/long
+        if _coalesce_cols(df, "lat") and _coalesce_cols(df, "long", "lon"):
+            if not _valida_latlon(df):
+                problemas.append("- 'lat/long' no tienen registros válidos (no 0,0; dentro de SV).")
+
+        if problemas:
+            guia = []
+            guia.append("\n[SCHEMA] No se puede continuar. Ajustá los encabezados o agrega sinónimos:\n")
+            guia.extend(p + "\n" for p in problemas)
+            guia.append("\nSugerencias:\n")
+            guia.append("• Revisá 'entradas.columnas_esenciales' en config.json.\n")
+            guia.append("• Usá el wizard para mapear encabezados raros (se persisten en synonyms_user).\n")
+            guia.append("• Para 'long' también se acepta 'lon' (sinónimo en schema.fields).\n")
+            msg = "".join(guia)
+            try:
+                log(f"[FATAL][schema] {msg}")
+            except Exception:
+                pass
+            print(msg)
+            raise SystemExit(2)
+        else:
+            try:
+                log("[schema] Validación OK: esenciales presentes y tipos mínimos razonables.")
+            except Exception:
+                pass
+            return True
+    # === VALIDACIÓN DE SCHEMA — FIN ============================================
+
+
+    # Auto-mapeo de encabezados (desde CONFIG.schema.fields) con fuzzy
+    # - Usa sinónimos del config
+    # - Normaliza sinónimos igual que las columnas (lower, sin acentos, separadores -> _)
+    # - Fuzzy (difflib) para casos no exactos
+    import difflib, re, unicodedata
+
+    def _norm_head(x: str) -> str:
+        x = str(x or "").strip()
+        x = unicodedata.normalize("NFD", x).encode("ascii", "ignore").decode("ascii")
+        x = x.lower()
+        x = re.sub(r"[\s\-\/\.]+", "_", x)   # igual que arriba
+        x = re.sub(r"__+", "_", x).strip("_")
+        return x
+
+    schema_fields = {}
+    try:
+        schema_fields = (CONFIG.get("schema") or {}).get("fields") or {}
+    except Exception:
+        schema_fields = {}
+
+    # Canonicos que el script realmente usa internamente (target)
+    # Nota: el script usa "long" (no "lon") y "duracion" (no "duracion_seg")
+    _target_alias = {
+        "lon": "long",
+        "duracion_seg": "duracion",
+    }
+    # --- Alias VISIBLES para etiquetas del wizard (no cambian claves internas) ---
+    ALIAS_VISIBLES = {
+        "tel": "tel_analizado",
+        "ubicacion": "direccion_antena",
+    }
+
+
+    # Construir tabla de sinónimos normalizados -> nombre_canonico_target
+    syn2target = {}
+    for canon, meta in schema_fields.items():
+        target = _target_alias.get(canon, canon)
+        # incluir el propio nombre canonico como sinonimo
+        for s in [canon] + list(meta.get("synonyms", [])):
+            ns = _norm_head(s)
+            if ns:
+                syn2target[ns] = target
+
+    # Mapeo exacto primero
+    rename_map = {}
+    for col in list(df.columns):
+        ncol = _norm_head(col)  # ya están normalizadas, pero por si acaso
+        if ncol in syn2target:
+            rename_map[col] = syn2target[ncol]
+
+    # Fuzzy para columnas no mapeadas aún
+    remaining = [c for c in df.columns if c not in rename_map]
+    candidate_keys = list(syn2target.keys())
+    for col in remaining:
+        ncol = _norm_head(col)
+        if not ncol:
+            continue
+        # mejores coincidencias (umbral conservador 0.84)
+        matches = difflib.get_close_matches(ncol, candidate_keys, n=1, cutoff=0.84)
+        if matches:
+            best = matches[0]
+            rename_map[col] = syn2target[best]
+
+    # Aplicar (solo si NO estamos en QC manual)
+    if not MANUAL_QC_MAPPING and rename_map:
+        df = df.rename(columns=rename_map)
+
+        # === DEDUP/COALESCE DE COLUMNAS DUPLICADAS (post-rename) =====================
+        def _coalesce_duplicates(df: pd.DataFrame, prefer: list[str] | None = None) -> pd.DataFrame:
+            """
+            Si quedaron columnas duplicadas tras el rename (p.ej. 2 columnas 'hora'),
+            coalescea fila por fila tomando el primer valor "no vacío" y elimina duplicadas.
+            'prefer' permite dar un orden de preferencia por nombre exacto de columna original.
+            """
+            import numpy as np
+
+            prefer = prefer or []
+            cols = list(df.columns)
+            seen = set()
+            for col in cols:
+                if col in seen:
+                    continue
+                # ¿Cuántas veces aparece este nombre?
+                idxs = [i for i, c in enumerate(cols) if c == col]
+                if len(idxs) <= 1:
+                    seen.add(col)
+                    continue
+
+                # Armar lista de nombres "con sufijo posición" para poder ordenarlos por preferencia
+                dup_names = [df.columns[i] for i in idxs]  # todos se llaman igual, pero usamos posiciones
+                # Orden: primero los que estén en 'prefer' (si alguno matchea exactamente), luego el resto
+                def _rank(n):
+                    try:
+                        return prefer.index(n)
+                    except ValueError:
+                        return len(prefer)
+                # Nota: aunque todos se llamen igual, pandas conserva el orden original; usamos ese orden más 'prefer'
+                sub = [df.iloc[:, i] for i in idxs]
+                # Coalesce fila por fila: primer valor que no sea vacío/"Sin Inf."/NaN
+                def _clean_series(s: pd.Series) -> pd.Series:
+                    s2 = s.astype(object).copy()
+                    # normalizamos "vacío"
+                    inv = {"", "sin inf", "sin inf.", "nan", "none", "null", "s/i"}
+                    s2 = s2.where(~s2.astype(str).str.strip().str.lower().isin(inv), None)
+                    return s2
+
+                base = None
+                for ser in sub:
+                    s = _clean_series(ser)
+                    if base is None:
+                        base = s
+                    else:
+                        mask = (base.isna()) | (base.astype(str).str.strip() == "")
+                        base = base.where(~mask, s)
+
+                # Asignamos columna coalescida y eliminamos duplicadas extras
+                df[col] = base
+                # eliminar las otras instancias (dejamos la primera posición)
+                drop_pos = idxs[1:]
+                df = df.drop(columns=[cols[i] for i in drop_pos])
+                # recomputar lista de columnas tras drop (unión: originales + actuales)
+                cols = list(dict.fromkeys(cols_originales + list(df.columns)))
+
+                seen.add(col)
+
+            return df
+
+        # Si en tu archivo original había una llamada inmediata a _coalesce_duplicates(...),
+        # cortala de donde estaba y pegala aquí debajo, indentada dentro del 'if'.
+        # Ejemplo (mantén tus parámetros tal cual):
+        # df = _coalesce_duplicates(df, prefer=[...])
+
+    else:
+        print("[QC] Sin renombrar encabezados ni coalesce (QC manual activo).")
+
+        
+        # Ejecutar dedup/coalesce con preferencia ligera (por si te interesa priorizar algún origen)
+        if not MANUAL_QC_MAPPING:
+            df = _coalesce_duplicates(df, prefer=["hora", "fecha", "lat", "long", "lon", "azimut", "tel", "imei", "antena"])
+        # === FIN DEDUP/COALESCE =======================================================
+
+
+             # WIZARD (esenciales + selector de UBICACIÓN) y persistencia de sinónimos (modo estricto)
+    try:
+        import json, unicodedata, re, difflib, sys
+
+        def _norm_head_local(x):
+            x = unicodedata.normalize("NFD", str(x)).encode("ascii","ignore").decode("ascii")
+            x = x.lower()
+            x = re.sub(r"[\s\-\/\.]+","_", x)
+            x = re.sub(r"__+","_", x).strip("_")
+            return x
+
+        # 1) Schema y alias
+        SCHEMA = (CONFIG.get("schema") or {})
+        fields_meta = SCHEMA.get("fields", {}) or {}
+        location_alts = SCHEMA.get("location_alternatives", [["lat","lon"],["antena"]])
+        subject_mode = (SCHEMA.get("subject_default_mode") or "tel").lower()
+        _target_alias = {"lon": "long", "duracion_seg": "duracion"}
+
+        # 2) Estado actual
+        # lista completa para el wizard (unión: originales + actuales)
+        cols = list(dict.fromkeys(cols_originales + list(df.columns)))
+
+        present = set(cols)
+
+        def _has_location_ok():
+            return any(all((_target_alias.get(a, a)) in present for a in alt) for alt in location_alts)
+
+        def _need_fields():
+            req = set()
+            # sujeto
+            req.add("imei" if subject_mode == "imei" else "tel")
+            # tiempo
+            if "timestamp" in present:
+                req.add("timestamp")
+            else:
+                req.update(["fecha","hora"])
+            # contacto/interaccion
+            req.update(["contacto","interaccion"])
+            # ubicación (si no está completa, pediremos luego)
+            # respetar required/required_mode del schema
+            for k, meta in fields_meta.items():
+                tgt = _target_alias.get(k, k)
+                if meta.get("required") is True:
+                    req.add(tgt)
+                if str(meta.get("required_mode","")).lower() == subject_mode:
+                    req.add(tgt)
+            # faltantes fuera de ubicación
+            faltan = [f for f in req if f not in present]
+            return faltan
+
+        # 3) Si falta ubicación completa, NO preguntar (modo QC manual)
+        if not _has_location_ok():
+            if MANUAL_QC_MAPPING:
+                print("\n[WIZARD] Falta UBICACIÓN → modo asistido desactivado. Usando 'lat + long' automáticamente (QC).")
+                choice = None  # QC manual: se mapea lat/lon dentro del wizard QC, no aquí
+            else:
+                print("\n[WIZARD] Falta UBICACIÓN. Elegí alternativa:")
+                for i, alt in enumerate(location_alts, 1):
+                    alt_view = " + ".join([_target_alias.get(x, x) for x in alt])
+                    print(f"  [{i}] {alt_view}")
+                sel = input("→ Opción (#, Enter=1): ").strip()
+                try:
+                    k = int(sel) if sel else 1
+                except Exception:
+                    k = 1
+                k = max(1, min(k, len(location_alts)))
+                choice = location_alts[k-1]
+                # (si no es QC manual, aquí sí pide columnas…)
+
+
+            # Pedir columnas para la alternativa elegida
+            for tgt in choice:
+                t_tgt = _target_alias.get(tgt, tgt)
+                if t_tgt in present:
+                    continue
+                tgt_label = ALIAS_VISIBLES.get(tgt, tgt)
+                print(f"\n[WIZARD] Elegí la columna para '{tgt_label}':")
+                for i, c in enumerate(cols, 1):
+                    print(f"  [{i}] {c}")
+                sel2 = input(f"→ Columna para '{tgt_label}' (# o Enter=omitir): ").strip()
+
+                if not sel2:
+                    continue
+                try:
+                    k2 = int(sel2)
+                    if 1 <= k2 <= len(cols):
+                        src = cols[k2-1]
+                        if src != t_tgt:
+                            if src in df.columns:
+                                # caso normal: el nombre elegido todavía existe en df
+                                df = df.rename(columns={src: t_tgt})
+                            else:
+                                # caso tolerante: quizá ya fue renombrada antes; buscamos por nombre normalizado
+                                for c in list(df.columns):
+                                    if _norm_head(c) == _norm_head(src):
+                                        df = df.rename(columns={c: t_tgt})
+                                        break
+                            present.add(t_tgt)
+
+                except Exception:
+                    pass
+
+       # 4) Resolver otros esenciales faltantes (no-ubicación)
+        missing = _need_fields()
+        if missing:
+            if MANUAL_QC_MAPPING:
+                print("\n[WIZARD] QC activo: faltan canónicos esenciales (no se pedirá aquí):", ", ".join(missing))
+                # No abortamos ni preguntamos; dejamos marcadores para que el pipeline no truene.
+                for k in missing:
+                    real_tgt = _target_alias.get(k, k)
+                    if real_tgt not in df.columns:
+                        df[real_tgt] = "SinInf"
+                # refrescar listas internas
+                cols = list(dict.fromkeys(cols_originales + list(df.columns)))
+                present = set(cols)
+            else:
+                print("\n[WIZARD] Faltan campos esenciales:", ", ".join(missing))
+                print("Elegí la columna correspondiente (número). Enter = saltar.\nColumnas disponibles:")
+                for i, c in enumerate(cols, 1):
+                    print(f"  [{i}] {c}")
+                for tgt in missing:
+                    tgt_label = ALIAS_VISIBLES.get(tgt, tgt)
+                    sel = input(f"→ ¿Cuál columna corresponde a '{tgt_label}'? (# o Enter): ").strip()
+                    if not sel:
+                        continue
+                    try:
+                        k = int(sel)
+                        if 1 <= k <= len(cols):
+                            src = cols[k-1]
+                            real_tgt = _target_alias.get(tgt, tgt)
+                            if src != real_tgt:
+                                if src in df.columns:
+                                    df = df.rename(columns={src: real_tgt})
+                                else:
+                                    for c in list(df.columns):
+                                        if _norm_head(c) == _norm_head(src):
+                                            df = df.rename(columns={c: real_tgt})
+                                            break
+                            present.add(real_tgt)
+                    except Exception:
+                        pass
+
+
+        # 6) Persistir sinónimos aprendidos (solo si renombramos algo)
+        # Nota: para simplificar, guardamos únicamente cuando exista CONFIG y schema
+        try:
+            to_dump = CONFIG if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else None
+            if to_dump is not None:
+                # reconstruir fields_meta desde CONFIG (por si cambió)
+                schema_now = to_dump.setdefault("schema", {})
+                fields_now = schema_now.setdefault("fields", {})
+                # agregar cualquier nombre original que haya quedado como columna y sea sinónimo útil
+                # (no hacemos here mapeo inverso avanzado para mantenerlo estable)
+                # Guardado sencillo: no tocamos nada si no hay cambios explícitos
+                with open("config.json", "w", encoding="utf-8") as f:
+                    json.dump(to_dump, f, ensure_ascii=False, indent=2)
+                print("[WIZARD] Validación completada. Config guardada (sin cambios de sinónimos).")
+                df = _dedupe_columns(df)
+                
+                # === WIZARD: HELPERS DE VALIDACIÓN (inicio) ================================
+                def _muestras_columna(serie, n=5):
+                    try:
+                        vals = [str(v) for v in serie.dropna().astype(str).head(n).tolist()]
+                        if not vals:
+                            vals = ["(sin datos visibles)"]
+                        return vals
+                    except Exception:
+                        return ["(error al leer muestras)"]
+
+                def _es_numero(x):
+                    try:
+                        float(str(x).replace(",", "."))
+                        return True
+                    except Exception:
+                        return False
+
+                def _en_bbox_sv(lat, lon):
+                    try:
+                        bbox = (CONFIG or {}).get("geografia", {}).get("sv_bbox", None)
+                        if not (isinstance(bbox, dict) and all(k in bbox for k in ("lat_min","lat_max","lon_min","lon_max"))):
+                            bbox = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
+                        lat = float(lat); lon = float(lon)
+                        if abs(lat) < 1e-9 and abs(lon) < 1e-9:
+                            return False
+                        return (bbox["lat_min"] <= lat <= bbox["lat_max"]) and (bbox["lon_min"] <= lon <= bbox["lon_max"])
+                    except Exception:
+                        return False
+
+                def _es_columna_valida_para(canonico: str, serie) -> tuple[bool, str]:
+                    """
+                    Reglas mínimas por tipo canónico. Devuelve (ok, motivo_si_falla).
+                    """
+                    name = (canonico or "").strip().lower()
+                    smps = _muestras_columna(serie, n=5)
+
+                    if name in {"lat", "long"}:
+                        # pedimos 5/5 numéricos; si ambos existen, validamos bbox con pares lat/long si están en el df
+                        nums = sum(1 for v in smps if _es_numero(v))
+                        if nums < max(1, len(smps)):  # al menos todo lo que se ve debe ser numérico
+                            return False, f"La columna para '{canonico}' debería ser numérica; muestras: {', '.join(smps)}"
+                        return True, ""
+
+                    if name == "hora":
+                        pat = re.compile(r"^\d{2}:\d{2}:\d{2}$")
+                        ok = sum(1 for v in smps if pat.match(str(v).strip()[:8]) is not None)
+                        if ok < max(1, len(smps)):
+                            return False, f"Se espera formato HH:MM:SS; muestras: {', '.join(smps)}"
+                        return True, ""
+
+                    if name == "fecha":
+                        conv = pd.to_datetime(pd.Series(smps), errors="coerce", dayfirst=True)
+                        if conv.isna().any():
+                            return False, f"Algunas muestras no parecen fechas; muestras: {', '.join(smps)}"
+                        return True, ""
+
+                    if name in {"tel", "contacto", "tel_contacto"}:
+                        # números, +, espacios y guiones tolerados, pero que haya dígitos suficientes
+                        ok = sum(1 for v in smps if re.search(r"\d{7,}", v) is not None)
+                        if ok < max(1, len(smps)):
+                            return False, f"Se esperan números telefónicos; muestras: {', '.join(smps)}"
+                        return True, ""
+
+                    if name in {"azimut", "lac", "celda"}:
+                        nums = sum(1 for v in smps if _es_numero(v))
+                        if nums < max(1, len(smps)):
+                            return False, f"Se esperan valores numéricos; muestras: {', '.join(smps)}"
+                        return True, ""
+
+                    # Por defecto, no bloqueamos
+                    return True, ""
+
+                def _smoke_schema_postmap(df):
+                    """
+                    Chequeo express después de mapear:
+                    - Revisa esenciales definidos en config.entradas.columnas_esenciales.
+                    - Valida lat/long si están presentes (numéricos y no (0,0) en bbox).
+                    """
+                    esenciales = (CONFIG or {}).get("entradas", {}).get("columnas_esenciales", []) or []
+                    faltan = [c for c in esenciales if c not in df.columns]
+                    if faltan:
+                        return False, f"Faltan columnas esenciales tras el mapeo: {', '.join(faltan)}"
+
+                    if "lat" in df.columns and "long" in df.columns:
+                        import numpy as np
+                        try:
+                            lt = pd.to_numeric(df["lat"], errors="coerce")
+                            lg = pd.to_numeric(df["long"], errors="coerce")
+                            # al menos una fila válida
+                            mask_valid = (~lt.isna()) & (~lg.isna()) & (lt != 0) & (lg != 0)
+                            if not mask_valid.any():
+                                return False, "No quedaron coordenadas válidas (lat/long) tras el mapeo."
+                        except Exception:
+                            return False, "Coordenadas inválidas tras el mapeo."
+                    return True, ""
+                
+                # === WIZARD: HELPERS DE VALIDACIÓN (fin) ===================================
+
+                # WIZARD UBICACIÓN POR CAMPO + VALIDACIÓN DURA (lat, long, antena)
+                try:
+                    def _ask_map_col(_df, colname: str):
+                        # si ya existe, no preguntar
+                        if colname in _df.columns:
+                            return _df
+                        print(f"\n[WIZARD] Falta columna esencial de ubicación: '{colname}'. Elegí la columna correspondiente (número). Enter=omitir.")
+                        cols_list = list(_df.columns)
+                        for i, c in enumerate(cols_list, 1):
+                            print(f"  [{i}] {c}")
+                        sel = input(f"→ ¿Cuál columna corresponde a '{colname}'? (# o Enter): ").strip()
+                        if not sel:
+                            return _df
+                        try:
+                            k = int(sel)
+                            if 1 <= k <= len(cols_list):
+                                src = cols_list[k-1]
+                                # === WIZARD: MAPEO ROBUSTO CON PREVIEW + CHECKS (inicio) ===================
+                                if src != colname and src in _df.columns:
+                                    # 1) Vista previa de muestras y validación por tipo
+                                    smps = _muestras_columna(_df[src], n=5)
+                                    print(f"\n[WIZARD] Previsualización de '{src}' para mapear a '{colname}':")
+                                    for i, v in enumerate(smps, 1):
+                                        print(f"   {i}. {v}")
+                                    ok_tipo, motivo = _es_columna_valida_para(colname, _df[src])
+                                    if not ok_tipo:
+                                        print(f"[WIZARD] Esta columna no parece ser '{colname}': {motivo}")
+                                        print("Volvé a elegir otra columna para este canónico.")
+                                        return None  # aborta esta selección, se vuelve al menú
+
+                                    # 2) Doble confirmación anti-error de dedo
+                                    resp = input(f"[CONFIRMAR] ¿Seguro que '{src}' → '{colname}'? (S/N): ").strip().lower()
+                                    if resp not in ("s", "si", "sí"):
+                                        print("Cancelado. Elegí otra columna.")
+                                        return None
+
+                                    # 3) Conflictos con synonyms_user (si ya apuntaba a otro canónico)
+                                    user_syn = (CONFIG or {}).get("synonyms_user", {}) or {}
+                                    if src in user_syn and str(user_syn[src]).strip().lower() != str(colname).strip().lower():
+                                        print(f"[WIZARD] Conflicto: '{src}' ya está registrado como sinónimo de '{user_syn[src]}'.")
+                                        resp2 = input("¿Deseás SOBREESCRIBIR ese registro? (S/N): ").strip().lower()
+                                        if resp2 not in ("s", "si", "sí"):
+                                            print("No se aplicó el mapeo por conflicto. Volvé a elegir.")
+                                            return None
+
+                                    # 4) Renombrar (aplicar) y smoke test
+                                    _df_backup = _df.copy()
+                                    _df = _df.rename(columns={src: colname})
+
+                                    ok_schema, motivo_schema = _smoke_schema_postmap(_df)
+                                    if not ok_schema:
+                                        print(f"[WIZARD] Se revirtió el mapeo por inconsistencia: {motivo_schema}")
+                                        _df = _df_backup  # rollback
+                                        return None
+
+                                    # 5) Persistir sinónimo y reconstruir mapa efectivo (solo si todo fue ok)
+                                    try:
+                                        CONFIG = cfg_add_user_synonym(CONFIG, colname, src)     # guarda en config.json
+                                        RENAME_MAP = cfg_build_rename_map(CONFIG)                # vuelve a construir mapa en memoria
+                                    except Exception as e:
+                                        log(f"[WARN][synonyms] No se pudo persistir el sinónimo: {e}")
+
+                                    log(f"WIZARD: la columna '{src}' fue mapeada a '{colname}'.")
+                                # === WIZARD: MAPEO ROBUSTO — FIN ===========================================
+                                validate_schema_or_abort(_df)
+
+                                # === VALIDACIÓN DE SCHEMA (aborto elegante) — INICIO =======================
+                                def _coalesce_cols(df, *nombres):
+                                    for n in nombres:
+                                        if n in df.columns:
+                                            return n
+                                    return None
+
+                                def _fmt_lista(xs):
+                                    return ", ".join(xs) if xs else "(ninguna)"
+
+                                def _valida_formato_hora(serie):
+                                    pat = re.compile(r"^\d{2}:\d{2}:\d{2}$")
+                                    sample = serie.astype(str).str.strip().str[:8].head(5)
+                                    ok = sample.apply(lambda v: pat.match(v) is not None).all()
+                                    return ok, sample.tolist()
+
+                                def _valida_fecha_parsible(serie):
+                                    try:
+                                        s = pd.to_datetime(serie, errors="coerce", dayfirst=True)
+                                        return s.notna().any(), [str(v) for v in serie.head(5).tolist()]
+                                    except Exception:
+                                        return False, [str(v) for v in serie.head(5).tolist()]
+
+                                def _valida_latlon(df):
+                                    bbox = (CONFIG or {}).get("geografia", {}).get("sv_bbox", None)
+                                    if not (isinstance(bbox, dict) and all(k in bbox for k in ("lat_min","lat_max","lon_min","lon_max"))):
+                                        bbox = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
+                                    try:
+                                        lt = pd.to_numeric(df["lat"], errors="coerce")
+                                        lg = pd.to_numeric(df[_coalesce_cols(df, "long", "lon")], errors="coerce")
+                                        mask = (~lt.isna()) & (~lg.isna()) & (lt != 0) & (lg != 0) \
+                                            & (lt.between(bbox["lat_min"], bbox["lat_max"])) \
+                                            & (lg.between(bbox["lon_min"], bbox["lon_max"]))
+                                        return bool(mask.any())
+                                    except Exception:
+                                        return False
+
+                                def validate_schema_or_abort(df):
+                                    esenciales_cfg = (CONFIG or {}).get("entradas", {}).get("columnas_esenciales", []) or []
+                                    esenciales = set(esenciales_cfg)
+                                    if "long" in esenciales and "lon" not in esenciales:
+                                        esenciales.add("lon")
+
+                                    headers = list(df.columns)
+                                    faltan = [c for c in esenciales if c not in headers]
+                                    if "long" in faltan and "lon" in headers:
+                                        faltan.remove("long")
+                                    if "lon" in faltan and "long" in headers:
+                                        faltan.remove("lon")
+
+                                    alts = (CONFIG or {}).get("schema", {}).get("location_alternatives", []) or []
+                                    def _alt_ok(alt_group):
+                                        cols_needed = []
+                                        for c in alt_group:
+                                            if c == "lon":
+                                                cols_needed.append(_coalesce_cols(df, "long", "lon"))
+                                            else:
+                                                cols_needed.append(c if c in df.columns else None)
+                                        return all(col is not None for col in cols_needed)
+                                    hay_alt_loc = any(_alt_ok(g) for g in alts) if alts else True
+
+                                    problemas = []
+                                    if faltan:
+                                        problemas.append(f"- Faltan columnas esenciales: {_fmt_lista(faltan)}")
+                                    if not hay_alt_loc:
+                                        problemas.append("- No se cumple ninguna alternativa de localización (p. ej., (lat+long) o (antena)).")
+
+                                    # hora
+                                    if _coalesce_cols(df, "hora"):
+                                        ok_hora, smp_h = _valida_formato_hora(df["hora"].astype(str))
+                                        if not ok_hora:
+                                            problemas.append(f"- 'hora' debería verse como HH:MM:SS; muestras: {_fmt_lista(smp_h)}")
+                                    # fecha
+                                    if _coalesce_cols(df, "fecha"):
+                                        ok_fecha, smp_f = _valida_fecha_parsible(df["fecha"])
+                                        if not ok_fecha:
+                                            problemas.append(f"- 'fecha' no es parseable en algunas filas; muestras: {_fmt_lista(smp_f)}")
+                                    # lat/long
+                                    if _coalesce_cols(df, "lat") and _coalesce_cols(df, "long", "lon"):
+                                        if not _valida_latlon(df):
+                                            problemas.append("- 'lat/long' no tienen registros válidos (no 0,0; dentro de SV).")
+
+                                    if problemas:
+                                        guia = []
+                                        guia.append("\n[SCHEMA] No se puede continuar. Ajustá encabezados o agregá sinónimos:\n")
+                                        guia.extend(p + "\n" for p in problemas)
+                                        guia.append("\nSugerencias:\n")
+                                        guia.append("• Revisá 'entradas.columnas_esenciales' en config.json.\n")
+                                        guia.append("• Usá el wizard para mapear encabezados raros (se persisten en synonyms_user).\n")
+                                        guia.append("• Para 'long' también se acepta 'lon'.\n")
+                                        msg = "".join(guia)
+                                        try:
+                                            log(f"[FATAL][schema] {msg}")
+                                        except Exception:
+                                            pass
+                                        print(msg)
+                                        raise SystemExit(2)
+                                    else:
+                                        try:
+                                            log("[schema] Validación OK: esenciales presentes y tipos mínimos razonables.")
+                                        except Exception:
+                                            pass
+                                        return True
+                                # === VALIDACIÓN DE SCHEMA — FIN ============================================
+
+                                    import platform, sys, datetime, time
+                                    try:
+                                        tzname = time.tzname[0]
+                                    except Exception:
+                                        tzname = "UTC?"
+                                    return {
+                                        "so": f"{platform.system()} {platform.release()}",
+                                        "python": sys.version.split()[0],
+                                        "tz": tzname,
+                                        "fecha_hora": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                        "tz_analysis": (CONFIG or {}).get("version", "¿sin_version?"),
+                                        "version_config": (CONFIG or {}).get("version_config", "¿sin_version?")
+                                    }
+                                
+                                # === METADATOS TÉCNICOS (controlado por config) — INICIO =====================
+                                def _post_inyectar_metadatos(informe_html_path: str):
+                                    """
+                                    Si html.metadatos_tecnicos.enabled == true, inserta un bloque mínimo o ampliado.
+                                    Si está en false (por defecto), NO toca el HTML.
+                                    """
+                                    try:
+                                        if not isinstance(informe_html_path, str) or not os.path.exists(informe_html_path):
+                                            return
+
+                                        meta_cfg = (CONFIG or {}).get("html", {}).get("metadatos_tecnicos", {}) or {}
+                                        if not bool(meta_cfg.get("enabled", False)):
+                                            return  # HTML limpio
+
+                                        modo = (meta_cfg.get("modo") or "minimo").lower()
+                                        mostrar_ver = bool(meta_cfg.get("mostrar_versiones", False))
+
+                                        # Datos disponibles
+                                        import platform, sys, datetime, time
+                                        try:
+                                            tzname = time.tzname[0]
+                                        except Exception:
+                                            tzname = "UTC?"
+
+                                        # Bloques
+                                        partes = []
+                                        bloque = '<div class="metainfo" style="margin:8px 0 12px 0;">' + "".join(partes) + '</div>'
+
+                                        # Insertar tras <body> si no hay sección “meta”
+                                        with open(informe_html_path, "r", encoding="utf-8") as fr:
+                                            html = fr.read()
+
+                                        i = html.lower().find("<section")
+                                        inyectado = False
+                                        if i != -1 and "meta" in html[i:i+200].lower():
+                                            j = html.find(">", i)
+                                            if j != -1:
+                                                html = html[:j+1] + bloque + html[j+1:]
+                                                inyectado = True
+
+                                        if not inyectado:
+                                            b = html.lower().find("<body")
+                                            if b != -1:
+                                                bj = html.find(">", b)
+                                                if bj != -1:
+                                                    html = html[:bj+1] + bloque + html[bj+1:]
+
+                                        with open(informe_html_path, "w", encoding="utf-8") as fw:
+                                            fw.write(html)
+
+                                        try: log("[meta] Metadatos técnicos inyectados (según config).")
+                                        except Exception: pass
+
+                                    except Exception as _e:
+                                        try: log(f"[WARN][meta] No se pudo inyectar metadatos técnicos: {_e}")
+                                        except Exception: pass
+                                # === METADATOS TÉCNICOS — FIN ===============================================
+
+                                # === COPIAR LOGO A CARPETA DE SALIDA (INICIO) ================================
+                                def _copiar_logo_a_salida(logo_path: str, dest_dir: str, dest_name: str = "logo_tz.png"):
+                                    """
+                                    Copia el logo a la carpeta de salida con nombre 'logo_tz.png'.
+                                    Si no existe o falla, no rompe nada.
+                                    """
+                                    try:
+                                        if not logo_path or not dest_dir:
+                                            return
+                                        # Aceptamos rutas con / o con \\ (Windows)
+                                        if not os.path.exists(logo_path):
+                                            return
+                                        os.makedirs(dest_dir, exist_ok=True)
+                                        shutil.copyfile(logo_path, os.path.join(dest_dir, dest_name))
+                                    except Exception:
+                                        pass
+                                # === COPIAR LOGO A CARPETA DE SALIDA (FIN) ===================================
+                                
+                                    # === RENOMBRADOR DE HEADERS (opcional, si no tenés uno) ====================
+                                    def aplicar_rename_map(df, rename_map: dict) -> pd.DataFrame:
+                                        """
+                                        Intenta mapear nombres crudos del DataFrame a canónicos usando RENAME_MAP.
+                                        - Compara por clave normalizada (minúsculas, sin tildes, sin dobles espacios).
+                                        - Si dos canónicos reclaman el mismo header, prioriza el primero encontrado.
+                                        """
+                                        if df is None or df.empty or not rename_map:
+                                            return df
+
+                                        # Construir índice invertido: raw_norm -> canonico
+                                        inv = {}
+                                        for canonico, sinonimos in rename_map.items():
+                                            for raw_norm in (sinonimos or []):
+                                                if raw_norm not in inv:
+                                                    inv[raw_norm] = canonico
+
+                                        # Generar renames
+                                        ren = {}
+                                        for c in list(df.columns):
+                                            raw_norm = _normalize_key_for_synonyms(c)
+                                            if raw_norm in inv:
+                                                ren[c] = inv[raw_norm]
+
+                                        if ren:
+                                            df = df.rename(columns=ren)
+                                        return df
+                                    # ==========================================================================
+
+                                    # (y en tu flujo, luego de leer el DataFrame):
+                                    # df = aplicar_rename_map(df, RENAME_MAP)
+
+                        except Exception:
+                            pass
+                        return _df
+
+                    # Preguntar individualmente por cada campo de ubicación
+                    for need in ("lat", "long", "antena"):
+                        df = _ask_map_col(df, need)
+
+                    # Quitar duplicadas si quedaron tras renombrar
+                    df = _dedupe_columns(df)
+
+                    # Validación dura: sin lat/lon → en QC no abortamos, intentamos coalesce y seguimos
+                    faltan_ub = [x for x in ("lat", "lon") if x not in df.columns]  # OJO: usamos 'lon' como canónica
+                    if faltan_ub:
+                        if MANUAL_QC_MAPPING:
+                            print("\n[WIZARD] QC activo: faltan columnas de ubicación -> " + ", ".join(faltan_ub))
+
+                            # Intento de coalesce automático (hoja PROCESADA y variantes)
+                            if "lat" not in df.columns and "latitud_inicial_objetivo" in df.columns:
+                                df["lat"] = df["latitud_inicial_objetivo"]
+                            # Aceptamos 'long' o 'longitud_inicial_objetivo' como fuente de 'lon'
+                            if "lon" not in df.columns:
+                                if "longitud_inicial_objetivo" in df.columns:
+                                    df["lon"] = df["longitud_inicial_objetivo"]
+                                elif "long" in df.columns:
+                                    df["lon"] = df["long"]
+
+                            # Si aún faltan, no abortamos: ponemos placeholder para que el wizard QC lo resuelva
+                            for c in ("lat", "lon"):
+                                if c not in df.columns:
+                                    df[c] = None
+                            print("[WIZARD] Continuamos; el mapeo manual definirá 'lat'/'lon'.")
+                        else:
+                            print("\n[ERROR] No se puede continuar: faltan columnas esenciales de ubicación -> " + ", ".join(faltan_ub))
+                            print("Revise los encabezados de la hoja o use el wizard para mapearlos correctamente.")
+                            sys.exit(2)
+
+                    # ANTENA FALLBACK — autogenerar nombres si hay lat/long pero falta 'antena'
+                    try:
+                        if ("lat" in df.columns) and ("long" in df.columns) and ("antena" not in df.columns):
+                            def _fmt_coord(x):
+                                try:
+                                    return f"{float(x):.6f}"
+                                except Exception:
+                                    return ""
+
+                            lat_key = df["lat"].map(_fmt_coord)
+                            lon_key = df["long"].map(_fmt_coord)
+
+                            # válidas: ambas coords presentes (no blanco)
+                            mask = (lat_key != "") & (lon_key != "")
+
+                            # pares (lat,long) en el orden de aparición
+                            pairs = pd.Series(list(zip(lat_key, lon_key)), index=df.index)
+                            uniq_pairs = pd.unique(pairs[mask])
+
+                            # mapa estable: primer par visto = Antena 1, siguiente = Antena 2, etc.
+                            mapdict = {p: f"Antena {i}" for i, p in enumerate(uniq_pairs, start=1)}
+                            log(f"Antena fallback: se crearon {len(mapdict)} grupos por par (lat,long).")
+
+                            df["antena"] = np.where(
+                                mask,
+                                pairs.map(mapdict),
+                                "Antena —"
+                            )
+
+                            # por si quedó alguna duplicación posterior
+                            df = _dedupe_columns(df)
+
+                    except Exception:
+                        pass
+
+
+                    # Nota: si no hay 'antena' pero sí lat/long, seguimos (Step 3 creará nombres 'Antena N').
+                except Exception:
+                    pass
+
+        except Exception:
+            print("[WIZARD] Aviso: no se pudo escribir config.json; se continúa sin persistir.")
+
+    except Exception:
+        pass
+
+
+    # NORMALIZADOR-1: aplicar correcciones de codificación y abreviaturas en columnas de texto
+    try:
+        _reglas_norm = None
+        if 'CONFIG' in globals() and isinstance(CONFIG, dict):
+            _reglas_norm = (CONFIG.get("normalizador", {}) or {}).get("reemplazos", None)
+    except Exception:
+        _reglas_norm = None
+
+    df = normalizar_columnas_texto(df, reglas=_reglas_norm)
+
+    # Validación
+    columnas_esenciales = ["antena", "lat", "long"]
+    # --- QC: coalesce de fecha/hora y limpieza de duplicados antes de validar ---
+    # 1) Normalizar 'fecha' tomando inicio si existe
+    if "fecha" not in df.columns:
+        if "fecha_inicial" in df.columns:
+            df["fecha"] = df["fecha_inicial"]
+        elif "fecha_final" in df.columns:
+            df["fecha"] = df["fecha_final"]
+
+    # 2) Normalizar 'hora' tomando inicio si existe
+    if "hora" not in df.columns:
+        if "hora_inicial" in df.columns:
+            df["hora"] = df["hora_inicial"]
+        elif "hora_final" in df.columns:
+            df["hora"] = df["hora_final"]
+
+    # 3) Asegurar canónica 'lon' si vino como 'long' o similares
+    if "lon" not in df.columns:
+        if "longitud_inicial_objetivo" in df.columns:
+            df["lon"] = df["longitud_inicial_objetivo"]
+        elif "long" in df.columns:
+            df["lon"] = df["long"]
+
+    # 4) Eliminar columnas duplicadas por nombre (pandas permite duplicados)
+    df = df.loc[:, ~df.columns.duplicated(keep="first")]
+
+    # --- PROCESADA: completar canónicos mínimos antes de validar ---
+    # tel
+    if "tel" not in df.columns:
+        for c in ("msisdn_origen","msisdn","telefono","tel"):
+            if c in df.columns:
+                df["tel"] = df[c]
+                print("[QC] tel <-", c)
+                break
+
+    # interaccion (solo si NO estamos en mapeo manual)
+    if not MANUAL_QC_MAPPING and "interaccion" not in df.columns:
+        for c in ("tipo","tipo2","contacto","usuario"):
+            if c in df.columns:
+                df["interaccion"] = df[c]
+                print("[QC] interaccion <-", c)
+                break
+
+    # antena (solo si NO estamos en mapeo manual)
+    if not MANUAL_QC_MAPPING and "antena" not in df.columns:
+        for c in ("siteid","cod_celda_inicial","celda"):
+            if c in df.columns:
+                df["antena"] = df[c]
+                print("[QC] antena <-", c)
+                break
+
+
+    # --- QC: verificación rápida y tipado numérico ---
+    print("[QC] mapeo:", {
+        "tel": "tel" in df.columns,
+        "interaccion": "interaccion" in df.columns,
+        "antena": "antena" in df.columns
+    })
+    if "tel" in df.columns and "interaccion" in df.columns and "antena" in df.columns:
+        print("[QC] no-nulos:", {
+            "tel": int(df["tel"].notna().sum()),
+            "interaccion": int(df["interaccion"].notna().sum()),
+            "antena": int(df["antena"].notna().sum())
+        })
+
+    # Asegurar que lat/lon/azimut sean numéricos (evita KPI=0 por NaN)
+    for c in ("lat", "lon", "azimut"):
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    # --- WIZARD QC MANUAL ---
+    if MANUAL_QC_MAPPING:
+        print("\n[QC] Iniciando wizard QC (mapeo manual).")
+        esenciales_qc = ["tel", "lat", "lon", "fecha", "hora", "azimut", "imei", "antena", "interaccion", "contacto"]
+        no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
+        df._orig_cols = list(df.columns)
+        df, _mapeo = _wizard_qc_mapeo(df, esenciales=esenciales_qc, no_esenciales=no_esenciales_qc)
+        # --- Compatibilidad lon/long para KPIs/HTML ---
+        if "lon" in df.columns and "long" not in df.columns:
+            df["long"] = df["lon"]
+        elif "long" in df.columns and "lon" not in df.columns:
+            df["lon"] = df["long"]
+
+    # --- Normalización estricta de fecha y hora (solo formato, sin cambiar mapeo) ---
+    try:
+        # 1) Parsear FECHA a datetime y dejarla como dd/mm/YYYY (solo fecha)
+        _f_dt = None
+        if "fecha" in df.columns:
+            _f_dt = pd.to_datetime(df["fecha"], errors="coerce", dayfirst=True)
+            df["fecha"] = _f_dt.dt.strftime("%d/%m/%Y")  # siempre string solo fecha
+
+        # 2) Construir HORA robusta (HH:MM:SS)
+        if "hora" in df.columns:
+            # intentar parsear 'hora' como datetime (muchas vienen 'fecha+hora' camufladas)
+            _h_dt = pd.to_datetime(df["hora"], errors="coerce", dayfirst=True)
+            _h_out = pd.Series("", index=df.index, dtype=object)
+
+            # 2a) Para las que sí parsearon como datetime: tomar solo la hora
+            mask_h_ok = _h_dt.notna()
+            if mask_h_ok.any():
+                _h_out.loc[mask_h_ok] = _h_dt.loc[mask_h_ok].dt.strftime("%H:%M:%S")
+
+            # 2b) Para las que NO parsearon, intentar con prefijo fecha dummy (texto tipo "2:2" o "02:02")
+            mask_h_bad = ~mask_h_ok & df["hora"].astype(str).str.strip().ne("")
+            if mask_h_bad.any():
+                _h_try2 = pd.to_datetime(
+                    "1970-01-01 " + df.loc[mask_h_bad, "hora"].astype(str).str.strip(),
+                    errors="coerce", dayfirst=True
+                )
+                mask_h2_ok = _h_try2.notna()
+                if mask_h2_ok.any():
+                    _h_out.loc[mask_h_bad[mask_h_bad].index[mask_h2_ok]] = _h_try2.loc[mask_h2_ok].dt.strftime("%H:%M:%S")
+
+            # 2c) Para las que siguen vacías: si 'fecha' traía hora embebida, derivarla desde 'fecha'
+            if _f_dt is not None:
+                mask_empty = _h_out.eq("")
+                if mask_empty.any():
+                    _h_from_f = _f_dt.dt.strftime("%H:%M:%S")
+                    _h_out.loc[mask_empty & _f_dt.notna()] = _h_from_f.loc[mask_empty & _f_dt.notna()]
+
+            # 2d) Si aún quedó vacío, dejar "Sin Inf."
+            _h_out = _h_out.replace("", "Sin Inf.")
+            df["hora"] = _h_out
+
+        else:
+            # No existe columna 'hora': si 'fecha' tenía hora embebida, crearla; si no, "Sin Inf."
+            if _f_dt is not None:
+                df["hora"] = _f_dt.dt.strftime("%H:%M:%S").where(_f_dt.notna(), "Sin Inf.")
+            else:
+                df["hora"] = "Sin Inf."
+
+    except Exception as __e:
+        print(f"[WARN] Normalización fecha/hora: {__e}")
+
+
+
+        # Asegurar numéricos
+        df["lat"] = pd.to_numeric(df["lat"], errors="coerce") if "lat" in df.columns else None
+        if "long" in df.columns:
+            df["long"] = pd.to_numeric(df["long"], errors="coerce")
+
+        # Post–mapeo: si faltan alias/usuario/abonado, ofrecer cargarlos como valor único (solo en QC manual)
+        if MANUAL_QC_MAPPING:
+            for etiqueta, col in (("alias","alias"), ("usuario","usuario"), ("abonado","abonado")):
+                tiene = col in df.columns
+                vacio = True
+                if tiene:
+                    try:
+                        vacio = bool(df[col].isna().all() or (df[col].astype(str).str.strip() == '').all())
+                    except Exception:
+                        vacio = True
+                if (not tiene) or vacio:
+                    try:
+                        entrada = input(f"→ No se encontró '{etiqueta}'. ¿Ingresar un valor único para el KML? (Enter=omitir): ").strip()
+                    except Exception:
+                        entrada = ""
+                    if entrada:
+                        df[col] = entrada  # crea/llena toda la columna con el mismo valor
+                        print(f"[QC] '{col}' faltaba o estaba vacío; se llenó con valor único: {entrada}")
+
+
+    # === Overrides Top N (Modos 1 y 2) ===
+    if opcion in ("1", "2") and not MANUAL_QC_MAPPING:
+        try:
+            ovr = _solicitar_overrides_topn(CONFIG)
+            if ovr:
+                globals()["OVERRIDE_TOPS"] = ovr
+                print(f"[INFO] Top N override aplicado: {ovr}")
+        except Exception:
+            pass
+
+    df, errores = validar_datos(df, columnas_esenciales)
+
+    # Salidas
+    nombre_base = os.path.splitext(os.path.basename(archivo_entrada))[0]
+
+    # --- Nombre sugerido para salida (Excel): TEL + ALIAS + RANGO ISO + EXCEL + TIMESTAMP ---
+    def _sanear_nombre_archivo_local(s: str) -> str:
+        base = nombre_base
+        s = s or base
+        # quitar acentos y normalizar
+        s = unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode("ascii")
+        # permitir solo letras, numeros, guion, guion_bajo, punto y espacios
+        s = re.sub(r"[^\w\s.-]", "_", s)
+        # espacios -> guion_bajo, limpiar bordes y vacíos
+        s = re.sub(r"\s+", "_", s).strip("._")
+        return s or base
+
+    def _first_nonempty(colname):
+        if not colname or colname not in df.columns:
+            return None
+        serie = df[colname].dropna().astype(str).str.strip()
+        serie = serie[serie != ""]
+        return serie.iloc[0] if not serie.empty else None
+
+    # Tel / Alias
+    tel_col   = next((c for c in ["tel","telefono","numero","msisdn","a_number","origen","from","callingnumber","num"] if c in df.columns), None)
+    alias_col = next((c for c in ["alias","alias_usuario","apodo"] if c in df.columns), None)
+    tel_val   = _first_nonempty(tel_col)
+    alias_val = _first_nonempty(alias_col)
+
+    tel_part   = tel_val if tel_val else "multi" if df.get("tel", pd.Series()).nunique(dropna=True) > 1 else "sin_tel"
+    alias_part = alias_val if alias_val else "sin_alias"
+
+    # Rango de fechas (ISO yyyyMMdd)
+    from datetime import datetime
+    if "fecha" in df.columns:
+        fechas_parsed = pd.to_datetime(df["fecha"], errors="coerce", dayfirst=True)
+        fechas_valid = fechas_parsed.dropna()
+        if not fechas_valid.empty:
+            fmin = fechas_valid.min().strftime("%d-%m-%Y")
+            fmax = fechas_valid.max().strftime("%d-%m-%Y")
+            rango = fmin if fmin == fmax else f"{fmin}__{fmax}"
+        else:
+            rango = datetime.now().strftime("%d-%m-%Y")
+    else:
+        rango = datetime.now().strftime("%d-%m-%Y")
+
+
+    # Timestamp de generación
+    # Etiqueta de filtro para el nombre de salida (solo Modo 2)
+    suf = ""
+    if opcion == "2":
+        try:
+            t = filtros.get("tipo") if 'filtros' in locals() else None
+            if t == "dia":
+                d = pd.to_datetime(filtros.get("dia"), dayfirst=True, errors="coerce")
+                if pd.notna(d):
+                    suf = f"__dia_{d.strftime('%Y-%m-%d')}"
+            elif t == "rango_dias":
+                d1 = pd.to_datetime(filtros.get("desde"), dayfirst=True, errors="coerce")
+                d2 = pd.to_datetime(filtros.get("hasta"), dayfirst=True, errors="coerce")
+                if pd.notna(d1) and pd.notna(d2):
+                    suf = f"__rd_{d1.strftime('%Y-%m-%d')}__{d2.strftime('%Y-%m-%d')}"
+            elif t == "rango_horas_dia":
+                d = pd.to_datetime(filtros.get("dia"), dayfirst=True, errors="coerce")
+                h1 = (filtros.get("hora_ini") or "00:00")[:5].replace(":", "-")
+                h2 = (filtros.get("hora_fin") or "00:00")[:5].replace(":", "-")
+                if pd.notna(d) and h1 and h2:
+                    suf = f"__hrdia_{d.strftime('%Y-%m-%d')}__{h1}__{h2}"
+            elif t == "rango_horas":
+                h1 = (filtros.get("hora_ini") or "00:00")[:5].replace(":", "-")
+                h2 = (filtros.get("hora_fin") or "00:00")[:5].replace(":", "-")
+                if h1 and h2:
+                    suf = f"__hr_{h1}__{h2}"
+        except Exception:
+            pass
+
+    stamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
+    base_auto = _sanear_nombre_archivo_local(f"{tel_part}_{alias_part}_{rango}{suf}_EXCEL_{stamp}")
+
+    # Evitar que el usuario ponga un color hex por error como nombre
+    # [QC] Confirmar tipo de bitácora (afecta solo nombres de archivos y carpetas)
+    print("\n[QC] Confirmar si esta bitácora es por número de Teléfono o IMEI para nombrar archivos")
+    print("I = IMEI")
+    print("T = Número telefónico")
+    print("Enter = Que TZ Analysis decida")
+    tipo_bitacora = input("→ Opción (I/T/Enter): ").strip().upper() or ""
+
+    # Definir modo según respuesta del usuario o detección automática
+    modo_bitacora = "AUTO"
+    if tipo_bitacora == "I":
+        modo_bitacora = "IMEI"
+    elif tipo_bitacora == "T":
+        modo_bitacora = "TEL"
+    else:
+        # Detección automática basada en unicidad de columnas
+        imeis_unicos = df["imei"].nunique() if "imei" in df.columns else 0
+        tels_unicos = df["tel"].nunique() if "tel" in df.columns else 0
+        if imeis_unicos == 1 and tels_unicos != 1:
+            modo_bitacora = "IMEI"
+        elif tels_unicos == 1 and imeis_unicos != 1:
+            modo_bitacora = "TEL"
+        else:
+            modo_bitacora = "AUTO"
+
+    print(f"[QC] Tipo de bitácora establecido: {modo_bitacora}")
+
+    # [BASE-NAME v1] Sugerido según modo_bitacora (solo nombres; sin período ni "EXCEL")
+    def _limpiar_alias(s):
+        try:
+            s = str(s).strip()
+            if not s:
+                return ""
+            s = s.replace(" ", "_")
+            return s[:12]
+        except Exception:
+            return ""
+
+    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+
+    # alias corto (si existe)
+    alias_val = None
+    if "alias" in df.columns:
+        try:
+            _a = [x for x in df["alias"].astype(str).str.strip().unique() if x]
+            alias_val = _a[0] if _a else None
+        except Exception:
+            alias_val = None
+    alias_short = _limpiar_alias(alias_val)
+
+    # principal según elección
+    primary = None
+    prefix = "AUTO"
+
+    if "modo_bitacora" in locals():
+        if modo_bitacora == "IMEI":
+            prefix = "IMEI"
+            if "imei" in df.columns:
+                try:
+                    vals = [str(x).strip() for x in df["imei"].dropna().astype(str) if str(x).strip()]
+                    vals = sorted(set(vals))
+                    if vals:
+                        primary = vals[0]
+                except Exception:
+                    pass
+        elif modo_bitacora == "TEL":
+            prefix = "TEL"
+            if "tel" in df.columns:
+                try:
+                    vals = [str(x).strip() for x in df["tel"].dropna().astype(str) if str(x).strip()]
+                    vals = sorted(set(vals))
+                    if vals:
+                        primary = vals[0]
+                except Exception:
+                    pass
+
+    # construir base_auto final (este valor es el que verá el input)
+    if primary:
+        base_auto = f"{prefix}_{primary}{('_' + alias_short) if alias_short else ''}_{stamp}"
+    else:
+        base_auto = f"CASO{('_' + alias_short) if alias_short else ''}_{stamp}"
+
+    # --- PREVISUALIZACIÓN (antes de nombrar) ---
+    ts = datetime.now().strftime("%Y-%m-%d_%H-%M")
+
+    kml_habilitado = not CONFIG.get("salida", {}).get("solo_kmz", False)
+
+    def _pick_id(df, col):
+        if col not in df.columns:
+            return "DESCONOCIDO"
+        serie = df[col].astype(str).str.strip()
+        # Quitar vacíos, “0”, “None”, “null”, “—”
+        serie = serie[~serie.isin(["", "0", "None", "none", "NULL", "null", "—", "--"])]
+        if serie.empty:
+            return "DESCONOCIDO"
+        # Más frecuente (modo) como identificador estable
+        try:
+            return serie.mode().iat[0]
+        except Exception:
+            return serie.iloc[0]
+
+    # Elegir identificador principal según tipo de bitácora
+    # === principal_id con soporte multiN (IMEI/TEL) ===
+    if modo_bitacora == "IMEI":
+        col = "imei"
+    else:
+        col = "tel"
+
+    try:
+        if col in df.columns:
+            serie = df[col].astype(str).str.strip()
+            serie = serie[~serie.isin(["", "0", "None", "none", "NULL", "null", "—", "--"])]
+            uniques = serie.unique()  # evitar pd.unique() para no depender de 'pd' local
+            n = len(uniques)
+            if n > 1:
+                principal_id = f"multi{n}"
+            elif n == 1:
+                principal_id = uniques[0]
+            else:
+                principal_id = "DESCONOCIDO"
+        else:
+            principal_id = "DESCONOCIDO"
+    except Exception:
+        # Fallback seguro si algo raro pasa
+        principal_id = _pick_id(df, col)
+
+    # Alias (si no existe, usar 'SinAlias')
+    alias_id = _pick_id(df, "alias")
+    if alias_id == "DESCONOCIDO":
+        ts = datetime.now().strftime("%Y-%m-%d_%H-%M")
+
+        alias_id = (alias_val or "").strip()
+
+        # timestamp local para el BASE (comparto formato con el resto)
+        ts = datetime.now().strftime("%Y-%m-%d_%H-%M")
+
+    if alias_id:
+        base_auto = f"{modo_bitacora}_{principal_id}_{alias_id}_{ts}"
+    else:
+        base_auto = f"{modo_bitacora}_{principal_id}_{ts}"
+
+    # --- Submenú Filtro de tiempo (post-mapeo, antes de nombres) ---
+    sel = locals().get('resp') or locals().get('opcion') or ""
+    if str(sel) == "2":
+        try:
+            filtros = _solicitar_filtros_tiempo()
+            df, _resumen_filtro = _aplicar_filtros_tiempo(df, filtros)
+            if df.empty:
+                print("No hay registros después de aplicar el filtro. Saliendo...")
+                return
+            print(f"[INFO] Filtro aplicado: {_resumen_filtro}")
+        except Exception as __e:
+            print(f"[WARN] No se pudo aplicar el filtro temporal: {__e}")
+
+    # [QC] Alias / Usuario / Abonado (post-mapeo; opcional)
+    # Aparece una sola vez tras el mapeo/filtro y antes de la previsualización.
+    try:
+        alias_val = input("→ Alias global para esta ejecución (Enter=omitir): ").strip()
+    except Exception:
+        alias_val = ""
+
+    try:
+        usuario_val = input("→ Nombre de usuario/identidad (Enter=omitir): ").strip()
+    except Exception:
+        usuario_val = ""
+
+    try:
+        abonado_val = input("→ Abonado/titular de línea (Enter=omitir): ").strip()
+    except Exception:
+        abonado_val = ""
+
+    # Propagar a CONFIG si existe; salidas (HTML/KMZ) las leen de aquí como fuente única.
+    if "CONFIG" in globals() and isinstance(CONFIG, dict):
+        CONFIG["alias_val"] = alias_val
+        CONFIG["usuario_val"] = usuario_val
+        CONFIG["abonado_val"] = abonado_val
+
+    # [QC] Preguntas de TOPs (antenas/contactos) — antes de la previsualización
+    try:
+        _raw_top_ant = input("→ Top de antenas (Enter=10; 0=sin límite): ").strip()
+        top_antenas = 10 if _raw_top_ant == "" else max(0, int(_raw_top_ant))
+    except Exception:
+        top_antenas = 10
+
+    try:
+        _raw_top_cto = input("→ Top de contactos (Enter=10; 0=sin límite): ").strip()
+        top_contactos = 10 if _raw_top_cto == "" else max(0, int(_raw_top_cto))
+    except Exception:
+        top_contactos = 10
+
+    # Propagar a CONFIG si existe (para que HTML/KMZ usen estos valores)
+    if "CONFIG" in globals() and isinstance(CONFIG, dict):
+        CONFIG["top_antenas"] = top_antenas
+        CONFIG["top_contactos"] = top_contactos
+
+    print("[QC] Carpeta sugerida por TZ Analysis:")
+    print(f"  📁 {base_auto}\n")
+
+    print("[QC] Se generarán estos archivos:")
+    print(f"  - {base_auto}_informe.html")
+    print(f"  - {base_auto}_mapeo.kmz")
+    print(f"  - {base_auto}_hashes.txt")
+    print(f"  - {base_auto}_errores.txt\n")
+
+    print("Si desea cambiar el nombre base, escríbalo ahora (solo base, sin extensión).")
+    resp = input(f"Nombre base del KML (Enter = {base_auto}): ").strip()
+    nombre_salida = (resp or base_auto)
+
+    if re.fullmatch(r'#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?', resp or ''):
+        print("Eso parece un color hex, no un nombre de archivo. Usaré el sugerido.")
+        resp = ""
+
+    nombre_salida = _sanear_nombre_archivo_local(resp) if resp else base_auto
+
+    # --- Selección de carpeta al final (estilo i2) ---
+    try:
+        carpeta_base = seleccionar_carpeta()
+    except Exception:
+        carpeta_base = None
+    if not carpeta_base:
+        carpeta_base = os.getcwd()
+    print(f"[QC] Carpeta destino: {carpeta_base}")
+
+
+    # Subcarpeta del caso = nombre_salida (sin acortador)
+    nombre_carpeta = nombre_salida
+    carpeta_salida = os.path.join(carpeta_base, nombre_carpeta)
+    os.makedirs(carpeta_salida, exist_ok=True)
+    # --- FIN selección de carpeta ---
+
+    # --- RUTAS FINALES KML/KMZ (ya existe carpeta_salida) ---
+    if CONFIG.get("salida", {}).get("separar_kml_kmz", False):
+        carpeta_kml = os.path.join(carpeta_salida, "kml")
+        os.makedirs(carpeta_kml, exist_ok=True)
+        archivo_kml = os.path.join(carpeta_kml, f"{nombre_salida}_mapeo.kml")
+        archivo_kmz = os.path.join(carpeta_kml, f"{nombre_salida}_mapeo.kmz")
+    else:
+        archivo_kml = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kml")
+        archivo_kmz = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
+    # --- FIN rutas KML/KMZ ---
+
+    # HTML opcional (solo si lo activás en config.json con html.generar_en_modo_manual = true)
+    if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
+        try:
+            _copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
+            informe_html = generar_informe_html(
+                df, archivo_kml, carpeta_salida, nombre_salida, hoja
+            )
+
+            print(f"Informe HTML generado en: {informe_html}")
+            # --- Normalizar ubicación del KMZ (por si quedó fuera de BASE) ---
+            try:
+                kmz_esperado = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
+                kmz_fuera    = os.path.join(carpeta_base,  f"{nombre_salida}_mapeo.kmz")
+                if os.path.isfile(kmz_fuera):
+                    if os.path.isfile(kmz_esperado):
+                        try:
+                            os.remove(kmz_esperado)
+                        except Exception:
+                            pass
+                    os.replace(kmz_fuera, kmz_esperado)
+                    log(f"[DEBUG] KMZ reubicado a: {kmz_esperado}")
+            except Exception as _e:
+                print(f"[WARN] No se pudo reubicar KMZ: {_e}")
+            # --- FIN normalización KMZ ---
+
+        except Exception as e:
+            print(f"[ERROR] No se pudo generar el HTML: {e}")
+            informe_html = None
+    else:
+        informe_html = None
+
+    # Log mínimo para Modo 2
+    if opcion == "2":
+        try:
+            log_min = os.path.join(carpeta_salida, "log_minimo.txt")
+
+            # Conteos básicos
+            total_post_filtro = len(df)
+
+            # Antenas válidas (con coordenadas válidas)
+            latn = pd.to_numeric(df.get("lat", pd.Series(dtype=float)), errors="coerce")
+            lonn = pd.to_numeric(df.get("long", pd.Series(dtype=float)), errors="coerce")
+            m_coord = (
+                latn.notna() & lonn.notna() &
+                ~((latn.fillna(0) == 0) & (lonn.fillna(0) == 0)) &
+                latn.between(-90, 90) & lonn.between(-180, 180)
+            )
+
+            ant_unicas = 0
+            if "antena" in df.columns:
+                s_ant = df.loc[m_coord, "antena"].astype(str).str.strip()
+                invalid = {"", "0", "null", "none", "nan", "sin inf", "sin inf.", "s/i"}
+                s_ant = s_ant[~s_ant.str.lower().isin(invalid)]
+                ant_unicas = int(s_ant.nunique())
+
+            contactos_unicos = 0
+            if "tel_contacto" in df.columns:
+                s_ct = df["tel_contacto"].astype(str).str.strip()
+                s_ct = s_ct.replace({"": None})
+                contactos_unicos = int(s_ct.nunique(dropna=True))
+
+            with open(log_min, "w", encoding="utf-8") as f:
+                f.write(f"Filtro aplicado: {_resumen_filtro}\n")
+                f.write(f"Registros tras filtro: {total_post_filtro}\n")
+                f.write(f"Antenas únicas (válidas): {ant_unicas}\n")
+                f.write(f"Contactos únicos: {contactos_unicos}\n")
+        except Exception:
+            # No detiene el flujo si hay algún problema con el log
+            pass
+
+    # PRE-KML: asegurar alias/usuario/abonado sin prompt (usar 'SinInf' si faltan)
+    def _prep_meta_unicos(_df, campos):
+
+        for etiqueta, col in campos:
+            serie = _df[col] if col in _df.columns else None
+
+            vacio = True
+            if serie is not None:
+                try:
+                    vacio = bool(serie.isna().all() or (serie.astype(str).str.strip() == '').all())
+                except Exception:
+                    vacio = True
+
+            if (col not in _df.columns) or vacio:
+                _df[col] = ""  # dejar vacío (sin placeholder)
+                log(f"[QC] {col} no presente/vacío; se deja vacío (no se imprime en salida).")
+
+        return _df
+
+    # Rellena solo si faltan; si ya existen no pregunta
+    df = _prep_meta_unicos(df, [
+        ("alias", "alias"),
+        ("nombre_usuario", "usuario"),
+        ("abonado", "abonado"),
+    ])
+
+
+    archivo_kml, desc_coords = generar_kml(df, archivo_kml)
+    
+    # === BLOQUE HTML/SECCIONES (repuesto) ===
+    try:
+        # 1) Parámetros para "Interacciones de los últimos días"
+        try:
+            _dias_cfg = 3
+            if 'CONFIG' in globals() and isinstance(CONFIG, dict):
+                _dias_cfg = int(CONFIG.get("html", {}).get("interacciones_ultimos_dias", 3))
+        except Exception:
+            _dias_cfg = 3
+
+        try:
+            _cols_cfg = CONFIG.get("columnas", {}) if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else {}
+        except Exception:
+            _cols_cfg = {}
+
+        # 2) Construir sección de interacciones (se inyecta en el HTML)
+        try:
+            global HTML_SECCION_INTERACCIONES
+            HTML_SECCION_INTERACCIONES = _construir_seccion_interacciones(
+                df, dias=_dias_cfg, columnas_config=_cols_cfg
+            )
+            log(f"[DEBUG] Interacciones: {len(HTML_SECCION_INTERACCIONES)} chars")
+        except Exception as e:
+            log(f"[ERROR] Interacciones falló: {e}")
+            HTML_SECCION_INTERACCIONES = ""
+
+        # 2b) Construir sección "Todos los contactos"
+        try:
+            global HTML_SECCION_TODOS_CONTACTOS
+            HTML_SECCION_TODOS_CONTACTOS = _construir_seccion_todos_contactos(
+                df, columnas_config=_cols_cfg
+            )
+        except Exception:
+            HTML_SECCION_TODOS_CONTACTOS = ""
+
+
+        # 3) (Opcional) Sección Top N antenas para la portada del HTML
+        try:
+            global HTML_SECCION_ANTENAS
+
+            # Leer Top N antenas (override -> config -> 3)
+            try:
+                if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
+                    _topN = int(OVERRIDE_TOPS.get('antenas'))
+                elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
+                    _topN = int(CONFIG.get("html", {}).get("top_antenas_n", 3))
+                else:
+                    _topN = 3
+            except Exception:
+                _topN = 3
+
+
+            # Buscar la función si existe (con o sin guion bajo)
+            _func = globals().get("_construir_seccion_antenas") or globals().get("construir_seccion_antenas")
+            if callable(_func):
+                HTML_SECCION_ANTENAS = _func(df, top_n=_topN, columnas_config=_cols_cfg)
+            else:
+                # Si no existe la función, no pasa nada: el HTML ya arma su sección de antenas.
+                HTML_SECCION_ANTENAS = ""
+        except Exception:
+            HTML_SECCION_ANTENAS = ""
+
+            # Si no existe la función o algo falla, la sección queda vacía (no bloquea el HTML)
+            # print(f"[DEBUG] Antenas HTML error: {e}")
+            HTML_SECCION_ANTENAS = ""
+
+        # 4) Generar el HTML
+        print("[DEBUG] Llamando a generar_informe_html(...)")
+        _copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
+        informe_html = generar_informe_html(
+            df, archivo_kml, carpeta_salida, nombre_salida, hoja,
+            os.path.basename(archivo_entrada)
+        )
+        print(f"Informe HTML generado en: {informe_html}")
+        # --- Normalizar ubicación del KMZ (por si quedó fuera de BASE) ---
+        try:
+            kmz_esperado = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
+            kmz_fuera    = os.path.join(carpeta_base,  f"{nombre_salida}_mapeo.kmz")
+            if os.path.isfile(kmz_fuera):
+                if os.path.isfile(kmz_esperado):
+                    try:
+                        os.remove(kmz_esperado)
+                    except Exception:
+                        pass
+                os.replace(kmz_fuera, kmz_esperado)
+        except Exception as _e:
+            print(f"[WARN] No se pudo reubicar KMZ: {_e}")
+        # --- FIN normalización KMZ ---
+
+
+        # === HASHES.txt (entrada/salidas/config/log) — INICIO =======================
+        try:
+            pares = []
+
+            # 1) Entrada (usa la primera variable que exista)
+            for _cand in ("ruta_archivo_entrada", "archivo_entrada"):
+                _v = locals().get(_cand) or globals().get(_cand)
+                if isinstance(_v, str) and os.path.exists(_v):
+                    pares.append((os.path.abspath(_v), os.path.basename(_v)))
+                    break
+
+            # 2) HTML recién generado
+            if isinstance(informe_html, str) and os.path.exists(informe_html):
+                pares.append((os.path.abspath(informe_html), os.path.basename(informe_html)))
+
+            # 3) KMZ (derivado del path base del KML)
+            _kmz_added = False; _k_ref = None
+            for _cand_k in ("archivo_salida_kml", "archivo_kml"):
+                _k = locals().get(_cand_k) or globals().get(_cand_k)
+                if _k:
+                    _k_ref = _k
+                    _kmz = os.path.splitext(_k)[0] + ".kmz"
+                    if os.path.exists(_kmz):
+                        pares.append((os.path.abspath(_kmz), os.path.basename(_kmz)))
+                        _kmz_added = True
+                    break
+
+
+            # 5) Log actual (si existe)
+            _log_file = globals().get("LOG_FILE")
+            if _log_file and os.path.exists(_log_file):
+                pares.append((os.path.abspath(_log_file), os.path.basename(_log_file)))
+
+            # 6) Carpeta destino (prefiero la del HTML; si no, la del KML/KMZ; si no, cwd)
+            _dest_dir = None
+            if isinstance(informe_html, str) and informe_html:
+                _dest_dir = os.path.dirname(informe_html)
+            elif _kmz_added and _k_ref:
+                _dest_dir = os.path.dirname(_k_ref)
+            if not _dest_dir:
+                _dest_dir = os.getcwd()
+
+            _hashes_path = os.path.join(_dest_dir, f"{nombre_salida}_hashes.txt")
+            _escribe_hashes_txt(_hashes_path, pares)
+            try: log(f"[hashes] Generado {os.path.basename(_hashes_path)}")
+            except Exception: pass
+        except Exception as e:
+            try: log(f"[WARN][hashes] No se pudo generar HASHES.txt: {e}")
+            except Exception: pass
+        # === HASHES.txt — FIN ========================================================
+
+
+        # 5) Mensajes finales (KML/KMZ/errores)
+        print(f"KML generado en: {archivo_kml}")
+        if bool(CONFIG.get("salida", {}).get("separar_kml_kmz", False)):
+            kml_dir = os.path.dirname(archivo_kml)
+            base_dir = os.path.dirname(kml_dir) if os.path.basename(kml_dir).lower() == "kml" else kml_dir
+            kmz_dir = os.path.join(base_dir, "kmz")
+            kmz_path = os.path.join(kmz_dir, os.path.splitext(os.path.basename(archivo_kml))[0] + ".kmz")
+        else:
+            kmz_path = os.path.splitext(archivo_kml)[0] + ".kmz"
+
+        if os.path.exists(kmz_path):
+            print(f"KMZ generado en: {kmz_path}")
+        print(f"Filas descartadas por coordenadas inválidas: {desc_coords}")
+        print(f"Reporte de errores generado en: {archivo_errores}")
+
+    except Exception as e:
+        print(f"[ERROR] Bloque HTML/KML falló: {e}")
+def _solicitar_filtros_tiempo():
+    """
+    Devuelve un dict con claves:
+      {"tipo": "dia"|"rango_dias"|"rango_horas_dia"|"rango_horas",
+       "dia": "dd/mm/yyyy" | None,
+       "desde": "dd/mm/yyyy" | None,
+       "hasta": "dd/mm/yyyy" | None,
+       "hora_ini": "HH:MM:SS" | None,
+       "hora_fin": "HH:MM:SS" | None}
+    Si el usuario pulsa Enter en todo, retorna None (sin filtros).
+    """
+    print("\nSeleccione el filtro de tiempo:")
+    print("[1] Día específico")
+    print("[2] Rango de días")
+    print("[3] Rango de horas en un día específico")
+    print("[4] Rango de horas (aplicado a todos los días)")
+    resp = input("Opción (1/2/3/4, Enter=sin filtro): ").strip()
+    if resp not in ("1","2","3","4"):
+        return None
+    if resp == "1":
+        d = input("Ingrese el día (dd/mm/yyyy): ").strip()
+        return {"tipo":"dia","dia":d, "desde":None,"hasta":None,"hora_ini":None,"hora_fin":None}
+    if resp == "2":
+        d1 = input("Desde (dd/mm/yyyy): ").strip()
+        d2 = input("Hasta (dd/mm/yyyy): ").strip()
+        return {"tipo":"rango_dias","dia":None,"desde":d1,"hasta":d2,"hora_ini":None,"hora_fin":None}
+    if resp == "3":
+        d = input("Día (dd/mm/yyyy): ").strip()
+        h1 = input("Hora inicio (HH:MM, Enter=usar presets SV): ").strip()
+        h2 = input("Hora fin (HH:MM, Enter=usar presets SV): ").strip()
+        h1 = (h1 + ":00") if (h1 and len(h1)==5) else (h1 if h1 else None)
+        h2 = (h2 + ":00") if (h2 and len(h2)==5) else (h2 if h2 else None)
+        return {"tipo":"rango_horas_dia","dia":d,"desde":None,"hasta":None,"hora_ini":h1,"hora_fin":h2}
+    if resp == "4":
+        h1 = input("Hora inicio (HH:MM, Enter=usar presets SV): ").strip()
+        h2 = input("Hora fin (HH:MM, Enter=usar presets SV): ").strip()
+        h1 = (h1 + ":00") if (h1 and len(h1)==5) else (h1 if h1 else None)
+        h2 = (h2 + ":00") if (h2 and len(h2)==5) else (h2 if h2 else None)
+        return {"tipo":"rango_horas","dia":None,"desde":None,"hasta":None,"hora_ini":h1,"hora_fin":h2}
+
+def _aplicar_filtros_tiempo(df, filtros):
+    """
+    Aplica los filtros al DataFrame según el dict de _solicitar_filtros_tiempo().
+    Devuelve: (df_filtrado, resumen_texto).
+    """
+    if not filtros:
+        return df, "Sin filtro de tiempo"
+
+    tipo = filtros.get("tipo")
+    resumen = ""
+
+    # Normalizar fecha (f) y hora (h)
+    f = pd.to_datetime(df["fecha"], dayfirst=True, errors="coerce") if "fecha" in df.columns else None
+    h = pd.to_timedelta(df["hora"].astype(str), errors="coerce") if "hora" in df.columns else None
+
+    # Máscara base
+    mask = pd.Series([True]*len(df), index=df.index)
+
+    if tipo == "dia" and f is not None:
+        try:
+            d = pd.to_datetime(filtros.get("dia"), dayfirst=True, errors="coerce").normalize()
+            mask &= (f.dt.normalize() == d)
+            resumen = f"Día: {filtros.get('dia')}"
+        except Exception:
+            pass
+
+    elif tipo == "rango_dias" and f is not None:
+        d1 = pd.to_datetime(filtros.get("desde"), dayfirst=True, errors="coerce")
+        d2 = pd.to_datetime(filtros.get("hasta"), dayfirst=True, errors="coerce")
+        if pd.notna(d1): d1 = d1.normalize()
+        if pd.notna(d2): d2 = d2.normalize()
+        if pd.notna(d1): mask &= (f.dt.normalize() >= d1)
+        if pd.notna(d2): mask &= (f.dt.normalize() <= d2)
+        resumen = f"Rango de días: {filtros.get('desde')} → {filtros.get('hasta')}"
+
+    elif tipo == "rango_horas_dia" and (f is not None) and (h is not None):
+        # Día específico + rango de horas (maneja cruce de medianoche)
+        d = pd.to_datetime(filtros.get("dia"), dayfirst=True, errors="coerce")
+        h1 = filtros.get("hora_ini")
+        h2 = filtros.get("hora_fin")
+        if pd.notna(d) and h1 and h2:
+            try:
+                d = d.normalize()
+                t1 = pd.to_timedelta(h1)
+                t2 = pd.to_timedelta(h2)
+                mask &= (f.dt.normalize() == d)
+                if t1 <= t2:
+                    mask &= (h >= t1) & (h <= t2)
+                else:
+                    mask &= (h >= t1) | (h <= t2)
+                resumen = f"Rango de horas en día {filtros.get('dia')}: {h1} → {h2}"
+            except Exception:
+                resumen = "Rango de horas en día (entrada inválida, sin filtrar)"
+
+    elif tipo == "rango_horas" and h is not None:
+        # Rango de horas aplicado a todos los días (maneja cruce de medianoche)
+        h1 = filtros.get("hora_ini")
+        h2 = filtros.get("hora_fin")
+        if h1 and h2:
+            try:
+                t1 = pd.to_timedelta(h1)
+                t2 = pd.to_timedelta(h2)
+                if t1 <= t2:
+                    mask &= (h >= t1) & (h <= t2)
+                else:
+                    mask &= (h >= t1) | (h <= t2)
+                resumen = f"Rango de horas: {h1} → {h2}"
+            except Exception:
+                resumen = "Rango de horas (entrada inválida, sin filtrar)"
+        else:
+            resumen = "Rango de horas (usando presets SV)"
+
+    df2 = df.loc[mask].copy()
+    return df2, resumen
+
+def _solicitar_overrides_topn(config):
+    """Pide Top N de antenas y de contactos solo para esta ejecución (override).
+    Retorna dict como {'antenas': int?, 'contactos': int?} o None si no se cambia nada."""
+    try:
+        defA = int(config.get('html', {}).get('top_antenas_n', 3))
+        defC = int(config.get('html', {}).get('top_contactos_n', 10))
+    except Exception:
+        defA, defC = 3, 10
+
+    print("\n( Opcional ) Ajuste de Top N para esta ejecución:")
+    sa = input(f"Top N de ANTENAS (Enter={defA}): ").strip()
+    sc = input(f"Top N de CONTACTOS (Enter={defC}, escribe 'mismo' para usar el de antenas): ").strip()
+
+    ovr = {}
+
+    def _parse(x):
+        try:
+            v = int(x)
+            return v if v > 0 else None
+        except Exception:
+            return None
+
+    if sa:
+        va = _parse(sa)
+        if va:
+            ovr['antenas'] = va
+
+    if sc:
+        if sc.lower() == 'mismo' and 'antenas' in ovr:
+            ovr['contactos'] = ovr['antenas']
+        else:
+            vc = _parse(sc)
+            if vc:
+                ovr['contactos'] = vc
+
+    return ovr if ovr else None
+
+def _compactar_ruta(txt: str, maxlen: int = 64) -> str:
+    """
+    Devuelve un nombre corto y seguro para usar como carpeta.
+    Mantiene inicio y final del nombre y pone un hash al centro,
+    asegurando que la longitud final sea <= maxlen.
+    """
+    import hashlib, os
+
+    base = str(txt).strip().replace(os.sep, "_")
+    if len(base) <= maxlen:
+        return base
+
+    hash_len = 8            # tamaño del hash
+    sep = "__"              # separador
+    fixed = hash_len + 2*len(sep)  # espacio ocupado por "__" + hash + "__"
+
+    # Si el maxlen es demasiado corto, devolvemos solo el hash truncado.
+    if maxlen <= fixed + 2:
+        return hashlib.sha1(base.encode("utf-8")).hexdigest()[:min(hash_len, maxlen)]
+
+    remain = maxlen - fixed
+    # repartimos 60/40 entre prefijo y sufijo con mínimos razonables
+    pref_len = max(10, int(remain * 0.6))
+    suf_len = remain - pref_len
+    if suf_len < 8:
+        suf_len = 8
+        pref_len = remain - suf_len
+
+    h = hashlib.sha1(base.encode("utf-8")).hexdigest()[:hash_len]
+    prefix = base[:pref_len].rstrip("_- ")
+    suffix = base[-suf_len:].lstrip("_- ")
+
+    return f"{prefix}{sep}{h}{sep}{suffix}"
+
+if __name__ == "__main__":
+    bootstrap_config()
+    main()

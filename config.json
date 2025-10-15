@@ -1,0 +1,339 @@
+{
+  "brand": {
+    "name": "TZ Analysis",
+    "version": "Versión 1.0.0",
+    "logo": {
+      "path": "logo_tz.png",
+      "width_px": 120,
+      "alt": "TZ Analysis"
+    }
+  },
+  "branding": {
+    "mostrar_marca_agua": true,
+    "marca_agua_texto": "CONFIDENCIAL",
+    "marca_agua_opacidad": 0.08,
+    "marca_agua_en_impresion": true,
+    "mostrar_pie_legal": true,
+    "pie_legal_texto": "El presente informe es de carácter confidencial y ha sido generado mediante el software TZ Analysis, exclusivamente para el equipo asignado a la investigación. Su divulgación o reproducción no autorizada a personas ajenas podría acarrear consecuencias legales.",
+    "byline_texto": "by: Omar Arias - TZ Analysis - Versión 1.0.0",
+    "pie_legal_en_impresion": true,
+    "logo_path": "logo_tz.png",
+    "logo_width": "120px",
+    "logo_alt": "TZ Analysis"
+  },
+  "excel": {
+    "ignore_hidden_sheets": true
+  },
+  "geografia": {
+    "sv_bbox": {
+      "lat_min": 12.9,
+      "lat_max": 14.5,
+      "lon_min": -90.3,
+      "lon_max": -87.6
+    }
+  },
+  "html": {
+    "top_antenas_n": 10,
+    "interacciones_ultimos_dias": 3,
+    "enmascarar_contactos": false,
+    "top_contactos_n": 5,
+    "generar_en_modo_manual": false,
+    "enmascarar_ultimos": 4,
+    "metadatos_tecnicos": {
+      "enabled": false,
+      "modo": "minimo",
+      "mostrar_versiones": false
+    }
+  },
+  "kml": {
+    "azimuth_km": 1.5,
+    "cone": {
+      "half_degrees": 35,
+      "fill_color": "7fffffff"
+    },
+    "line": {
+      "color": "ffff00ff",
+      "width": 5
+    },
+    "description": [[["Fecha","fecha"],["Hora","hora"]],[["Tel","tel"],["IMEI","imei"],["Alias","alias"],["Nombre del Usuario","usuario"],["Abonado","abonado"]],[["Antena","antena"],["Detalle","detalle"],["Lat","lat"],["Long","long"],["Azimut","azimut"],["Celda","celda"],["LAC","lac"]],[["Interacción","interaccion"],["Duración","duracion"]]]
+  },
+  "logs": {
+    "modo1_log_completo": true,
+    "modo2_log_minimo": true,
+    "nivel": "INFO"
+  },
+  "rango_horario": {
+    "usar_presets_por_defecto": true,
+    "permitir_rango_manual_modo2": true,
+    "presets": {
+      "manana_0501-1300": {
+        "ini": "05:01:00",
+        "fin": "13:00:00"
+      },
+      "tarde_1301-1800": {
+        "ini": "13:01:00",
+        "fin": "18:00:00"
+      },
+      "noche_1801-0100": {
+        "ini": "18:01:00",
+        "fin": "01:00:00"
+      },
+      "madrugada_0301-0500": {
+        "ini": "01:01:00",
+        "fin": "05:00:00"
+      }
+    }
+  },
+  "schema": {
+    "subject_default_mode": "tel",
+    "subject_modes": [
+      "tel",
+      "imei"
+    ],
+    "fields": {
+      "fecha": {
+        "required": true,
+        "synonyms": [
+          "fecha",
+          "fecha_inicial",
+          "f_inicio",
+          "fecha_evento",
+          "fecha llamada",
+          "f_llamada",
+          "fecha_in"
+        ]
+      },
+      "hora": {
+        "required": true,
+        "synonyms": [
+          "hora",
+          "hora_inicial",
+          "h_inicio",
+          "hora_evento",
+          "h_llamada"
+        ]
+      },
+      "timestamp": {
+        "required": false,
+        "synonyms": [
+          "fecha_hora",
+          "datetime",
+          "marca_tiempo"
+        ]
+      },
+      "tel": {
+        "required_mode": "tel",
+        "synonyms": [
+          "tel",
+          "numero",
+          "numero_origen",
+          "msisdn",
+          "telefono",
+          "num_origen"
+        ]
+      },
+      "imei": {
+        "required_mode": "imei",
+        "synonyms": [
+          "imei",
+          "imei_sujeto",
+          "imei_origen"
+        ]
+      },
+      "alias": {
+        "required": false,
+        "synonyms": [
+          "alias",
+          "sobrenombre"
+        ]
+      },
+      "usuario": {
+        "required": false,
+        "synonyms": [
+          "usuario",
+          "abonado",
+          "titular",
+          "suscriptor",
+          "nombre_usuario"
+        ]
+      },
+      "antena": {
+        "required": false,
+        "synonyms": [
+          "antena",
+          "sitio",
+          "site",
+          "estacion",
+          "torre",
+          "torre_a",
+          "tower",
+          "torre A"
+        ]
+      },
+      "lat": {
+        "required": false,
+        "synonyms": [
+          "lat",
+          "latitud",
+          "latitude",
+          "y"
+        ]
+      },
+      "lon": {
+        "required": false,
+        "synonyms": [
+          "lon",
+          "long",
+          "longitud",
+          "lng",
+          "x"
+        ]
+      },
+      "azimut": {
+        "required": false,
+        "synonyms": [
+          "azimut",
+          "azimuth",
+          "az",
+          "orientacion"
+        ]
+      },
+      "celda": {
+        "required": false,
+        "synonyms": [
+          "celda",
+          "cell_id",
+          "eci",
+          "ci",
+          "cid"
+        ]
+      },
+      "direccion": {
+        "required": false,
+        "synonyms": [
+          "direccion",
+          "direccion_antena",
+          "ubicacion",
+          "address",
+          "site_address"
+        ]
+      },
+      "contacto": {
+        "required": true,
+        "synonyms": [
+          "contacto",
+          "numero_destino",
+          "num_destino",
+          "destino",
+          "b_msisdn"
+        ]
+      },
+      "interaccion": {
+        "required": true,
+        "synonyms": [
+          "interaccion",
+          "conteo",
+          "llamadas",
+          "cantidad",
+          "eventos"
+        ]
+      },
+      "duracion_seg": {
+        "required": false,
+        "synonyms": [
+          "duracion",
+          "duración",
+          "call_duration",
+          "segundos",
+          "tiempo_llamada"
+        ]
+      },
+      "tipo_evento": {
+        "required": false,
+        "synonyms": [
+          "tipo",
+          "evento",
+          "call_type",
+          "clase_evento"
+        ]
+      },
+      "sentido": {
+        "required": false,
+        "synonyms": [
+          "sentido",
+          "direction",
+          "dir",
+          "incoming_outgoing"
+        ]
+      },
+      "operador": {
+        "required": false,
+        "synonyms": [
+          "operador",
+          "carrier",
+          "isp",
+          "compania"
+        ]
+      },
+      "tecnologia": {
+        "required": false,
+        "synonyms": [
+          "tecnologia",
+          "tech",
+          "rat",
+          "generacion"
+        ]
+      },
+      "imsi": {
+        "required": false,
+        "synonyms": [
+          "imsi"
+        ]
+      }
+    },
+    "location_alternatives": [
+      [
+        "lat",
+        "lon"
+      ],
+      [
+        "antena"
+      ]
+    ]
+  },
+  "style": {
+    "theme_hex": "#76ff03",
+    "pin_scale": 1.1,
+    "line_width": 5,
+    "cone_opacity": 0.35,
+    "palette": [["Magenta (alto contraste)","#ff00ff"],["Cian","#00ffff"],["Amarillo","#ffff00"],["Rojo intenso","#ff1744"],["Azul fuerte","#2979ff"],["Verde intenso","#00c853"],["Naranja","#ff9100"],["Morado","#9c27b0"],["Rosa","#ff4081"],["Lima","#c6ff00"],["Aqua","#00e5ff"],["Ámbar","#ffc400"],["Azul eléctrico","#00b6ff"],["Chartreuse","#7fff00"],["Verde primavera","#00ff7f"],["Rosa fuerte","#ff69b4"],["Cielo profundo","#00bfff"],["Oro","#ffd700"],["Rojo anaranjado","#ff4500"],["Violeta","#ee82ee"],["Azul dodger","#1e90ff"],["Verde puro","#00ff00"],["Carmesí","#dc143c"],["Púrpura neón","#bf00ff"],["Rojo puro","#ff0000"],["Rojo cereza","#d50000"],["Rojo coral","#ff5252"],["Fucsia vibrante","#ff00aa"],["Rosa A400","#f50057"],["Magenta oscuro","#c51162"],["Índigo A700","#304ffe"],["Índigo A400","#3d5afe"],["Azul A700","#2962ff"],["Azul medio","#2196f3"],["Azul cielo","#42a5f5"],["Azul claro","#03a9f4"],["Azul A400","#00b0ff"],["Azul A700 brillante","#0091ea"],["Turquesa","#40e0d0"],["Cian profundo","#00b8d4"],["Cian A200","#18ffff"],["Verde azulado","#00bfa5"],["Verde A400","#00e676"],["Verde lima A700","#64dd17"],["Verde neón","#76ff03"],["Lima A700","#aeea00"],["Amarillo A400","#ffea00"],["Ámbar A700","#ffa000"],["Naranja fuerte","#ff6f00"],["Naranja oscuro","#ff8c00"],["Naranja rojizo","#ff3d00"],["Mandarina","#ffa726"],["Anaranjado suave","#ff7043"],["Diente de león","#ffb300"],["Ámbar 500","#ffc107"],["Amarillo neón","#fff600"],["Púrpura A400","#d500f9"],["Púrpura profundo","#6200ea"],["Morado A400","#651fff"],["Violeta claro","#ba68c8"]]
+  },
+  "entradas": {
+    "priorizar_origen": true,
+    "permitir_destino_top_contactos": false,
+    "columnas_esenciales": [
+      "lat",
+      "long",
+      "azimut",
+      "fecha",
+      "hora",
+      "tel"
+    ]
+  },
+  "salida": {
+    "separar_kml_kmz": false,
+    "etiquetar_filtro": true,
+    "carpeta_base": "salida",
+    "prefijo_manual": "salida_manual",
+    "normalizar_nombres_archivo": true,
+    "solo_kmz": true
+  },
+  "synonyms_user": {
+    "_info": "Sinónimos aprendidos por el wizard. No editar a mano.",
+    "_ejemplo": {
+      "num": "tel",
+      "numero": "tel",
+      "fecha y hora": "fecha"
+    }
+  }
+}
