@@ -216,12 +216,21 @@ def _ensure_lat_name(df: pd.DataFrame) -> None:
 
 def validar_datos(df: pd.DataFrame, columnas_esenciales: List[str]) -> Tuple[pd.DataFrame, List[str]]:
     """
-    Normaliza y valida columnas esenciales en df.
-    - NO lanza excepciones; devuelve lista de mensajes (errores/warnings).
-    - Devuelve un nuevo df (o una vista) con columnas normalizadas.
+    Normaliza y valida columnas esenciales en un DataFrame sin lanzar excepciones.
 
-    columnas_esenciales típicas: ['tel','lat','lon','fecha','hora','azimut', ...]
+    Parámetros:
+        df (pd.DataFrame): DataFrame de bitácora a validar/normalizar (se trabaja sobre referencia).
+        columnas_esenciales (List[str]): Nombres canónicos esperados (p. ej. ['tel','lat','lon','fecha','hora','azimut']).
+
+    Retorna:
+        Tuple[pd.DataFrame, List[str]]: (df normalizado, lista de mensajes de error/warn/info).
+
+    Notas:
+        - No aborta ni filtra filas; la etapa HTML/KML decide.
+        - Coloca 'Sin Inf.' donde no es posible normalizar.
+        - Alias comunes de lat/lon se mapean a ('lat','lon') si existen.
     """
+
     errores: List[str] = []
     total = len(df)
 
@@ -301,9 +310,21 @@ def validar_datos(df: pd.DataFrame, columnas_esenciales: List[str]) -> Tuple[pd.
 
 def guardar_errores(errores: List[str], carpeta_salida: str, nombre_base: str) -> Optional[str]:
     """
-    Guarda un TXT con los errores si hay algo que reportar.
-    Retorna la ruta del archivo generado o None si no se generó nada.
+    Guarda un reporte de validación en un archivo .txt cuando hay mensajes.
+
+    Parámetros:
+        errores (List[str]): Mensajes a registrar.
+        carpeta_salida (str): Carpeta destino (se crea si no existe).
+        nombre_base (str): Prefijo del archivo (genera '<nombre_base>_errores.txt').
+
+    Retorna:
+        Optional[str]: Ruta del archivo generado, o None si no se creó.
+
+    Notas:
+        - Ante error al escribir, se debe registrar el aviso por logging y retornar None.
+        - La configuración del logging corresponde al punto de entrada (run.py).
     """
+
     if not errores:
         return None
 
