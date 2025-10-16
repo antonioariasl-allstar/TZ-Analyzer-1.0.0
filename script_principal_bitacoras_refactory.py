@@ -53,6 +53,8 @@ import re
 import shutil
 import sys
 import unicodedata
+import logging
+import traceback
 
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
@@ -6968,4 +6970,16 @@ def _compactar_ruta(txt: str, maxlen: int = 64) -> str:
 
 if __name__ == "__main__":
     bootstrap_config()
-    main()
+
+    # Logging simple y visible en consola para toda la app
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s: %(message)s"
+    )
+
+    try:
+        main()
+    except Exception as e:
+        logging.error("Error no controlado: %s", e)
+        traceback.print_exc()
+        raise
