@@ -2401,6 +2401,24 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     kml_name = os.path.basename(archivo_kml)  # nombre base, p.ej. "caso.kml"
     kmz_name = os.path.splitext(kml_name)[0] + ".kmz"
 
+    # Integración de campos canónicos no esenciales en resultados
+    df_html = df.copy()
+    if "alias" in df.columns:
+        df_html["Alias"] = df["alias"]
+    if "usuario" in df.columns:
+        df_html["Usuario"] = df["usuario"]
+    if "abonado" in df.columns:
+        df_html["Abonado"] = df["abonado"]
+
+    # Asegurar que los campos se incluyan en la generación de KML/KMZ
+    kml_data = {}
+    if "alias" in df.columns:
+        kml_data["Alias"] = df["alias"].tolist()
+    if "usuario" in df.columns:
+        kml_data["Usuario"] = df["usuario"].tolist()
+    if "abonado" in df.columns:
+        kml_data["Abonado"] = df["abonado"].tolist()
+
     if bool(CONFIG.get("salida", {}).get("separar_kml_kmz", False)):
         # El HTML se guarda en carpeta_salida (raíz). KML está en /kml y KMZ en /kmz
         kml_href = os.path.join("kml", kml_name) if os.path.basename(os.path.dirname(archivo_kml)).lower() == "kml" else kml_name
