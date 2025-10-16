@@ -27,3 +27,42 @@ Pendientes observables (higiene, sin tocar lógica):
 
 Notas:
 - No filtra filas ni aborta: la etapa HTML/KML decide; mantener ese contrato.
+
+## run.py
+Funciones / responsabilidades (según archivo):
+- Punto de entrada del programa (menú / opciones).
+- Orquestación: lectura de bitácora, validaciones, generación de salidas (HTML/KML/KMZ), rutas de salida.
+
+Pendientes observables (higiene, sin cambiar lógica):
+- [ ] Centralizar configuración de `logging` aquí (nivel y formato simples). No configurar en módulos.
+- [ ] Docstring breve al inicio del archivo explicando flujo general (1–2 líneas).
+- [ ] Mensajes de usuario: revisar que sean claros y consistentes (evitar prints ruidosos).
+- [ ] Manejo de errores: envolver la ejecución principal en try/except con mensaje legible + `logging.error(...)`.
+- [ ] Comprobación de carpetas de salida: asegurar `os.makedirs(..., exist_ok=True)` antes de escribir.
+
+Notas:
+- Mantener contratos actuales con módulos (`validaciones`, `kml_generador`, etc.).
+- No cambiar nombres de opciones del menú en este pase.
+
+## kml_generador.py
+Funciones / responsabilidades (según archivo):
+- Construcción de KML/KMZ a partir del DataFrame validado.
+- Formateo de coordenadas y burbujas (placemarks), agrupaciones por criterio (fecha/rango, top antenas).
+
+Pendientes observables (higiene, sin cambiar lógica):
+- [ ] Docstrings breves en funciones públicas clave (qué hace, params, return).
+- [ ] Revisar consistencia de formato en lat/lon (6 decimales, sin ‘.0’ en enteros cuando aplique).
+- [ ] Confirmar que solo se muestren campos con dato (omitir “Sin Inf.” en la burbuja si así está definido).
+- [ ] Validar que el nombre de archivos/carpetas no introduzca caracteres problemáticos (solo verificación).
+- [ ] (Opcional) Extraer pequeñas utilidades repetidas (helpers) si existen bloques duplicados.
+
+Notas:
+- Respetar estructura de carpetas actual y nombres base (no modificar en este pase).
+- Mantener compatibilidad con configuración desde `config.json`.
+
+## Transversal
+- [ ] Configurar `logging` en `run.py` (no en módulos) con formato simple visible en consola.
+- [ ] Mantener `"_SIN_INF"` coherente en todas las salidas (HTML/KML/KMZ).
+- [ ] Tests mínimos (pytest) para normalización de fecha/hora y formateo de lat/lon.
+- [ ] Confirmar zonas horarias y `dayfirst=True` donde aplique.
+- [ ] Documentar en `README.md` requisitos básicos y flujo general (breve).
