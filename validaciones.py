@@ -16,9 +16,10 @@ Contratos públicos (compatibles con el código existente):
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, List, Dict, Any, Iterable
+from typing import Optional, Tuple, List, Dict, Any, Iterable, Literal   # ✚ Literal
 import os
 import math
+import logging                                                           # ✚ logging
 
 import pandas as pd
 import numpy as np
@@ -69,8 +70,9 @@ def _excel_serial_to_timestamp(x: Any) -> Optional[pd.Timestamp]:
 def _safe_to_datetime(
     series: pd.Series,
     dayfirst: bool = True,
-    errors: str = "coerce"
+    errors: Literal["raise", "coerce", "ignore"] = "coerce"
 ) -> pd.Series:
+
     """
     Convierte a datetime de forma tolerante:
     - Si hay números → intenta como serial Excel.
@@ -319,6 +321,5 @@ def guardar_errores(errores: List[str], carpeta_salida: str, nombre_base: str) -
                 f.write(f"{e}\n")
         return ruta
     except Exception as ex:
-        # No impedimos el flujo por problemas al escribir el log.
-        print(f"[WARN] No se pudo guardar el reporte de errores en '{ruta}': {ex}")
+        logging.warning("No se pudo guardar el reporte de errores en '%s': %s", ruta, ex)
         return None
