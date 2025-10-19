@@ -61,11 +61,12 @@ import numpy as np
 
 # Terceros
 import pandas as pd  # <-- UNO solo, aquí arriba
+from simplekml import Kml
 
 # Módulos locales
 from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
-from kml_generador import generar_kml  # si lo estás usando desde aquí
+from kml_generador import generar_kml_puntos_libres, generar_kml_antenas
 #=================================================================================
 
 def bootstrap_config() -> None:
@@ -197,19 +198,19 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
                 asignadas[can] = ("omitido", None)
         except:
             asignadas[can] = ("omitido", None)
-        # --- Resumen final de mapeo ---
-        print("\n[QC] === Resumen de mapeo ===")
-        for k,(t,v) in asignadas.items():
-            if t == "col":
-                print(f"  {k:12s} <- columna '{v}'")
-            elif t == "fijo":
-                print(f"  {k:12s} <- fijo '{v}'")
-            else:
-                print(f"  {k:12s} <- omitido")
+    # --- Resumen final de mapeo (una sola vez tras no esenciales) ---
+    print("\n[QC] === Resumen de mapeo ===")
+    for k,(t,v) in asignadas.items():
+        if t == "col":
+            print(f"  {k:12s} <- columna '{v}'")
+        elif t == "fijo":
+            print(f"  {k:12s} <- fijo '{v}'")
+        else:
+            print(f"  {k:12s} <- omitido")
 
-        if pendientes:
-            print("\n[QC] Aviso: omitiste canónicos ESENCIALES:", ", ".join(pendientes))
-            print("Podés volver a ejecutar para completar esos campos, o continuar bajo tu responsabilidad.")
+    if pendientes:
+        print("\n[QC] Aviso: omitiste canónicos ESENCIALES:", ", ".join(pendientes))
+        print("Podés volver a ejecutar para completar esos campos, o continuar bajo tu responsabilidad.")
 
 
     # --- Aplicar mapeo al DataFrame ---
@@ -416,7 +417,7 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
 
     return df, asignadas
 
-from simplekml import Kml
+from kml_generador import generar_kml_puntos_libres
 from collections import Counter
 
 # --- LOGS: helper para registrar degrade/mapas/omisiones ---
@@ -1461,15 +1462,16 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     items = []  # elementos base para recrear puntos en varias carpetas
 
     for _, row in df.iterrows():
-    # Coordenadas válidas
-            # Coordenadas válidas (numéricas y en rango)
+        # Coordenadas válidas (numéricas y en rango)
         lat_raw = row.get("lat", None); lon_raw = row.get("long", None)
         if lat_raw in ("Sin Inf.", "S/I", None, "") or lon_raw in ("Sin Inf.", "S/I", None, ""):
+            descartadas += 1
             continue
         try:
             lat = float(lat_raw)
             lon = float(lon_raw)
         except Exception:
+            descartadas += 1
             continue
 
         # Descartar (0,0) y fuera de rango
@@ -4719,6 +4721,18 @@ def _modo_manual():
     # --------- flujo interactivo ---------
     items = []
     print("\nModo MANUAL. Ingresará uno o más puntos/antenas.")
+    
+    # Preguntar tipo de registro UNA SOLA VEZ al inicio
+    print("\n¿Qué tipo de registros desea agregar?")
+    print("[1] Antenas/Celdas")
+    print("[2] Puntos libres (lugares, domicilios, escenas, etc.)")
+    tipo_modo = (input("Tipo (1/2, Enter=1): ").strip() or "1")
+    es_punto_libre = (tipo_modo == "2")
+    
+    if es_punto_libre:
+        print("\n→ Modo: Puntos libres (sin azimut, campos simplificados)")
+    else:
+        print("\n→ Modo: Antenas/Celdas (con azimut y campos completos)")
 
     while True:
         print("\nMenú:")
@@ -4756,39 +4770,64 @@ def _modo_manual():
 
         if op == "A":
             print("\n— Nuevo registro —")
-            antena = _input_str("Nombre de la antena (recomendado corto): ", True, 120)
-            detalle = _input_str("Detalle/dirección (opcional): ", False, 500)
-            lat  = _input_float("Latitud (obligatoria): ", True)
-            lon  = _input_float("Longitud (obligatoria): ", True)
-            az   = _input_int("Azimut 0–359 (opcional): ", False, 0, 359)
 
-            # Identidad (opcionales)
-            tel     = _input_str("Tel (opcional): ", False, 50)
-            imei    = _input_str("IMEI (opcional): ", False, 50)
-            alias   = _input_str("Alias (opcional): ", False, 120)
-            usuario = _input_str("Nombre del Usuario (opcional): ", False, 200)
-            abonado = _input_str("Abonado (opcional): ", False, 200)
+            if es_punto_libre:
+                # Punto libre (sin azimut ni campos de antena)
+                nombre = _input_str("Nombre/identificador del lugar: ", True, 160)
+                direccion = _input_str("Dirección del lugar (opcional): ", False, 500)
+                lat  = _input_float("Latitud (obligatoria): ", True)
+                lon  = _input_float("Longitud (obligatoria): ", True)
+                comentarios = _input_str("Comentarios (opcional): ", False, 800)
 
-            # Técnica (opcionales)
-            celda = _input_str("Celda (opcional): ", False, 50)
-            lac   = _input_str("LAC (opcional): ", False, 50)
+                # Mapear a las columnas soportadas por el generador KML
+                # Usamos 'antena' como nombre del punto; 'direccion' se muestra en su bloque
+                # y 'detalle' lo reutilizamos para comentarios.
+                items.append({
+                    "tipo": "punto",
+                    "antena": nombre,
+                    "detalle": comentarios,
+                    "direccion": direccion,
+                    "lat": lat,
+                    "long": lon,
+                    "azimut": None,  # sin orientación
+                })
+                print("✓ Punto agregado.")
+            else:
+                # Antena/Celda
+                antena = _input_str("Nombre de la antena (recomendado corto): ", True, 120)
+                detalle = _input_str("Detalle/dirección (opcional): ", False, 500)
+                lat  = _input_float("Latitud (obligatoria): ", True)
+                lon  = _input_float("Longitud (obligatoria): ", True)
+                az   = _input_int("Azimut 0–359 (opcional): ", False, 0, 359)
 
-            # Interacción (opcionales)
-            interaccion  = _input_str("Interacción (opcional): ", False, 80)
-            tel_contacto = _input_str("Tel contacto (opcional): ", False, 50)
-            duracion     = _input_int("Duración en segundos (opcional): ", False, 0)
+                # Identidad (opcionales)
+                tel     = _input_str("Tel (opcional): ", False, 50)
+                imei    = _input_str("IMEI (opcional): ", False, 50)
+                alias   = _input_str("Alias (opcional): ", False, 120)
+                usuario = _input_str("Nombre del Usuario (opcional): ", False, 200)
+                abonado = _input_str("Abonado (opcional): ", False, 200)
 
-            items.append({
-                "antena": antena, "detalle": detalle,
-                "lat": lat, "long": lon, "azimut": az,
-                "tel": tel, "imei": imei, "alias": alias,
-                "usuario": usuario, "abonado": abonado,
-                "celda": celda, "lac": lac,
-                "interaccion": interaccion,
-                "tel_contacto": tel_contacto,
-                "duracion": duracion
-            })
-            print("✓ Registro agregado.")
+                # Técnica (opcionales)
+                celda = _input_str("Celda (opcional): ", False, 50)
+                lac   = _input_str("LAC (opcional): ", False, 50)
+
+                # Interacción (opcionales)
+                interaccion  = _input_str("Interacción (opcional): ", False, 80)
+                tel_contacto = _input_str("Tel contacto (opcional): ", False, 50)
+                duracion     = _input_int("Duración en segundos (opcional): ", False, 0)
+
+                items.append({
+                    "tipo": "antena",
+                    "antena": antena, "detalle": detalle,
+                    "lat": lat, "long": lon, "azimut": az,
+                    "tel": tel, "imei": imei, "alias": alias,
+                    "usuario": usuario, "abonado": abonado,
+                    "celda": celda, "lac": lac,
+                    "interaccion": interaccion,
+                    "tel_contacto": tel_contacto,
+                    "duracion": duracion
+                })
+                print("✓ Registro agregado.")
             continue
 
         if op == "G":
@@ -4800,7 +4839,6 @@ def _modo_manual():
             # [MOVIDO] La selección de carpeta se hará al final del flujo.
             base_auto = _nombre_auto_desde_items(items)
             nombre_sugerido = _input_str(
-
                 f"Nombre base del archivo (Enter = {base_auto}): ", False, 120
             ) or base_auto
             # (No crear carpeta aquí)
@@ -4826,8 +4864,17 @@ def _modo_manual():
 
             # DF y KML
             df = _armar_df(items)
-
             # --- RUTAS FINALES KML/KMZ (modo manual) ---
+            if es_punto_libre:
+                archivo_kml = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kml")
+                archivo_kml, desc_coords = generar_kml_puntos_libres(df, archivo_kml, CONFIG)
+                print(f"KML generado en: {archivo_kml}")
+                kmz_path = os.path.splitext(archivo_kml)[0] + ".kmz"
+                if os.path.exists(kmz_path):
+                    print(f"KMZ generado en: {kmz_path}")
+                print(f"Filas descartadas por coordenadas inválidas: {desc_coords}")
+                print(f"Reporte de errores generado en: {archivo_errores}")
+                return
             # Requiere que ya existan: carpeta_salida y nombre_salida
             if CONFIG.get("salida", {}).get("separar_kml_kmz", False):
                 carpeta_kml = os.path.join(carpeta_salida, "kml")
@@ -4839,7 +4886,7 @@ def _modo_manual():
                 archivo_kmz = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
 
             # Generar el KML/KMZ en modo plano (sin subcarpetas del KML)
-            archivo_kml, desc_coords = generar_kml(df, archivo_kml, flat=True)
+            archivo_kml, desc_coords = generar_kml_antenas(df, archivo_kml, CONFIG, flat=True)
             print(f"KML generado en: {archivo_kml}")
 
 
@@ -6619,7 +6666,7 @@ def main():
     ])
 
 
-    archivo_kml, desc_coords = generar_kml(df, archivo_kml)
+    archivo_kml, desc_coords = generar_kml_antenas(df, archivo_kml, CONFIG, flat=False)
     
     # === BLOQUE HTML/SECCIONES (repuesto) ===
     try:
