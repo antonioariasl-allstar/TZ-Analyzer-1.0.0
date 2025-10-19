@@ -53,6 +53,8 @@ import re
 import shutil
 import sys
 import unicodedata
+import logging
+import traceback
 
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
@@ -123,7 +125,11 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
                 pass
             print("  [QC] Entrada inválida. Debe ser un número de la lista.")
 
-    # --- ESENCIALES (obligatorio, sin valores fijos ni omitir) ---
+    # =============================================================
+    # === Mapeo de CANÓNICOS ESENCIALES ===
+    # El usuario debe asignar columna a cada campo esencial.
+    # Se muestra el menú una sola vez y se pregunta en orden.
+    # =============================================================
     # Mostrar menú de columnas UNA sola vez
     print("\n[QC] Columnas disponibles (una sola vez):")
     print(_menu_horizontal(cols_menu, per_line=6))
@@ -169,7 +175,12 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
     # Reconocimiento mínimo de tipos numéricos (para lat/lon/azimut)
     tipar_numericos = {"lat", "long", "azimut", "duracion"}
 
-    # --- NO ESENCIALES (opcional: columna, valor fijo o omitir) ---
+    # =============================================================
+    # === Mapeo de CANÓNICOS NO ESENCIALES ===
+    # Incluye alias, usuario y abonado, junto con otros campos opcionales.
+    # El usuario puede asignar columna, valor fijo o dejarlo omitido.
+    # El menú se muestra una sola vez y se pregunta en orden.
+    # =============================================================
     print("\n[QC] === Mapeo NO ESENCIALES ===")
     print(_menu_horizontal(cols_menu, per_line=6))
     print("  Podés: elegir número, escribir 'F <valor fijo>' o Enter=omitir.")
@@ -259,7 +270,31 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
         else:
             print(f"  {can:<12} <- omitido")
 
-    # Vista previa (3 filas)
+    # =============================================================
+    # === Pregunta de identidad (alias/usuario/abonado) ===
+    # Si no existen o están vacíos, ofrecer cargarlos como un valor único para toda la ejecución.
+    # Esto garantiza que siempre se puedan incorporar estos metadatos.
+    # =============================================================
+    for etiqueta in ("alias", "usuario", "abonado"):
+        falta_col = etiqueta not in df.columns
+        vacio = False
+        if not falta_col:
+            try:
+                vacio = bool(df[etiqueta].isna().all() or (df[etiqueta].astype(str).str.strip() == '').all())
+            except Exception:
+                vacio = True
+        if falta_col or vacio:
+            try:
+                entrada = input(f"→ {etiqueta.capitalize()} para toda la ejecución (Enter=omitir): ").strip()
+            except Exception:
+                entrada = ""
+            if entrada:
+                df[etiqueta] = entrada
+
+    # =============================================================
+    # === Vista previa del mapeo (primeras 3 filas) ===
+    # Permite al usuario validar visualmente el resultado antes de confirmar.
+    # =============================================================
     try:
         print("\n[QC] Vista previa (3 filas):")
         print(df.head(3)[[c for c in esenciales + no_esenciales if c in df.columns]])
@@ -1601,15 +1636,40 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
             folders_por_fecha[fecha_str] = f_todas.newfolder(name=fecha_str)
         return folders_por_fecha[fecha_str]
 
-    f_rangos = raiz.newfolder(name="por_rango_horario")
-    rango_folders = {
-        "manana":    f_rangos.newfolder(name=RANGOS_SV["manana"][0]),
-        "tarde":     f_rangos.newfolder(name=RANGOS_SV["tarde"][0]),
-        "noche":     f_rangos.newfolder(name=RANGOS_SV["noche"][0]),
-        "madrugada": f_rangos.newfolder(name=RANGOS_SV["madrugada"][0]),
-    }
-    f_top_global = raiz.newfolder(name="top_3_las_mas_activadas")
-    f_top_por_rango = raiz.newfolder(name="top_3_por_rango")
+    # Carpeta por rango horario: controlada por config (kml.incluir_por_rango_horario)
+    incluir_rango = False
+    try:
+        incluir_rango = bool(CONFIG.get("kml", {}).get("incluir_por_rango_horario", False))
+    except Exception:
+        incluir_rango = False
+    if incluir_rango:
+        f_rangos = raiz.newfolder(name="por_rango_horario")
+        rango_folders = {
+            "manana":    f_rangos.newfolder(name=RANGOS_SV["manana"][0]),
+            "tarde":     f_rangos.newfolder(name=RANGOS_SV["tarde"][0]),
+            "noche":     f_rangos.newfolder(name=RANGOS_SV["noche"][0]),
+            "madrugada": f_rangos.newfolder(name=RANGOS_SV["madrugada"][0]),
+        }
+    else:
+        rango_folders = {}
+    # Top N dinámico (coincide con HTML): usa OVERRIDE_TOPS['antenas'] si existe,
+    # si no, cae a CONFIG['top_antenas'] o html.top_antenas_n. 0 = sin límite.
+    try:
+        if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and (OVERRIDE_TOPS.get('antenas') is not None):
+            _topN_ant = int(OVERRIDE_TOPS.get('antenas'))
+        else:
+            _topN_ant = int(CONFIG.get("top_antenas", CONFIG.get("html", {}).get("top_antenas_n", 3)))
+    except Exception:
+        _topN_ant = 3
+
+    _name_top_global = "top_las_mas_activadas" if (_topN_ant is None or _topN_ant <= 0) else f"top_{_topN_ant}_las_mas_activadas"
+    _name_top_por_rango = (
+        "top_por_rango_horario" if (_topN_ant is None or _topN_ant <= 0)
+        else f"top_{_topN_ant}_por_rango_horario"
+    )
+
+    f_top_global = raiz.newfolder(name=_name_top_global)
+    f_top_por_rango = raiz.newfolder(name=_name_top_por_rango)
     top_rango_folders = {
         "manana":    f_top_por_rango.newfolder(name=RANGOS_SV["manana"][0]),
         "tarde":     f_top_por_rango.newfolder(name=RANGOS_SV["tarde"][0]),
@@ -1635,8 +1695,10 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     ant_global = Counter(it["antena"] for it in items)
 
     items_by_rango = defaultdict(list)
+    # Mantener agrupación por rango para "top_3_por_rango" sin crear carpeta "por_rango_horario"
+    _rango_keys_validos = set(RANGOS_SV.keys())
     for it in items:
-        if it["rango"] in rango_folders:
+        if it["rango"] in _rango_keys_validos:
             items_by_rango[it["rango"]].append(it)
     pair_por_rango = {r: Counter((it["antena"], it["azimut_i"]) for it in lst) for r, lst in items_by_rango.items()}
     ant_por_rango  = {r: Counter(it["antena"] for it in lst) for r, lst in items_by_rango.items()}
@@ -1734,27 +1796,29 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
             _crear_feature_kml(container, antena, lon, lat, desc_core, az_principal, CONFIG, azimuts_extra=az_sec)
 
-    # 7) Por rango horario (deduplicado por antena+azimut ENTERO)
-    for clave, folder in rango_folders.items():
-        lst = items_by_rango.get(clave, [])
-        if lst:
-            _crear_dedup(folder, lst, pair_por_rango.get(clave, {}))
+    # 7) Por rango horario (opcional según config)
+    if incluir_rango and rango_folders:
+        for clave, folder in rango_folders.items():
+            lst = items_by_rango.get(clave, [])
+            if lst:
+                _crear_dedup(folder, lst, pair_por_rango.get(clave, {}))
 
-    # 8) Top 3 Global (por antena), deduplicando por azimut ENTERO
-    top3_global = ant_global.most_common(3)
-    for i, (ant, _) in enumerate(top3_global, start=1):
+    # 8) Top N Global (por antena), deduplicando por azimut ENTERO
+    _n_eff = None if (isinstance(_topN_ant, int) and _topN_ant <= 0) else int(_topN_ant)
+    topN_global = ant_global.most_common(_n_eff)
+    for i, (ant, _) in enumerate(topN_global, start=1):
         sub = f_top_global.newfolder(name=f"{i}_{ant}")
         lst = [it for it in items if it["antena"] == ant]
         _crear_dedup(sub, lst, pair_global)
 
-    # 9) Top 3 por rango (por antena), deduplicando por azimut ENTERO
+    # 9) Top N por rango (por antena), deduplicando por azimut ENTERO
     for clave, padre in top_rango_folders.items():
         c = ant_por_rango.get(clave, None)
         if not c:
             continue
-        top3_r = c.most_common(3)
+        topN_r = c.most_common(_n_eff)
         items_r = items_by_rango.get(clave, [])
-        for i, (ant, _) in enumerate(top3_r, start=1):
+        for i, (ant, _) in enumerate(topN_r, start=1):
             sub = padre.newfolder(name=f"{i}_{ant}")
             lst = [it for it in items_r if it["antena"] == ant]
             _crear_dedup(sub, lst, pair_por_rango.get(clave, {}))
@@ -2399,7 +2463,11 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     """
     from datetime import datetime
     
-    # --- Datos base / rutas ---
+    # =============================================================
+    # === Generación de salidas: HTML, KML, KMZ, TXT ===
+    # Aquí se construyen los archivos de salida principales.
+    # Los metadatos de alias/usuario/abonado se incluyen si existen.
+    # =============================================================
     kml_name = os.path.basename(archivo_kml)  # nombre base, p.ej. "caso.kml"
     kmz_name = os.path.splitext(kml_name)[0] + ".kmz"
 
@@ -2839,12 +2907,12 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     if c_col:
         # Top N de contactos según config
         try:
-            _topC = 10
-            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('contactos'):
+            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('contactos') is not None:
                 _topC = int(OVERRIDE_TOPS.get('contactos'))
             elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                _topC = int(CONFIG.get("html", {}).get("top_contactos_n", 10))
-
+                _topC = int(CONFIG.get("top_contactos", CONFIG.get("html", {}).get("top_contactos_n", 10)))
+            else:
+                _topC = 10
         except Exception:
             _topC = 10
         d = df.copy()
@@ -2868,8 +2936,9 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                 d.groupby("_c_norm", dropna=False)
                 .size()
                 .sort_values(ascending=False)
-                .head(int(_topC))
             )
+            if int(_topC) > 0:
+                g_cnt = g_cnt.head(int(_topC))
             total_cnt = int(len(d))
             rows = []
             for i, (k, n) in enumerate(g_cnt.items(), start=1):
@@ -2899,8 +2968,9 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                     d.groupby("_c_norm", dropna=False)["_sec"]
                     .sum()
                     .sort_values(ascending=False)
-                    .head(int(_topC))
                 )
+                if int(_topC) > 0:
+                    g_dur = g_dur.head(int(_topC))
                 def _fmt_hms(sec):
                     sec = int(round(sec))
                     h = sec // 3600; m = (sec % 3600) // 60; s = sec % 60
@@ -3501,10 +3571,10 @@ section{{margin-top:22px}}
     try:
         # Top N configurable (override -> config -> 3)
         try:
-            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
+            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas') is not None:
                 _topN = int(OVERRIDE_TOPS.get('antenas'))
             elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                _topN = int(CONFIG.get("html", {}).get("top_antenas_n", 3))
+                _topN = int(CONFIG.get("top_antenas", CONFIG.get("html", {}).get("top_antenas_n", 3)))
             else:
                 _topN = 3
         except Exception:
@@ -3556,8 +3626,9 @@ section{{margin-top:22px}}
                 top = (dfv.groupby(col_ant)
                         .size()
                         .reset_index(name="activaciones")
-                        .sort_values("activaciones", ascending=False)
-                        .head(int(_topN)))
+                        .sort_values("activaciones", ascending=False))
+                if int(_topN) > 0:
+                    top = top.head(int(_topN))
 
                 filas = []
                 for _, r0 in top.iterrows():
@@ -3790,14 +3861,16 @@ section{{margin-top:22px}}
                             if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
                                 _topN = int(OVERRIDE_TOPS.get('antenas'))
                             elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                                _topN = int(CONFIG.get("html", {}).get("top_antenas_n", 3))
+                                _topN = int(CONFIG.get("top_antenas", CONFIG.get("html", {}).get("top_antenas_n", 3)))
                             else:
                                 _topN = 3
                         except Exception:
                             _topN = 3
 
                         conteo = sub_valid[col_ant].value_counts(dropna=False)
-                        top_series = conteo.head(_topN)
+                        top_series = conteo
+                        if int(_topN) > 0:
+                            top_series = conteo.head(int(_topN))
 
 
                         out.append(f'<h3 class="sub">{lab} <span class="sub">({total} activaciones)</span></h3>')
@@ -6219,23 +6292,6 @@ def main():
             df["long"] = pd.to_numeric(df["long"], errors="coerce")
 
         # Post–mapeo: si faltan alias/usuario/abonado, ofrecer cargarlos como valor único (solo en QC manual)
-        if MANUAL_QC_MAPPING:
-            for etiqueta, col in (("alias","alias"), ("usuario","usuario"), ("abonado","abonado")):
-                tiene = col in df.columns
-                vacio = True
-                if tiene:
-                    try:
-                        vacio = bool(df[col].isna().all() or (df[col].astype(str).str.strip() == '').all())
-                    except Exception:
-                        vacio = True
-                if (not tiene) or vacio:
-                    try:
-                        entrada = input(f"→ No se encontró '{etiqueta}'. ¿Ingresar un valor único para el KML? (Enter=omitir): ").strip()
-                    except Exception:
-                        entrada = ""
-                    if entrada:
-                        df[col] = entrada  # crea/llena toda la columna con el mismo valor
-                        print(f"[QC] '{col}' faltaba o estaba vacío; se llenó con valor único: {entrada}")
 
 
     # === Overrides Top N (Modos 1 y 2) ===
@@ -6483,27 +6539,6 @@ def main():
             print(f"[WARN] No se pudo aplicar el filtro temporal: {__e}")
 
     # [QC] Alias / Usuario / Abonado (post-mapeo; opcional)
-    # Aparece una sola vez tras el mapeo/filtro y antes de la previsualización.
-    try:
-        alias_val = input("→ Alias global para esta ejecución (Enter=omitir): ").strip()
-    except Exception:
-        alias_val = ""
-
-    try:
-        usuario_val = input("→ Nombre de usuario/identidad (Enter=omitir): ").strip()
-    except Exception:
-        usuario_val = ""
-
-    try:
-        abonado_val = input("→ Abonado/titular de línea (Enter=omitir): ").strip()
-    except Exception:
-        abonado_val = ""
-
-    # Propagar a CONFIG si existe; salidas (HTML/KMZ) las leen de aquí como fuente única.
-    if "CONFIG" in globals() and isinstance(CONFIG, dict):
-        CONFIG["alias_val"] = alias_val
-        CONFIG["usuario_val"] = usuario_val
-        CONFIG["abonado_val"] = abonado_val
 
     # [QC] Preguntas de TOPs (antenas/contactos) — antes de la previsualización
     try:
@@ -6522,6 +6557,12 @@ def main():
     if "CONFIG" in globals() and isinstance(CONFIG, dict):
         CONFIG["top_antenas"] = top_antenas
         CONFIG["top_contactos"] = top_contactos
+
+    # Además, propagar overrides a nivel global para que las secciones HTML los lean
+    try:
+        globals()["OVERRIDE_TOPS"] = {"antenas": int(top_antenas), "contactos": int(top_contactos)}
+    except Exception:
+        pass
 
     print("[QC] Carpeta sugerida por TZ Analysis:")
     print(f"  📁 {base_auto}\n")
@@ -7015,4 +7056,16 @@ def _compactar_ruta(txt: str, maxlen: int = 64) -> str:
 
 if __name__ == "__main__":
     bootstrap_config()
-    main()
+
+    # Logging simple y visible en consola para toda la app
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s: %(message)s"
+    )
+
+    try:
+        main()
+    except Exception as e:
+        logging.error("Error no controlado: %s", e)
+        traceback.print_exc()
+        raise

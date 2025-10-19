@@ -47,6 +47,7 @@
   },
   "kml": {
     "azimuth_km": 1.5,
+    "incluir_por_rango_horario": false,
     "cone": {
       "half_degrees": 35,
       "fill_color": "7fffffff"
