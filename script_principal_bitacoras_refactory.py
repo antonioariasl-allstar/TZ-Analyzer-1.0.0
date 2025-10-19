@@ -259,16 +259,6 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
             except Exception as e:
                 print(f"[QC] Aviso: no se pudo convertir '{c}' a numérico ({e}); se deja como está.")
 
-    # Resumen final
-    print("\n[QC] === Resumen de mapeo ===")
-    for can in esenciales + no_esenciales:
-        t, v = asignadas.get(can, ("omitido", None))
-        if t == "col":
-            print(f"  {can:<12} <- columna '{v}'")
-        elif t == "fijo":
-            print(f"  {can:<12} <- valor fijo '{v}'")
-        else:
-            print(f"  {can:<12} <- omitido")
 
     # =============================================================
     # === Pregunta de identidad (alias/usuario/abonado) ===
