@@ -68,7 +68,189 @@ from simplekml import Kml
 # Módulos locales
 from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
-from kml_generador import generar_kml_puntos_libres, generar_kml_antenas
+from kml_generador import generar_kml_puntos_libres
+# --- Helpers de hora y carpetas/rangos (Preset A SV) ---
+from datetime import time as _time
+
+RANGOS_SV = {
+    "madrugada": ("madrugada_0000-0559", _time(0, 0, 0),  _time(6, 0, 0)),    # 00:00–05:59
+    "manana":    ("manana_0600-1159",    _time(6, 0, 0),  _time(12, 0, 0)),   # 06:00–11:59
+    "tarde":     ("tarde_1200-1759",     _time(12, 0, 0), _time(18, 0, 0)),   # 12:00–17:59
+    "noche":     ("noche_1800-2359",     _time(18, 0, 0), _time(23, 59, 59)), # 18:00–23:59
+}
+
+def _hhmmss_to_time_or_none(hh):
+    try:
+        h, m, s = str(hh).strip()[:8].split(":")
+        return _time(int(h), int(m), int(s))
+    except Exception:
+        return None
+
+def _en_rango(t: _time, ini: _time, fin: _time) -> bool:
+    if ini <= fin:
+        return ini <= t <= fin
+    return (t >= ini) or (t <= fin)
+
+def _clasificar_rango_sv(hhmmss: str):
+    t = _hhmmss_to_time_or_none(hhmmss)
+    if t is None:
+        return None
+    for clave, (_, ini, fin) in RANGOS_SV.items():
+        if _en_rango(t, ini, fin):
+            return clave
+    return None
+
+# =========================
+# Generación de KML (usa CONFIG)
+# =========================
+def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_float, CONFIG, azimuts_extra=None):
+    import simplekml as sk
+    try:
+        if descripcion:
+            parts = re.split(r'<br\s*/?>', str(descripcion))
+            parts = [
+                p for p in parts
+                if p and p.strip() and not any(tok in p for tok in (
+                    "> SinInf", "> Sin Inf.", "> None", "> nan", "> NaN"
+                ))
+            ]
+            def _fix_id_line(s: str) -> str:
+                if ("<b>IMEI" in s) or ("<b>Número" in s) or ("<b>Numero" in s):
+                    return re.sub(r'(\d+)\.0\b', r'\1', s)
+                return s
+            parts = [_fix_id_line(p) for p in parts]
+            descripcion = "<br>".join(parts)
+    except Exception:
+        pass
+    try:
+        az = float(azimut_float)
+    except Exception:
+        return
+    if isinstance(az, float) and math.isnan(az):
+        return
+    az = az % 360.0
+    az_int = int(round(az)) % 360
+    try:
+        _hex_to_kml_color
+    except NameError:
+        def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
+            s = (hex_rgb or "").strip().lstrip("#")
+            if len(s) == 3:
+                s = "".join(ch*2 for ch in s)
+            if len(s) != 6:
+                return "ffffffff"
+            try:
+                a = max(0, min(255, int(alpha)))
+            except Exception:
+                a = 255
+            rr, gg, bb = s[0:2], s[2:4], s[4:6]
+            return f"{a:02x}{bb}{gg}{rr}".lower()
+    global _REUSABLE_STYLES
+    if "_REUSABLE_STYLES" not in globals():
+        _REUSABLE_STYLES = None
+    if _REUSABLE_STYLES is None:
+        style_cfg = {}
+        try:
+            style_cfg = CONFIG.get("style", {}) if isinstance(CONFIG, dict) else {}
+        except Exception:
+            style_cfg = {}
+        theme_hex = style_cfg.get("theme_hex", "#ff00ff")
+        pin_scale = style_cfg.get("pin_scale", 1.1)
+        line_width = style_cfg.get("line_width", 5)
+        cone_opac = style_cfg.get("cone_opacity", 0.35)
+        pin_color  = _hex_to_kml_color(theme_hex, 255)
+        line_color = _hex_to_kml_color(theme_hex, 255)
+        cone_color = _hex_to_kml_color(theme_hex, int(max(0, min(1.0, float(cone_opac))) * 255))
+        s_pin = sk.Style()
+        s_pin.iconstyle.color = pin_color
+        s_pin.iconstyle.scale = pin_scale
+        s_pin.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/paddle/wht-blank.png"
+        s_pin.labelstyle.color = pin_color
+        s_line = sk.Style()
+        s_line.linestyle.color = line_color
+        s_line.linestyle.width = line_width
+        s_cone = sk.Style()
+        s_cone.polystyle.color = cone_color
+        s_cone.polystyle.fill = 1
+        s_cone.polystyle.outline = 1
+        _REUSABLE_STYLES = {
+            "pin": s_pin,
+            "line": s_line,
+            "cone": s_cone,
+        }
+    p = container.newpoint(name=nombre_punto, coords=[(lon, lat)])
+    if descripcion:
+        p.description = f'<div style="line-height:1.10; font-size:14px">{descripcion}</div>'
+    p.style = _REUSABLE_STYLES["pin"]
+    try:
+        az = float(azimut_float) if azimut_float is not None else float("nan")
+    except Exception:
+        az = float("nan")
+    if not (isinstance(az, float) and math.isnan(az)):
+        try:
+            az_dist_km = CONFIG.get("kml", {}).get("azimuth_km", 1.5)
+            cone_half  = CONFIG.get("kml", {}).get("cone", {}).get("half_degrees", 35)
+        except Exception:
+            az_dist_km = 1.5
+            cone_half = 35
+        latf, lonf = calcular_punto_final(lat, lon, az, float(az_dist_km))
+        linea = container.newlinestring(
+            name=f"Azimut {int(round(az))}°",
+            coords=[(lon, lat), (lonf, latf)]
+        )
+        linea.style = _REUSABLE_STYLES["line"]
+        coords_cono = []
+        paso = 5
+        for ang in range(-int(cone_half), int(cone_half) + 1, paso):
+            lat_p, lon_p = calcular_punto_final(lat, lon, az + ang, float(az_dist_km))
+            coords_cono.append((lon_p, lat_p))
+        coords_cono.append((lon, lat))
+        pol = container.newpolygon(name=f"Cono Azimut {int(round(az))}°")
+        pol.outerboundaryis = coords_cono
+        pol.style = _REUSABLE_STYLES["cone"]
+        if azimuts_extra:
+            for az_s in azimuts_extra:
+                try:
+                    az_s = float(az_s)
+                except:
+                    continue
+                latf2, lonf2 = calcular_punto_final(lat, lon, az_s, float(az_dist_km))
+                linea2 = container.newlinestring(
+                    name=f"Azimut {int(round(az_s))}° (sec.)",
+                    coords=[(lon, lat), (lonf2, latf2)]
+                )
+                linea2.style = _REUSABLE_STYLES["line"]
+                coords_cono2 = []
+                for ang in range(-int(cone_half), int(cone_half) + 1, paso):
+                    lat_p2, lon_p2 = calcular_punto_final(lat, lon, az_s + ang, float(az_dist_km))
+                    coords_cono2.append((lon_p2, lat_p2))
+                coords_cono2.append((lon, lat))
+                pol2 = container.newpolygon(name=f"Cono Azimut {int(round(az_s))}° (sec.)")
+                pol2.outerboundaryis = coords_cono2
+                pol2.style = _REUSABLE_STYLES["cone"]
+
+def _agregar_bloque(partes, fila, pares):
+    bloque = []
+    for etiqueta, col in pares:
+        val = fila.get(col, None)
+        if _tiene_valor(val):
+            if col == "interaccion":
+                val_fmt = _formatear_valor_para_burbuja(col, val)
+                extra = ""
+                telc = fila.get("tel_contacto", None)
+                if _tiene_valor(telc):
+                    extra = f" — {str(telc).strip()}"
+                bloque.append(f"<b>{etiqueta}:</b> {val_fmt}{extra}<br>")
+                continue
+            val_fmt = _formatear_valor_para_burbuja(col, val)
+            if val_fmt is None or (isinstance(val_fmt, str) and not val_fmt.strip()):
+                continue
+            bloque.append(f"<b>{etiqueta}:</b> {val_fmt}<br>")
+    if bloque:
+        partes.extend(bloque)
+        partes.append("<hr>")
+
+# ...existing code...
 #=================================================================================
 
 def bootstrap_config() -> None:
@@ -6697,7 +6879,7 @@ def main():
     ])
 
 
-    archivo_kml, desc_coords = generar_kml_antenas(df, archivo_kml, CONFIG, flat=False)
+    archivo_kml, desc_coords = generar_kml(df, archivo_kml, flat=False)
     
     # === BLOQUE HTML/SECCIONES (repuesto) ===
     try:
