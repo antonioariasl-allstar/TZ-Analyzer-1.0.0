@@ -304,9 +304,13 @@
   },
   "style": {
     "theme_hex": "#76ff03",
+    "pin_icon_url": "http://maps.google.com/mapfiles/kml/paddle/wht-blank.png",
     "pin_scale": 1.1,
+    "label_scale": 1.2,
     "line_width": 5,
+    "line_abgr": null,
     "cone_opacity": 0.35,
+    "cone_half_degrees": 35,
     "palette": [["Magenta (alto contraste)","#ff00ff"],["Cian","#00ffff"],["Amarillo","#ffff00"],["Rojo intenso","#ff1744"],["Azul fuerte","#2979ff"],["Verde intenso","#00c853"],["Naranja","#ff9100"],["Morado","#9c27b0"],["Rosa","#ff4081"],["Lima","#c6ff00"],["Aqua","#00e5ff"],["Ámbar","#ffc400"],["Azul eléctrico","#00b6ff"],["Chartreuse","#7fff00"],["Verde primavera","#00ff7f"],["Rosa fuerte","#ff69b4"],["Cielo profundo","#00bfff"],["Oro","#ffd700"],["Rojo anaranjado","#ff4500"],["Violeta","#ee82ee"],["Azul dodger","#1e90ff"],["Verde puro","#00ff00"],["Carmesí","#dc143c"],["Púrpura neón","#bf00ff"],["Rojo puro","#ff0000"],["Rojo cereza","#d50000"],["Rojo coral","#ff5252"],["Fucsia vibrante","#ff00aa"],["Rosa A400","#f50057"],["Magenta oscuro","#c51162"],["Índigo A700","#304ffe"],["Índigo A400","#3d5afe"],["Azul A700","#2962ff"],["Azul medio","#2196f3"],["Azul cielo","#42a5f5"],["Azul claro","#03a9f4"],["Azul A400","#00b0ff"],["Azul A700 brillante","#0091ea"],["Turquesa","#40e0d0"],["Cian profundo","#00b8d4"],["Cian A200","#18ffff"],["Verde azulado","#00bfa5"],["Verde A400","#00e676"],["Verde lima A700","#64dd17"],["Verde neón","#76ff03"],["Lima A700","#aeea00"],["Amarillo A400","#ffea00"],["Ámbar A700","#ffa000"],["Naranja fuerte","#ff6f00"],["Naranja oscuro","#ff8c00"],["Naranja rojizo","#ff3d00"],["Mandarina","#ffa726"],["Anaranjado suave","#ff7043"],["Diente de león","#ffb300"],["Ámbar 500","#ffc107"],["Amarillo neón","#fff600"],["Púrpura A400","#d500f9"],["Púrpura profundo","#6200ea"],["Morado A400","#651fff"],["Violeta claro","#ba68c8"]]
   },
   "entradas": {
