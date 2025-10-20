@@ -1531,21 +1531,26 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
         except Exception:
             style_cfg = {}
         theme_hex = style_cfg.get("theme_hex", "#ff00ff")
-        pin_scale = style_cfg.get("pin_scale", 1.1)
-        line_width = style_cfg.get("line_width", 5)
-        cone_opac = style_cfg.get("cone_opacity", 0.35)
+        pin_icon_url = style_cfg.get("pin_icon_url", "http://maps.google.com/mapfiles/kml/paddle/wht-blank.png")
+        pin_scale = float(style_cfg.get("pin_scale", 1.1))
+        label_scale = float(style_cfg.get("label_scale", 1.2))
+        line_width = float(style_cfg.get("line_width", 5))
+        line_abgr = style_cfg.get("line_abgr", None)
+        cone_opac = float(style_cfg.get("cone_opacity", 0.35))
 
         # Colores KML (AABBGGRR)
         pin_color  = _hex_to_kml_color(theme_hex, 255)
-        line_color = _hex_to_kml_color(theme_hex, 255)
-        cone_color = _hex_to_kml_color(theme_hex, int(max(0, min(1.0, float(cone_opac))) * 255))
+        # Si line_abgr está en config, úsalo directamente; si no, convierte theme_hex
+        line_color = line_abgr if line_abgr else _hex_to_kml_color(theme_hex, 255)
+        cone_color = _hex_to_kml_color(theme_hex, int(max(0, min(1.0, cone_opac)) * 255))
 
         # Estilo del PIN
         s_pin = sk.Style()
         s_pin.iconstyle.color = pin_color
         s_pin.iconstyle.scale = pin_scale
-        s_pin.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/paddle/wht-blank.png"
+        s_pin.iconstyle.icon.href = pin_icon_url
         s_pin.labelstyle.color = pin_color
+        s_pin.labelstyle.scale = label_scale
 
         # Estilo de la LÍNEA
         s_line = sk.Style()
@@ -1580,7 +1585,10 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
         # Distancia y ángulo del cono (defaults si CONFIG no trae)
         try:
             az_dist_km = CONFIG.get("kml", {}).get("azimuth_km", 1.5)
-            cone_half  = CONFIG.get("kml", {}).get("cone", {}).get("half_degrees", 35)
+            # Priorizar kml.cone.half_degrees, luego style.cone_half_degrees
+            cone_half  = CONFIG.get("kml", {}).get("cone", {}).get("half_degrees")
+            if cone_half is None:
+                cone_half = CONFIG.get("style", {}).get("cone_half_degrees", 35)
         except Exception:
             az_dist_km = 1.5
             cone_half = 35
