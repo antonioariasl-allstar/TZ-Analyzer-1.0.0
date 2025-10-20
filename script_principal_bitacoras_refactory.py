@@ -53,6 +53,8 @@ import re
 import shutil
 import sys
 import unicodedata
+import logging
+import traceback
 
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
@@ -61,11 +63,194 @@ import numpy as np
 
 # Terceros
 import pandas as pd  # <-- UNO solo, aquí arriba
+from simplekml import Kml
 
 # Módulos locales
 from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
-from kml_generador import generar_kml  # si lo estás usando desde aquí
+from kml_generador import generar_kml_puntos_libres
+# --- Helpers de hora y carpetas/rangos (Preset A SV) ---
+from datetime import time as _time
+
+RANGOS_SV = {
+    "madrugada": ("madrugada_0000-0559", _time(0, 0, 0),  _time(6, 0, 0)),    # 00:00–05:59
+    "manana":    ("manana_0600-1159",    _time(6, 0, 0),  _time(12, 0, 0)),   # 06:00–11:59
+    "tarde":     ("tarde_1200-1759",     _time(12, 0, 0), _time(18, 0, 0)),   # 12:00–17:59
+    "noche":     ("noche_1800-2359",     _time(18, 0, 0), _time(23, 59, 59)), # 18:00–23:59
+}
+
+def _hhmmss_to_time_or_none(hh):
+    try:
+        h, m, s = str(hh).strip()[:8].split(":")
+        return _time(int(h), int(m), int(s))
+    except Exception:
+        return None
+
+def _en_rango(t: _time, ini: _time, fin: _time) -> bool:
+    if ini <= fin:
+        return ini <= t <= fin
+    return (t >= ini) or (t <= fin)
+
+def _clasificar_rango_sv(hhmmss: str):
+    t = _hhmmss_to_time_or_none(hhmmss)
+    if t is None:
+        return None
+    for clave, (_, ini, fin) in RANGOS_SV.items():
+        if _en_rango(t, ini, fin):
+            return clave
+    return None
+
+# =========================
+# Generación de KML (usa CONFIG)
+# =========================
+def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_float, CONFIG, azimuts_extra=None):
+    import simplekml as sk
+    try:
+        if descripcion:
+            parts = re.split(r'<br\s*/?>', str(descripcion))
+            parts = [
+                p for p in parts
+                if p and p.strip() and not any(tok in p for tok in (
+                    "> SinInf", "> Sin Inf.", "> None", "> nan", "> NaN"
+                ))
+            ]
+            def _fix_id_line(s: str) -> str:
+                if ("<b>IMEI" in s) or ("<b>Número" in s) or ("<b>Numero" in s):
+                    return re.sub(r'(\d+)\.0\b', r'\1', s)
+                return s
+            parts = [_fix_id_line(p) for p in parts]
+            descripcion = "<br>".join(parts)
+    except Exception:
+        pass
+    try:
+        az = float(azimut_float)
+    except Exception:
+        return
+    if isinstance(az, float) and math.isnan(az):
+        return
+    az = az % 360.0
+    az_int = int(round(az)) % 360
+    try:
+        _hex_to_kml_color
+    except NameError:
+        def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
+            s = (hex_rgb or "").strip().lstrip("#")
+            if len(s) == 3:
+                s = "".join(ch*2 for ch in s)
+            if len(s) != 6:
+                return "ffffffff"
+            try:
+                a = max(0, min(255, int(alpha)))
+            except Exception:
+                a = 255
+            rr, gg, bb = s[0:2], s[2:4], s[4:6]
+            return f"{a:02x}{bb}{gg}{rr}".lower()
+    global _REUSABLE_STYLES
+    if "_REUSABLE_STYLES" not in globals():
+        _REUSABLE_STYLES = None
+    if _REUSABLE_STYLES is None:
+        style_cfg = {}
+        try:
+            style_cfg = CONFIG.get("style", {}) if isinstance(CONFIG, dict) else {}
+        except Exception:
+            style_cfg = {}
+        theme_hex = style_cfg.get("theme_hex", "#ff00ff")
+        pin_scale = style_cfg.get("pin_scale", 1.1)
+        line_width = style_cfg.get("line_width", 5)
+        cone_opac = style_cfg.get("cone_opacity", 0.35)
+        pin_color  = _hex_to_kml_color(theme_hex, 255)
+        line_color = _hex_to_kml_color(theme_hex, 255)
+        cone_color = _hex_to_kml_color(theme_hex, int(max(0, min(1.0, float(cone_opac))) * 255))
+        s_pin = sk.Style()
+        s_pin.iconstyle.color = pin_color
+        s_pin.iconstyle.scale = pin_scale
+        s_pin.iconstyle.icon.href = "http://maps.google.com/mapfiles/kml/paddle/wht-blank.png"
+        s_pin.labelstyle.color = pin_color
+        s_line = sk.Style()
+        s_line.linestyle.color = line_color
+        s_line.linestyle.width = line_width
+        s_cone = sk.Style()
+        s_cone.polystyle.color = cone_color
+        s_cone.polystyle.fill = 1
+        s_cone.polystyle.outline = 1
+        _REUSABLE_STYLES = {
+            "pin": s_pin,
+            "line": s_line,
+            "cone": s_cone,
+        }
+    p = container.newpoint(name=nombre_punto, coords=[(lon, lat)])
+    if descripcion:
+        p.description = f'<div style="line-height:1.10; font-size:14px">{descripcion}</div>'
+    p.style = _REUSABLE_STYLES["pin"]
+    try:
+        az = float(azimut_float) if azimut_float is not None else float("nan")
+    except Exception:
+        az = float("nan")
+    if not (isinstance(az, float) and math.isnan(az)):
+        try:
+            az_dist_km = CONFIG.get("kml", {}).get("azimuth_km", 1.5)
+            cone_half  = CONFIG.get("kml", {}).get("cone", {}).get("half_degrees", 35)
+        except Exception:
+            az_dist_km = 1.5
+            cone_half = 35
+        latf, lonf = calcular_punto_final(lat, lon, az, float(az_dist_km))
+        linea = container.newlinestring(
+            name=f"Azimut {int(round(az))}°",
+            coords=[(lon, lat), (lonf, latf)]
+        )
+        linea.style = _REUSABLE_STYLES["line"]
+        coords_cono = []
+        paso = 5
+        for ang in range(-int(cone_half), int(cone_half) + 1, paso):
+            lat_p, lon_p = calcular_punto_final(lat, lon, az + ang, float(az_dist_km))
+            coords_cono.append((lon_p, lat_p))
+        coords_cono.append((lon, lat))
+        pol = container.newpolygon(name=f"Cono Azimut {int(round(az))}°")
+        pol.outerboundaryis = coords_cono
+        pol.style = _REUSABLE_STYLES["cone"]
+        if azimuts_extra:
+            for az_s in azimuts_extra:
+                try:
+                    az_s = float(az_s)
+                except:
+                    continue
+                latf2, lonf2 = calcular_punto_final(lat, lon, az_s, float(az_dist_km))
+                linea2 = container.newlinestring(
+                    name=f"Azimut {int(round(az_s))}° (sec.)",
+                    coords=[(lon, lat), (lonf2, latf2)]
+                )
+                linea2.style = _REUSABLE_STYLES["line"]
+                coords_cono2 = []
+                for ang in range(-int(cone_half), int(cone_half) + 1, paso):
+                    lat_p2, lon_p2 = calcular_punto_final(lat, lon, az_s + ang, float(az_dist_km))
+                    coords_cono2.append((lon_p2, lat_p2))
+                coords_cono2.append((lon, lat))
+                pol2 = container.newpolygon(name=f"Cono Azimut {int(round(az_s))}° (sec.)")
+                pol2.outerboundaryis = coords_cono2
+                pol2.style = _REUSABLE_STYLES["cone"]
+
+def _agregar_bloque(partes, fila, pares):
+    bloque = []
+    for etiqueta, col in pares:
+        val = fila.get(col, None)
+        if _tiene_valor(val):
+            if col == "interaccion":
+                val_fmt = _formatear_valor_para_burbuja(col, val)
+                extra = ""
+                telc = fila.get("tel_contacto", None)
+                if _tiene_valor(telc):
+                    extra = f" — {str(telc).strip()}"
+                bloque.append(f"<b>{etiqueta}:</b> {val_fmt}{extra}<br>")
+                continue
+            val_fmt = _formatear_valor_para_burbuja(col, val)
+            if val_fmt is None or (isinstance(val_fmt, str) and not val_fmt.strip()):
+                continue
+            bloque.append(f"<b>{etiqueta}:</b> {val_fmt}<br>")
+    if bloque:
+        partes.extend(bloque)
+        partes.append("<hr>")
+
+# ...existing code...
 #=================================================================================
 
 def bootstrap_config() -> None:
@@ -122,7 +307,11 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
                 pass
             print("  [QC] Entrada inválida. Debe ser un número de la lista.")
 
-    # --- ESENCIALES (obligatorio, sin valores fijos ni omitir) ---
+    # =============================================================
+    # === Mapeo de CANÓNICOS ESENCIALES ===
+    # El usuario debe asignar columna a cada campo esencial.
+    # Se muestra el menú una sola vez y se pregunta en orden.
+    # =============================================================
     # Mostrar menú de columnas UNA sola vez
     print("\n[QC] Columnas disponibles (una sola vez):")
     print(_menu_horizontal(cols_menu, per_line=6))
@@ -168,7 +357,12 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
     # Reconocimiento mínimo de tipos numéricos (para lat/lon/azimut)
     tipar_numericos = {"lat", "long", "azimut", "duracion"}
 
-    # --- NO ESENCIALES (opcional: columna, valor fijo o omitir) ---
+    # =============================================================
+    # === Mapeo de CANÓNICOS NO ESENCIALES ===
+    # Incluye alias, usuario y abonado, junto con otros campos opcionales.
+    # El usuario puede asignar columna, valor fijo o dejarlo omitido.
+    # El menú se muestra una sola vez y se pregunta en orden.
+    # =============================================================
     print("\n[QC] === Mapeo NO ESENCIALES ===")
     print(_menu_horizontal(cols_menu, per_line=6))
     print("  Podés: elegir número, escribir 'F <valor fijo>' o Enter=omitir.")
@@ -197,19 +391,19 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
                 asignadas[can] = ("omitido", None)
         except:
             asignadas[can] = ("omitido", None)
-        # --- Resumen final de mapeo ---
-        print("\n[QC] === Resumen de mapeo ===")
-        for k,(t,v) in asignadas.items():
-            if t == "col":
-                print(f"  {k:12s} <- columna '{v}'")
-            elif t == "fijo":
-                print(f"  {k:12s} <- fijo '{v}'")
-            else:
-                print(f"  {k:12s} <- omitido")
+    # --- Resumen final de mapeo (una sola vez tras no esenciales) ---
+    print("\n[QC] === Resumen de mapeo ===")
+    for k,(t,v) in asignadas.items():
+        if t == "col":
+            print(f"  {k:12s} <- columna '{v}'")
+        elif t == "fijo":
+            print(f"  {k:12s} <- fijo '{v}'")
+        else:
+            print(f"  {k:12s} <- omitido")
 
-        if pendientes:
-            print("\n[QC] Aviso: omitiste canónicos ESENCIALES:", ", ".join(pendientes))
-            print("Podés volver a ejecutar para completar esos campos, o continuar bajo tu responsabilidad.")
+    if pendientes:
+        print("\n[QC] Aviso: omitiste canónicos ESENCIALES:", ", ".join(pendientes))
+        print("Podés volver a ejecutar para completar esos campos, o continuar bajo tu responsabilidad.")
 
 
     # --- Aplicar mapeo al DataFrame ---
@@ -247,18 +441,32 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
             except Exception as e:
                 print(f"[QC] Aviso: no se pudo convertir '{c}' a numérico ({e}); se deja como está.")
 
-    # Resumen final
-    print("\n[QC] === Resumen de mapeo ===")
-    for can in esenciales + no_esenciales:
-        t, v = asignadas.get(can, ("omitido", None))
-        if t == "col":
-            print(f"  {can:<12} <- columna '{v}'")
-        elif t == "fijo":
-            print(f"  {can:<12} <- valor fijo '{v}'")
-        else:
-            print(f"  {can:<12} <- omitido")
 
-    # Vista previa (3 filas)
+    # =============================================================
+    # === Pregunta de identidad (alias/usuario/abonado) ===
+    # Si no existen o están vacíos, ofrecer cargarlos como un valor único para toda la ejecución.
+    # Esto garantiza que siempre se puedan incorporar estos metadatos.
+    # =============================================================
+    for etiqueta in ("alias", "usuario", "abonado"):
+        falta_col = etiqueta not in df.columns
+        vacio = False
+        if not falta_col:
+            try:
+                vacio = bool(df[etiqueta].isna().all() or (df[etiqueta].astype(str).str.strip() == '').all())
+            except Exception:
+                vacio = True
+        if falta_col or vacio:
+            try:
+                entrada = input(f"→ {etiqueta.capitalize()} para toda la ejecución (Enter=omitir): ").strip()
+            except Exception:
+                entrada = ""
+            if entrada:
+                df[etiqueta] = entrada
+
+    # =============================================================
+    # === Vista previa del mapeo (primeras 3 filas) ===
+    # Permite al usuario validar visualmente el resultado antes de confirmar.
+    # =============================================================
     try:
         print("\n[QC] Vista previa (3 filas):")
         print(df.head(3)[[c for c in esenciales + no_esenciales if c in df.columns]])
@@ -416,7 +624,7 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
 
     return df, asignadas
 
-from simplekml import Kml
+from kml_generador import generar_kml_puntos_libres
 from collections import Counter
 
 # --- LOGS: helper para registrar degrade/mapas/omisiones ---
@@ -1461,15 +1669,16 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     items = []  # elementos base para recrear puntos en varias carpetas
 
     for _, row in df.iterrows():
-    # Coordenadas válidas
-            # Coordenadas válidas (numéricas y en rango)
+        # Coordenadas válidas (numéricas y en rango)
         lat_raw = row.get("lat", None); lon_raw = row.get("long", None)
         if lat_raw in ("Sin Inf.", "S/I", None, "") or lon_raw in ("Sin Inf.", "S/I", None, ""):
+            descartadas += 1
             continue
         try:
             lat = float(lat_raw)
             lon = float(lon_raw)
         except Exception:
+            descartadas += 1
             continue
 
         # Descartar (0,0) y fuera de rango
@@ -1599,15 +1808,40 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
             folders_por_fecha[fecha_str] = f_todas.newfolder(name=fecha_str)
         return folders_por_fecha[fecha_str]
 
-    f_rangos = raiz.newfolder(name="por_rango_horario")
-    rango_folders = {
-        "manana":    f_rangos.newfolder(name=RANGOS_SV["manana"][0]),
-        "tarde":     f_rangos.newfolder(name=RANGOS_SV["tarde"][0]),
-        "noche":     f_rangos.newfolder(name=RANGOS_SV["noche"][0]),
-        "madrugada": f_rangos.newfolder(name=RANGOS_SV["madrugada"][0]),
-    }
-    f_top_global = raiz.newfolder(name="top_3_las_mas_activadas")
-    f_top_por_rango = raiz.newfolder(name="top_3_por_rango")
+    # Carpeta por rango horario: controlada por config (kml.incluir_por_rango_horario)
+    incluir_rango = False
+    try:
+        incluir_rango = bool(CONFIG.get("kml", {}).get("incluir_por_rango_horario", False))
+    except Exception:
+        incluir_rango = False
+    if incluir_rango:
+        f_rangos = raiz.newfolder(name="por_rango_horario")
+        rango_folders = {
+            "manana":    f_rangos.newfolder(name=RANGOS_SV["manana"][0]),
+            "tarde":     f_rangos.newfolder(name=RANGOS_SV["tarde"][0]),
+            "noche":     f_rangos.newfolder(name=RANGOS_SV["noche"][0]),
+            "madrugada": f_rangos.newfolder(name=RANGOS_SV["madrugada"][0]),
+        }
+    else:
+        rango_folders = {}
+    # Top N dinámico (coincide con HTML): usa OVERRIDE_TOPS['antenas'] si existe,
+    # si no, cae a CONFIG['top_antenas'] o html.top_antenas_n. 0 = sin límite.
+    try:
+        if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and (OVERRIDE_TOPS.get('antenas') is not None):
+            _topN_ant = int(OVERRIDE_TOPS.get('antenas'))
+        else:
+            _topN_ant = int(CONFIG.get("top_antenas", CONFIG.get("html", {}).get("top_antenas_n", 3)))
+    except Exception:
+        _topN_ant = 3
+
+    _name_top_global = "top_las_mas_activadas" if (_topN_ant is None or _topN_ant <= 0) else f"top_{_topN_ant}_las_mas_activadas"
+    _name_top_por_rango = (
+        "top_por_rango_horario" if (_topN_ant is None or _topN_ant <= 0)
+        else f"top_{_topN_ant}_por_rango_horario"
+    )
+
+    f_top_global = raiz.newfolder(name=_name_top_global)
+    f_top_por_rango = raiz.newfolder(name=_name_top_por_rango)
     top_rango_folders = {
         "manana":    f_top_por_rango.newfolder(name=RANGOS_SV["manana"][0]),
         "tarde":     f_top_por_rango.newfolder(name=RANGOS_SV["tarde"][0]),
@@ -1633,8 +1867,10 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     ant_global = Counter(it["antena"] for it in items)
 
     items_by_rango = defaultdict(list)
+    # Mantener agrupación por rango para "top_3_por_rango" sin crear carpeta "por_rango_horario"
+    _rango_keys_validos = set(RANGOS_SV.keys())
     for it in items:
-        if it["rango"] in rango_folders:
+        if it["rango"] in _rango_keys_validos:
             items_by_rango[it["rango"]].append(it)
     pair_por_rango = {r: Counter((it["antena"], it["azimut_i"]) for it in lst) for r, lst in items_by_rango.items()}
     ant_por_rango  = {r: Counter(it["antena"] for it in lst) for r, lst in items_by_rango.items()}
@@ -1732,27 +1968,29 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
             _crear_feature_kml(container, antena, lon, lat, desc_core, az_principal, CONFIG, azimuts_extra=az_sec)
 
-    # 7) Por rango horario (deduplicado por antena+azimut ENTERO)
-    for clave, folder in rango_folders.items():
-        lst = items_by_rango.get(clave, [])
-        if lst:
-            _crear_dedup(folder, lst, pair_por_rango.get(clave, {}))
+    # 7) Por rango horario (opcional según config)
+    if incluir_rango and rango_folders:
+        for clave, folder in rango_folders.items():
+            lst = items_by_rango.get(clave, [])
+            if lst:
+                _crear_dedup(folder, lst, pair_por_rango.get(clave, {}))
 
-    # 8) Top 3 Global (por antena), deduplicando por azimut ENTERO
-    top3_global = ant_global.most_common(3)
-    for i, (ant, _) in enumerate(top3_global, start=1):
+    # 8) Top N Global (por antena), deduplicando por azimut ENTERO
+    _n_eff = None if (isinstance(_topN_ant, int) and _topN_ant <= 0) else int(_topN_ant)
+    topN_global = ant_global.most_common(_n_eff)
+    for i, (ant, _) in enumerate(topN_global, start=1):
         sub = f_top_global.newfolder(name=f"{i}_{ant}")
         lst = [it for it in items if it["antena"] == ant]
         _crear_dedup(sub, lst, pair_global)
 
-    # 9) Top 3 por rango (por antena), deduplicando por azimut ENTERO
+    # 9) Top N por rango (por antena), deduplicando por azimut ENTERO
     for clave, padre in top_rango_folders.items():
         c = ant_por_rango.get(clave, None)
         if not c:
             continue
-        top3_r = c.most_common(3)
+        topN_r = c.most_common(_n_eff)
         items_r = items_by_rango.get(clave, [])
-        for i, (ant, _) in enumerate(top3_r, start=1):
+        for i, (ant, _) in enumerate(topN_r, start=1):
             sub = padre.newfolder(name=f"{i}_{ant}")
             lst = [it for it in items_r if it["antena"] == ant]
             _crear_dedup(sub, lst, pair_por_rango.get(clave, {}))
@@ -2397,7 +2635,11 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     """
     from datetime import datetime
     
-    # --- Datos base / rutas ---
+    # =============================================================
+    # === Generación de salidas: HTML, KML, KMZ, TXT ===
+    # Aquí se construyen los archivos de salida principales.
+    # Los metadatos de alias/usuario/abonado se incluyen si existen.
+    # =============================================================
     kml_name = os.path.basename(archivo_kml)  # nombre base, p.ej. "caso.kml"
     kmz_name = os.path.splitext(kml_name)[0] + ".kmz"
 
@@ -2837,12 +3079,12 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     if c_col:
         # Top N de contactos según config
         try:
-            _topC = 10
-            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('contactos'):
+            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('contactos') is not None:
                 _topC = int(OVERRIDE_TOPS.get('contactos'))
             elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                _topC = int(CONFIG.get("html", {}).get("top_contactos_n", 10))
-
+                _topC = int(CONFIG.get("top_contactos", CONFIG.get("html", {}).get("top_contactos_n", 10)))
+            else:
+                _topC = 10
         except Exception:
             _topC = 10
         d = df.copy()
@@ -2866,8 +3108,9 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                 d.groupby("_c_norm", dropna=False)
                 .size()
                 .sort_values(ascending=False)
-                .head(int(_topC))
             )
+            if int(_topC) > 0:
+                g_cnt = g_cnt.head(int(_topC))
             total_cnt = int(len(d))
             rows = []
             for i, (k, n) in enumerate(g_cnt.items(), start=1):
@@ -2897,8 +3140,9 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                     d.groupby("_c_norm", dropna=False)["_sec"]
                     .sum()
                     .sort_values(ascending=False)
-                    .head(int(_topC))
                 )
+                if int(_topC) > 0:
+                    g_dur = g_dur.head(int(_topC))
                 def _fmt_hms(sec):
                     sec = int(round(sec))
                     h = sec // 3600; m = (sec % 3600) // 60; s = sec % 60
@@ -3499,10 +3743,10 @@ section{{margin-top:22px}}
     try:
         # Top N configurable (override -> config -> 3)
         try:
-            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
+            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas') is not None:
                 _topN = int(OVERRIDE_TOPS.get('antenas'))
             elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                _topN = int(CONFIG.get("html", {}).get("top_antenas_n", 3))
+                _topN = int(CONFIG.get("top_antenas", CONFIG.get("html", {}).get("top_antenas_n", 3)))
             else:
                 _topN = 3
         except Exception:
@@ -3554,8 +3798,9 @@ section{{margin-top:22px}}
                 top = (dfv.groupby(col_ant)
                         .size()
                         .reset_index(name="activaciones")
-                        .sort_values("activaciones", ascending=False)
-                        .head(int(_topN)))
+                        .sort_values("activaciones", ascending=False))
+                if int(_topN) > 0:
+                    top = top.head(int(_topN))
 
                 filas = []
                 for _, r0 in top.iterrows():
@@ -3788,14 +4033,16 @@ section{{margin-top:22px}}
                             if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
                                 _topN = int(OVERRIDE_TOPS.get('antenas'))
                             elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                                _topN = int(CONFIG.get("html", {}).get("top_antenas_n", 3))
+                                _topN = int(CONFIG.get("top_antenas", CONFIG.get("html", {}).get("top_antenas_n", 3)))
                             else:
                                 _topN = 3
                         except Exception:
                             _topN = 3
 
                         conteo = sub_valid[col_ant].value_counts(dropna=False)
-                        top_series = conteo.head(_topN)
+                        top_series = conteo
+                        if int(_topN) > 0:
+                            top_series = conteo.head(int(_topN))
 
 
                         out.append(f'<h3 class="sub">{lab} <span class="sub">({total} activaciones)</span></h3>')
@@ -4719,6 +4966,18 @@ def _modo_manual():
     # --------- flujo interactivo ---------
     items = []
     print("\nModo MANUAL. Ingresará uno o más puntos/antenas.")
+    
+    # Preguntar tipo de registro UNA SOLA VEZ al inicio
+    print("\n¿Qué tipo de registros desea agregar?")
+    print("[1] Antenas/Celdas")
+    print("[2] Puntos libres (lugares, domicilios, escenas, etc.)")
+    tipo_modo = (input("Tipo (1/2, Enter=1): ").strip() or "1")
+    es_punto_libre = (tipo_modo == "2")
+    
+    if es_punto_libre:
+        print("\n→ Modo: Puntos libres (sin azimut, campos simplificados)")
+    else:
+        print("\n→ Modo: Antenas/Celdas (con azimut y campos completos)")
 
     while True:
         print("\nMenú:")
@@ -4756,39 +5015,64 @@ def _modo_manual():
 
         if op == "A":
             print("\n— Nuevo registro —")
-            antena = _input_str("Nombre de la antena (recomendado corto): ", True, 120)
-            detalle = _input_str("Detalle/dirección (opcional): ", False, 500)
-            lat  = _input_float("Latitud (obligatoria): ", True)
-            lon  = _input_float("Longitud (obligatoria): ", True)
-            az   = _input_int("Azimut 0–359 (opcional): ", False, 0, 359)
 
-            # Identidad (opcionales)
-            tel     = _input_str("Tel (opcional): ", False, 50)
-            imei    = _input_str("IMEI (opcional): ", False, 50)
-            alias   = _input_str("Alias (opcional): ", False, 120)
-            usuario = _input_str("Nombre del Usuario (opcional): ", False, 200)
-            abonado = _input_str("Abonado (opcional): ", False, 200)
+            if es_punto_libre:
+                # Punto libre (sin azimut ni campos de antena)
+                nombre = _input_str("Nombre/identificador del lugar: ", True, 160)
+                direccion = _input_str("Dirección del lugar (opcional): ", False, 500)
+                lat  = _input_float("Latitud (obligatoria): ", True)
+                lon  = _input_float("Longitud (obligatoria): ", True)
+                comentarios = _input_str("Comentarios (opcional): ", False, 800)
 
-            # Técnica (opcionales)
-            celda = _input_str("Celda (opcional): ", False, 50)
-            lac   = _input_str("LAC (opcional): ", False, 50)
+                # Mapear a las columnas soportadas por el generador KML
+                # Usamos 'antena' como nombre del punto; 'direccion' se muestra en su bloque
+                # y 'detalle' lo reutilizamos para comentarios.
+                items.append({
+                    "tipo": "punto",
+                    "antena": nombre,
+                    "detalle": comentarios,
+                    "direccion": direccion,
+                    "lat": lat,
+                    "long": lon,
+                    "azimut": None,  # sin orientación
+                })
+                print("✓ Punto agregado.")
+            else:
+                # Antena/Celda
+                antena = _input_str("Nombre de la antena (recomendado corto): ", True, 120)
+                detalle = _input_str("Detalle/dirección (opcional): ", False, 500)
+                lat  = _input_float("Latitud (obligatoria): ", True)
+                lon  = _input_float("Longitud (obligatoria): ", True)
+                az   = _input_int("Azimut 0–359 (opcional): ", False, 0, 359)
 
-            # Interacción (opcionales)
-            interaccion  = _input_str("Interacción (opcional): ", False, 80)
-            tel_contacto = _input_str("Tel contacto (opcional): ", False, 50)
-            duracion     = _input_int("Duración en segundos (opcional): ", False, 0)
+                # Identidad (opcionales)
+                tel     = _input_str("Tel (opcional): ", False, 50)
+                imei    = _input_str("IMEI (opcional): ", False, 50)
+                alias   = _input_str("Alias (opcional): ", False, 120)
+                usuario = _input_str("Nombre del Usuario (opcional): ", False, 200)
+                abonado = _input_str("Abonado (opcional): ", False, 200)
 
-            items.append({
-                "antena": antena, "detalle": detalle,
-                "lat": lat, "long": lon, "azimut": az,
-                "tel": tel, "imei": imei, "alias": alias,
-                "usuario": usuario, "abonado": abonado,
-                "celda": celda, "lac": lac,
-                "interaccion": interaccion,
-                "tel_contacto": tel_contacto,
-                "duracion": duracion
-            })
-            print("✓ Registro agregado.")
+                # Técnica (opcionales)
+                celda = _input_str("Celda (opcional): ", False, 50)
+                lac   = _input_str("LAC (opcional): ", False, 50)
+
+                # Interacción (opcionales)
+                interaccion  = _input_str("Interacción (opcional): ", False, 80)
+                tel_contacto = _input_str("Tel contacto (opcional): ", False, 50)
+                duracion     = _input_int("Duración en segundos (opcional): ", False, 0)
+
+                items.append({
+                    "tipo": "antena",
+                    "antena": antena, "detalle": detalle,
+                    "lat": lat, "long": lon, "azimut": az,
+                    "tel": tel, "imei": imei, "alias": alias,
+                    "usuario": usuario, "abonado": abonado,
+                    "celda": celda, "lac": lac,
+                    "interaccion": interaccion,
+                    "tel_contacto": tel_contacto,
+                    "duracion": duracion
+                })
+                print("✓ Registro agregado.")
             continue
 
         if op == "G":
@@ -4800,7 +5084,6 @@ def _modo_manual():
             # [MOVIDO] La selección de carpeta se hará al final del flujo.
             base_auto = _nombre_auto_desde_items(items)
             nombre_sugerido = _input_str(
-
                 f"Nombre base del archivo (Enter = {base_auto}): ", False, 120
             ) or base_auto
             # (No crear carpeta aquí)
@@ -4826,8 +5109,17 @@ def _modo_manual():
 
             # DF y KML
             df = _armar_df(items)
-
             # --- RUTAS FINALES KML/KMZ (modo manual) ---
+            if es_punto_libre:
+                archivo_kml = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kml")
+                archivo_kml, desc_coords = generar_kml_puntos_libres(df, archivo_kml, CONFIG)
+                print(f"KML generado en: {archivo_kml}")
+                kmz_path = os.path.splitext(archivo_kml)[0] + ".kmz"
+                if os.path.exists(kmz_path):
+                    print(f"KMZ generado en: {kmz_path}")
+                print(f"Filas descartadas por coordenadas inválidas: {desc_coords}")
+                print(f"Reporte de errores generado en: {archivo_errores}")
+                return
             # Requiere que ya existan: carpeta_salida y nombre_salida
             if CONFIG.get("salida", {}).get("separar_kml_kmz", False):
                 carpeta_kml = os.path.join(carpeta_salida, "kml")
@@ -4839,7 +5131,7 @@ def _modo_manual():
                 archivo_kmz = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
 
             # Generar el KML/KMZ en modo plano (sin subcarpetas del KML)
-            archivo_kml, desc_coords = generar_kml(df, archivo_kml, flat=True)
+            archivo_kml, desc_coords = generar_kml_antenas(df, archivo_kml, CONFIG, flat=True)
             print(f"KML generado en: {archivo_kml}")
 
 
@@ -6172,23 +6464,6 @@ def main():
             df["long"] = pd.to_numeric(df["long"], errors="coerce")
 
         # Post–mapeo: si faltan alias/usuario/abonado, ofrecer cargarlos como valor único (solo en QC manual)
-        if MANUAL_QC_MAPPING:
-            for etiqueta, col in (("alias","alias"), ("usuario","usuario"), ("abonado","abonado")):
-                tiene = col in df.columns
-                vacio = True
-                if tiene:
-                    try:
-                        vacio = bool(df[col].isna().all() or (df[col].astype(str).str.strip() == '').all())
-                    except Exception:
-                        vacio = True
-                if (not tiene) or vacio:
-                    try:
-                        entrada = input(f"→ No se encontró '{etiqueta}'. ¿Ingresar un valor único para el KML? (Enter=omitir): ").strip()
-                    except Exception:
-                        entrada = ""
-                    if entrada:
-                        df[col] = entrada  # crea/llena toda la columna con el mismo valor
-                        print(f"[QC] '{col}' faltaba o estaba vacío; se llenó con valor único: {entrada}")
 
 
     # === Overrides Top N (Modos 1 y 2) ===
@@ -6436,27 +6711,6 @@ def main():
             print(f"[WARN] No se pudo aplicar el filtro temporal: {__e}")
 
     # [QC] Alias / Usuario / Abonado (post-mapeo; opcional)
-    # Aparece una sola vez tras el mapeo/filtro y antes de la previsualización.
-    try:
-        alias_val = input("→ Alias global para esta ejecución (Enter=omitir): ").strip()
-    except Exception:
-        alias_val = ""
-
-    try:
-        usuario_val = input("→ Nombre de usuario/identidad (Enter=omitir): ").strip()
-    except Exception:
-        usuario_val = ""
-
-    try:
-        abonado_val = input("→ Abonado/titular de línea (Enter=omitir): ").strip()
-    except Exception:
-        abonado_val = ""
-
-    # Propagar a CONFIG si existe; salidas (HTML/KMZ) las leen de aquí como fuente única.
-    if "CONFIG" in globals() and isinstance(CONFIG, dict):
-        CONFIG["alias_val"] = alias_val
-        CONFIG["usuario_val"] = usuario_val
-        CONFIG["abonado_val"] = abonado_val
 
     # [QC] Preguntas de TOPs (antenas/contactos) — antes de la previsualización
     try:
@@ -6475,6 +6729,12 @@ def main():
     if "CONFIG" in globals() and isinstance(CONFIG, dict):
         CONFIG["top_antenas"] = top_antenas
         CONFIG["top_contactos"] = top_contactos
+
+    # Además, propagar overrides a nivel global para que las secciones HTML los lean
+    try:
+        globals()["OVERRIDE_TOPS"] = {"antenas": int(top_antenas), "contactos": int(top_contactos)}
+    except Exception:
+        pass
 
     print("[QC] Carpeta sugerida por TZ Analysis:")
     print(f"  📁 {base_auto}\n")
@@ -6619,7 +6879,7 @@ def main():
     ])
 
 
-    archivo_kml, desc_coords = generar_kml(df, archivo_kml)
+    archivo_kml, desc_coords = generar_kml(df, archivo_kml, flat=False)
     
     # === BLOQUE HTML/SECCIONES (repuesto) ===
     try:
@@ -6968,4 +7228,16 @@ def _compactar_ruta(txt: str, maxlen: int = 64) -> str:
 
 if __name__ == "__main__":
     bootstrap_config()
-    main()
+
+    # Logging simple y visible en consola para toda la app
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s: %(message)s"
+    )
+
+    try:
+        main()
+    except Exception as e:
+        logging.error("Error no controlado: %s", e)
+        traceback.print_exc()
+        raise
