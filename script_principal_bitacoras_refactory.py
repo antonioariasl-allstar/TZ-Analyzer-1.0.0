@@ -72,6 +72,8 @@ from kml_generador import generar_kml_puntos_libres
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
+# Definición de rangos horarios para clasificación "SV" (usado en carpetas de KML)
+# Formato: clave -> (nombre_carpeta, hora_inicio, hora_fin)
 RANGOS_SV = {
     "madrugada": ("madrugada_0000-0559", _time(0, 0, 0),  _time(6, 0, 0)),    # 00:00–05:59
     "manana":    ("manana_0600-1159",    _time(6, 0, 0),  _time(12, 0, 0)),   # 06:00–11:59
@@ -80,6 +82,15 @@ RANGOS_SV = {
 }
 
 def _hhmmss_to_time_or_none(hh):
+    """
+    Convierte una cadena en formato HH:MM:SS a objeto datetime.time.
+    
+    Args:
+        hh: Cadena con formato HH:MM:SS (se toman máx. 8 caracteres)
+    
+    Returns:
+        datetime.time si la conversión es exitosa, None en caso de error
+    """
     try:
         h, m, s = str(hh).strip()[:8].split(":")
         return _time(int(h), int(m), int(s))
@@ -87,11 +98,33 @@ def _hhmmss_to_time_or_none(hh):
         return None
 
 def _en_rango(t: _time, ini: _time, fin: _time) -> bool:
+    """
+    Verifica si un tiempo t está dentro del rango [ini, fin].
+    Soporta rangos que cruzan medianoche (ej: 22:00 a 02:00).
+    
+    Args:
+        t: Tiempo a verificar
+        ini: Tiempo de inicio del rango
+        fin: Tiempo de fin del rango
+    
+    Returns:
+        True si t está dentro del rango, False en caso contrario
+    """
     if ini <= fin:
         return ini <= t <= fin
     return (t >= ini) or (t <= fin)
 
 def _clasificar_rango_sv(hhmmss: str):
+    """
+    Clasifica una hora HH:MM:SS en uno de los rangos SV predefinidos
+    (madrugada, manana, tarde, noche) según RANGOS_SV.
+    
+    Args:
+        hhmmss: Cadena con formato HH:MM:SS
+    
+    Returns:
+        Clave del rango ('madrugada', 'manana', 'tarde', 'noche') o None si no aplica
+    """
     t = _hhmmss_to_time_or_none(hhmmss)
     if t is None:
         return None
@@ -104,6 +137,23 @@ def _clasificar_rango_sv(hhmmss: str):
 # Generación de KML (usa CONFIG)
 # =========================
 def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_float, CONFIG, azimuts_extra=None):
+    """
+    Crea una feature KML completa: punto (pin), línea de azimut y cono de orientación.
+    Opcionalmente añade azimuts adicionales (para vista 180°).
+    
+    Args:
+        container: Contenedor KML donde agregar la feature (Folder o Document de simplekml)
+        nombre_punto: Nombre del punto/antena
+        lon: Longitud (decimal)
+        lat: Latitud (decimal)
+        descripcion: HTML para la burbuja descriptiva
+        azimut_float: Azimut principal en grados (0-360)
+        CONFIG: Diccionario de configuración con estilos y parámetros
+        azimuts_extra: Lista opcional de azimuts adicionales para vista 180°
+    
+    Returns:
+        None (modifica container in-place)
+    """
     import simplekml as sk
     try:
         if descripcion:
@@ -145,6 +195,10 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
                 a = 255
             rr, gg, bb = s[0:2], s[2:4], s[4:6]
             return f"{a:02x}{bb}{gg}{rr}".lower()
+    
+    # Cache global de estilos reutilizables para evitar crear objetos Style duplicados
+    # en cada llamada (mejora rendimiento del KML). Se inicializa una vez con los
+    # parámetros de CONFIG y se comparte entre todas las features del documento.
     global _REUSABLE_STYLES
     if "_REUSABLE_STYLES" not in globals():
         _REUSABLE_STYLES = None
@@ -229,27 +283,6 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
                 pol2.outerboundaryis = coords_cono2
                 pol2.style = _REUSABLE_STYLES["cone"]
 
-def _agregar_bloque(partes, fila, pares):
-    bloque = []
-    for etiqueta, col in pares:
-        val = fila.get(col, None)
-        if _tiene_valor(val):
-            if col == "interaccion":
-                val_fmt = _formatear_valor_para_burbuja(col, val)
-                extra = ""
-                telc = fila.get("tel_contacto", None)
-                if _tiene_valor(telc):
-                    extra = f" — {str(telc).strip()}"
-                bloque.append(f"<b>{etiqueta}:</b> {val_fmt}{extra}<br>")
-                continue
-            val_fmt = _formatear_valor_para_burbuja(col, val)
-            if val_fmt is None or (isinstance(val_fmt, str) and not val_fmt.strip()):
-                continue
-            bloque.append(f"<b>{etiqueta}:</b> {val_fmt}<br>")
-    if bloque:
-        partes.extend(bloque)
-        partes.append("<hr>")
-
 # ...existing code...
 #=================================================================================
 
@@ -289,8 +322,16 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
 
     if esenciales is None:
         esenciales = ["tel", "lat", "long", "fecha", "hora", "azimut"]
+    # Actualizar etiquetas para mapeo más claro
+    etiquetas_mapeo = {
+        "contacto": "Contacto o Destino",
+        "interaccion": "Interacción o Tipo"
+    }
     if no_esenciales is None:
-        no_esenciales = ["alias", "usuario", "abonado", "celda", "direccion", "imei", "imsi", "duracion"]
+        no_esenciales = [
+            "alias", "usuario", "abonado", "celda", "direccion", "imei", "imsi", "duracion",
+            "contacto", "interaccion"
+        ]
 
     asignadas = {}   # canónico -> (tipo, valor) ; tipo: "col"|"fijo"|"omitido"
     usadas = set()   # columnas ya tomadas (para evitar duplicados en esenciales)
@@ -318,7 +359,13 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
     print("\n[QC] === Mapeo ESENCIALES ===")
     pendientes = []
     for can in esenciales:
+        etiqueta_visible = etiquetas_mapeo.get(can, can)
         while True:
+            sel = input(f"→ Elegí columna para {etiqueta_visible} (número — '?' para ver menú / Enter=omitir): ").strip()
+            if sel == "?":
+                print(_menu_horizontal(cols_menu, per_line=6))
+                continue
+            break
             sel = input(f"→ Elegí columna para **{can}** (número — '?' para ver menú / Enter=omitir): ").strip()
             if sel == "?":
                 print(_menu_horizontal(cols_menu, per_line=6))
@@ -367,7 +414,13 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
     print(_menu_horizontal(cols_menu, per_line=6))
     print("  Podés: elegir número, escribir 'F <valor fijo>' o Enter=omitir.")
     for can in no_esenciales:
+        etiqueta_visible = etiquetas_mapeo.get(can, can)
         while True:
+            sel = input(f"→ Elegí columna para {etiqueta_visible} (n / 'F valor' / Enter=omitir — '?' para ver menú): ").strip()
+            if sel == "?":
+                print(_menu_horizontal(cols_menu, per_line=6))
+                continue
+            break
             sel = input(f"→ Elegí columna para {can} (n / 'F valor' / Enter=omitir — '?' para ver menú): ").strip()
             if sel == "?":
                 print(_menu_horizontal(cols_menu, per_line=6))
@@ -1432,6 +1485,18 @@ def _armar_descripcion_compacta(campos: dict, count_azimut=None) -> str:
     return "<br>".join(P)
 
 def _agregar_bloque(partes, fila, pares):
+    """
+    Construye un bloque HTML para la burbuja descriptiva del KML a partir de
+    una lista de pares (etiqueta, columna) y los valores de la fila.
+    
+    Args:
+        partes: Lista donde se añadirán las líneas HTML generadas
+        fila: Diccionario con los datos de la fila (row.to_dict())
+        pares: Lista de tuplas (etiqueta_display, nombre_columna) a procesar
+    
+    Returns:
+        None (modifica partes in-place)
+    """
     bloque = []
     for etiqueta, col in pares:
         val = fila.get(col, None)
@@ -1519,7 +1584,9 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
             rr, gg, bb = s[0:2], s[2:4], s[4:6]
             return f"{a:02x}{bb}{gg}{rr}".lower()
 
-    # ---------- 1) Inicializar estilos reusables 1 sola vez ----------
+    # Cache global de estilos reutilizables para evitar crear objetos Style duplicados
+    # en cada llamada (mejora rendimiento del KML). Se inicializa una vez con los
+    # parámetros de CONFIG y se comparte entre todas las features del documento.
     global _REUSABLE_STYLES
     if "_REUSABLE_STYLES" not in globals():
         _REUSABLE_STYLES = None
@@ -3355,6 +3422,82 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     except Exception:
         _topC = 10
 
+    # --- LOGO embebido: construir 'logo_html' SIEMPRE antes de interpolar el HTML ---
+    try:
+        import base64, mimetypes
+
+        def _build_logo_html() -> str:
+            """Devuelve el bloque <img> con logo embebido en base64 o un fallback SVG accesible.
+            No depende de archivos externos: usa archivo si existe; si no, genera SVG inline.
+            """
+            # Config y atributos visibles
+            _br_all = (CONFIG or {}) if 'CONFIG' in globals() else {}
+            _brand  = _br_all.get('brand', {}) or {}
+            _branding = _br_all.get('branding', {}) or {}
+
+            # Alt y ancho deseado
+            _alt = (
+                str((_branding.get('logo_alt') or '')).strip()
+                or str(((_brand.get('logo') or {}).get('alt') or '')).strip()
+                or str(_brand.get('name') or 'TZ Analyzer').strip()
+            )
+            try:
+                _w = int(((_brand.get('logo') or {}).get('width_px') or 120))
+            except Exception:
+                _w = 120
+
+            # 1) Si en config viene un base64 directo, úsalo
+            _b64_cfg = _branding.get('logo_base64') or (_brand.get('logo') or {}).get('base64')
+            if isinstance(_b64_cfg, str) and _b64_cfg.strip():
+                b64 = _b64_cfg.strip()
+                if b64.startswith('data:'):
+                    src = b64
+                else:
+                    # asumir PNG por defecto
+                    src = f"data:image/png;base64,{b64}"
+                return f'<img src="{src}" alt="{_alt}" style="height:{_w}px;max-height:{_w}px"/>'
+
+            # 2) Intentar archivo local si la ruta existe (robusto, nombres candidatos)
+            _script_dir = os.path.dirname(__file__) if '__file__' in globals() else os.getcwd()
+            _candidates = []
+            # a) paths declarados en config
+            for key_path in [(_branding.get('logo_path') or ''), (((_brand.get('logo') or {}).get('path')) or '')]:
+                p = str(key_path or '').strip()
+                if p:
+                    _candidates.append(p)
+            # b) candidatos comunes (soporta el caso "Logo TZ.png")
+            _candidates.extend([
+                'logo_tz.png', 'Logo TZ.png', 'Logo_TZ.png', 'logo.png', 'logo.svg', 'Logo.png', 'Logo.svg'
+            ])
+
+            for rel in _candidates:
+                try:
+                    p_abs = rel if os.path.isabs(rel) else os.path.join(_script_dir, rel)
+                    if os.path.exists(p_abs) and os.path.isfile(p_abs):
+                        mime, _ = mimetypes.guess_type(p_abs)
+                        mime = mime or ('image/svg+xml' if p_abs.lower().endswith('.svg') else 'image/png')
+                        with open(p_abs, 'rb') as fh:
+                            data = fh.read()
+                        b64 = base64.b64encode(data).decode('ascii')
+                        return f'<img src="data:{mime};base64,{b64}" alt="{_alt}" style="height:{_w}px;max-height:{_w}px"/>'
+                except Exception:
+                    continue
+
+            # 3) Fallback: SVG inline accesible (sin archivos)
+            _svg = (
+                f"<svg xmlns='http://www.w3.org/2000/svg' width='{_w}' height='{int(_w*0.38)}' viewBox='0 0 320 120' role='img' aria-label='{_alt}'>"
+                "<rect width='320' height='120' fill='#0B57D0' rx='12'/>"
+                "<text x='50%' y='53%' dominant-baseline='middle' text-anchor='middle' font-family='Segoe UI, Roboto, Arial, sans-serif' font-size='40' fill='white' font-weight='700'>TZ Analyzer</text>"
+                "</svg>"
+            )
+            svg_uri = "data:image/svg+xml;utf8," + _svg.replace("\n", "")
+            return f"<img src='{svg_uri}' alt='{_alt}' style='height:{_w}px;max-height:{_w}px'/>"
+
+        logo_html = _build_logo_html()
+    except Exception:
+        # ante cualquier problema, evita romper: deja un placeholder textual
+        logo_html = "<div style='font-weight:700;font-size:18px'>TZ Analyzer</div>"
+
 
     html = f"""<!DOCTYPE html>
 <html lang="es">
@@ -3432,14 +3575,12 @@ section{{margin-top:22px}}
   <header>
     <div class="brand-row" style="display:flex;align-items:center;gap:16px;padding:8px 0;justify-content:flex-start;">
   <!-- Logo a la izquierda -->
-  <img src="logo_tz.png"
-       alt="{(CONFIG.get('branding', {}) or {}).get('logo_alt', 'TZ Analysis')}"
-       style="width:{(CONFIG.get('branding', {}) or {}).get('logo_width', '120px')};display:block;">
+  {logo_html}
 
   <!-- Texto a la derecha -->
   <div style="line-height:1.25;">
     <div style="font-size:22px;font-weight:700;margin:0;">
-      TZ Analysis — {CONFIG.get('brand', {}).get('version', 'Versión 1.0.0')}
+      TZ Analyzer — {(CONFIG.get('brand', {}) or {}).get('version', 'Versión 1.0.0')}
     </div>
 
     <h1 style="font-size:20px;font-weight:700;margin:4px 0 0 0;">
@@ -4680,6 +4821,62 @@ section{{margin-top:22px}}
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html)
 
+    # --- HASHES de salida: HTML, KML y KMZ (si existen) ---
+    try:
+        import hashlib
+
+        def _file_hashes(path: str) -> tuple[str, str, int]:
+            md5 = hashlib.md5()
+            sha = hashlib.sha256()
+            size = 0
+            with open(path, 'rb') as fh:
+                while True:
+                    chunk = fh.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    md5.update(chunk)
+                    sha.update(chunk)
+            return md5.hexdigest(), sha.hexdigest(), size
+
+        archivos = []
+        # HTML recién generado
+        if os.path.exists(html_path):
+            archivos.append(("HTML", html_path))
+        # KML (ruta absoluta recibida por parámetro)
+        if archivo_kml and os.path.exists(archivo_kml):
+            archivos.append(("KML", archivo_kml))
+        # KMZ (si existe, en la ruta resuelta más arriba)
+        try:
+            if 'kmz_abs' in locals() and kmz_abs and os.path.exists(kmz_abs):
+                archivos.append(("KMZ", kmz_abs))
+        except Exception:
+            pass
+
+        if archivos:
+            txt_hash = os.path.join(carpeta_salida, f"{nombre_salida}_hashes.txt")
+            lines = []
+            lines.append(f"Hashes generados: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            for etiqueta, path in archivos:
+                try:
+                    md5, sha, size = _file_hashes(path)
+                    lines.append(f"[{etiqueta}] {os.path.basename(path)}")
+                    lines.append(f"  Ruta: {path}")
+                    lines.append(f"  Tamaño: {size} bytes")
+                    lines.append(f"  MD5: {md5}")
+                    lines.append(f"  SHA256: {sha}\n")
+                except Exception as _e:
+                    lines.append(f"[{etiqueta}] {path} — error al calcular hashes: {_e}\n")
+            with open(txt_hash, 'w', encoding='utf-8') as fh:
+                fh.write("\n".join(lines).strip() + "\n")
+            try:
+                log(f"[INFO] Hashes guardados en: {txt_hash}")
+            except Exception:
+                print(f"[INFO] Hashes guardados en: {txt_hash}")
+    except Exception:
+        # Nunca bloquear la generación por hashes
+        pass
+
 
     return html_path
 
@@ -4841,6 +5038,8 @@ def _preflight_esenciales(df: pd.DataFrame) -> list:
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
+# Definición de rangos horarios para clasificación "SV" (usado en carpetas de KML)
+# Formato: clave -> (nombre_carpeta, hora_inicio, hora_fin)
 RANGOS_SV = {
     "madrugada": ("madrugada_0000-0559", _time(0, 0, 0),  _time(6, 0, 0)),    # 00:00–05:59
     "manana":    ("manana_0600-1159",    _time(6, 0, 0),  _time(12, 0, 0)),   # 06:00–11:59
@@ -5139,7 +5338,7 @@ def _modo_manual():
                 archivo_kmz = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
 
             # Generar el KML/KMZ en modo plano (sin subcarpetas del KML)
-            archivo_kml, desc_coords = generar_kml_antenas(df, archivo_kml, CONFIG, flat=True)
+            archivo_kml, desc_coords = generar_kml(df, archivo_kml, flat=True)
             print(f"KML generado en: {archivo_kml}")
 
 
@@ -6569,7 +6768,7 @@ def main():
     print("\n[QC] Confirmar si esta bitácora es por número de Teléfono o IMEI para nombrar archivos")
     print("I = IMEI")
     print("T = Número telefónico")
-    print("Enter = Que TZ Analysis decida")
+    print("Enter = Que TZ Analyzer decida")
     tipo_bitacora = input("→ Opción (I/T/Enter): ").strip().upper() or ""
 
     # Definir modo según respuesta del usuario o detección automática
@@ -6744,7 +6943,7 @@ def main():
     except Exception:
         pass
 
-    print("[QC] Carpeta sugerida por TZ Analysis:")
+    print("[QC] Carpeta sugerida por TZ Analyzer:")
     print(f"  📁 {base_auto}\n")
 
     print("[QC] Se generarán estos archivos:")
