@@ -1,11 +1,12 @@
 {
   "brand": {
-    "name": "TZ Analysis",
+    "name": "TZ Analyzer",
+    "full_name": "TZ Analyzer – Forensic Data Processor",
     "version": "Versión 1.0.0",
     "logo": {
       "path": "logo_tz.png",
       "width_px": 120,
-      "alt": "TZ Analysis"
+      "alt": "TZ Analyzer"
     }
   },
   "branding": {
@@ -14,12 +15,12 @@
     "marca_agua_opacidad": 0.08,
     "marca_agua_en_impresion": true,
     "mostrar_pie_legal": true,
-    "pie_legal_texto": "El presente informe es de carácter confidencial y ha sido generado mediante el software TZ Analysis, exclusivamente para el equipo asignado a la investigación. Su divulgación o reproducción no autorizada a personas ajenas podría acarrear consecuencias legales.",
-    "byline_texto": "by: Omar Arias - TZ Analysis - Versión 1.0.0",
+    "pie_legal_texto": "El presente informe es de carácter confidencial y ha sido generado mediante el software TZ Analyzer – Forensic Data Processor, exclusivamente para el equipo asignado a la investigación. Su divulgación o reproducción no autorizada a personas ajenas podría acarrear consecuencias legales.",
+    "byline_texto": "by: Omar Arias - TZ Analyzer - Versión 1.0.0",
     "pie_legal_en_impresion": true,
     "logo_path": "logo_tz.png",
     "logo_width": "120px",
-    "logo_alt": "TZ Analysis"
+    "logo_alt": "TZ Analyzer"
   },
   "excel": {
     "ignore_hidden_sheets": true
