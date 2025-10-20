@@ -206,7 +206,8 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
         style_cfg = {}
         try:
             style_cfg = CONFIG.get("style", {}) if isinstance(CONFIG, dict) else {}
-        except Exception:
+        except Exception as e:
+            log(f"[WARN] _crear_feature_kml: No se pudo cargar CONFIG.style: {e}")
             style_cfg = {}
         theme_hex = style_cfg.get("theme_hex", "#ff00ff")
         pin_scale = style_cfg.get("pin_scale", 1.1)
@@ -238,13 +239,15 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
     p.style = _REUSABLE_STYLES["pin"]
     try:
         az = float(azimut_float) if azimut_float is not None else float("nan")
-    except Exception:
+    except Exception as e:
+        log(f"[WARN] _crear_feature_kml: Azimut inválido '{azimut_float}': {e}")
         az = float("nan")
     if not (isinstance(az, float) and math.isnan(az)):
         try:
             az_dist_km = CONFIG.get("kml", {}).get("azimuth_km", 1.5)
             cone_half  = CONFIG.get("kml", {}).get("cone", {}).get("half_degrees", 35)
-        except Exception:
+        except Exception as e:
+            log(f"[WARN] _crear_feature_kml: Error leyendo parámetros KML: {e}")
             az_dist_km = 1.5
             cone_half = 35
         latf, lonf = calcular_punto_final(lat, lon, az, float(az_dist_km))
@@ -300,7 +303,7 @@ def bootstrap_config() -> None:
 """)
     # Configuración y mapa de sinónimos (antes estaban al nivel superior)
     global CONFIG, RENAME_MAP
-    CONFIG = cargar_config()
+    CONFIG = get_config()  # Usa la función centralizada
     RENAME_MAP = cfg_build_rename_map(CONFIG)
 
 # === SECCIÓN: WIZARD DE MAPEO DE COLUMNAS (detección, mapeo manual, QC) ===
@@ -1053,8 +1056,16 @@ def cfg_add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, rut
     return CONFIG
 # === SINONIMOS: MERGE + PERSISTENCIA (fin) =================================
 
-CONFIG = cargar_config()
+# CONFIG inicializado al nivel de módulo (se carga una sola vez)
+CONFIG = None
 OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejecución)
+
+def get_config():
+    """Lazy-load de CONFIG - retorna CONFIG global, inicializándolo si es necesario."""
+    global CONFIG
+    if CONFIG is None:
+        CONFIG = cargar_config()
+    return CONFIG
 
 def _solicitar_color_tema(CONFIG):
     """
@@ -1233,11 +1244,11 @@ def analizar_antenas(df: pd.DataFrame, archivo_salida: str):
 
 
     resumen.append("Activaciones por rango horario:\n")
+    # Optimización: una sola copia en lugar de dos (líneas 1248 y 1251 duplicadas)
+    df_hora = df.copy()
     if "hora" in df.columns:
-        df_hora = df.copy()
         df_hora["hora"] = df_hora["hora"].astype(str).str[:8]
     else:
-        df_hora = df.copy()
         df_hora["hora"] = "Sin Inf."
 
     for rango, (inicio, fin) in rangos_horarios.items():
@@ -1712,6 +1723,14 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
 # === SECCIÓN: GENERACIÓN KML/KMZ (placemarks, carpetas, top_n, estilos) ===
 def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
     """Genera KML/KMZ a partir del DataFrame procesado según la configuración activa."""
+    # Validación defensiva de entrada
+    if df is None:
+        log("[ERROR] generar_kml: DataFrame es None, abortando")
+        return "", 0
+    if df.empty:
+        log("[WARN] generar_kml: DataFrame vacío, generando KML sin puntos")
+        # Continuar para crear archivo vacío válido
+    
     from collections import Counter, defaultdict  # import local para no tocar la cabecera
     kml = Kml()
     descartadas = 0
@@ -2708,6 +2727,14 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     Genera un informe HTML sencillo (portada + KPIs + enlaces) en la misma carpeta del KML.
     Retorna la ruta del HTML generado.
     """
+    # Validación defensiva de entrada
+    if df is None:
+        log("[ERROR] generar_informe_html: DataFrame es None, abortando")
+        return ""
+    if df.empty:
+        log("[WARN] generar_informe_html: DataFrame vacío, generando reporte mínimo")
+        # Continuar para crear archivo con mensaje de ausencia de datos
+    
     from datetime import datetime
     
     # =============================================================
@@ -2824,8 +2851,8 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
             s_l = s_l[s_l != ""]
             cel_label = "LAC únicas"
             cel_uniq = int(s_l.nunique()) if not s_l.empty else 0
-    except Exception:
-        pass
+    except Exception as e:
+        log(f"[WARN] generar_informe_html: Error calculando celdas únicas: {e}")
 
     # rango de fechas/horas (visual dd/mm/aaaa HH:MM — dd/mm/aaaa HH:MM)
     rango_str = "Sin datos"
@@ -2851,7 +2878,8 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                     rango_str = f"{_fmt_dt(fmin)} — {_fmt_dt(fmax)}"
                 else:
                     rango_str = "Sin datos"
-        except Exception:
+        except Exception as e:
+            log(f"[WARN] generar_informe_html: Error procesando rango de fechas: {e}")
             dt = None
 
         if dt is not None and not dt.empty:
@@ -4174,8 +4202,8 @@ section{{margin-top:22px}}
                         ant_str = tmp[col_ant].astype(str).str.strip()
                         valid_ant = (ant_str != "") & (ant_str != "0") & (~ant_str.str.match(r"(?i)(sin\s*inf\.?|s/i)$"))
 
-                        # dataframe ya depurado
-                        sub_valid = tmp[valid_geo & valid_ant].copy()
+                        # dataframe ya depurado (sin .copy() innecesario - solo lectura después)
+                        sub_valid = tmp[valid_geo & valid_ant]
 
                         # --- Top N (respeta override/config) ---
                         try:
