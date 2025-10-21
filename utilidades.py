@@ -47,14 +47,13 @@ def _get_initialdir() -> str:
 
 def seleccionar_archivo(titulo: str = "Seleccionar bitácora Excel") -> Optional[str]:
     """
-    Abre un diálogo para elegir archivo Excel.
-    - Título claro (+extensiones).
-    - Abre en la última carpeta usada (o cwd si es la primera vez).
-    Fallback: si Tkinter no está disponible o falla el diálogo (TclError),
-              pide la ruta por consola.
-    Retorna:
-        str  -> ruta del archivo elegido
-        None -> si se cancela o la ruta es inválida
+    Abre un diálogo gráfico (Tkinter) para seleccionar un archivo Excel (.xlsx/.xls).
+    Si Tkinter no está disponible o falla, solicita la ruta por consola.
+
+    Args:
+        titulo (str): Título del diálogo.
+    Returns:
+        Optional[str]: Ruta del archivo seleccionado o None si se cancela/ingresa inválido.
     """
     # Intento de GUI
     try:
@@ -103,14 +102,13 @@ def seleccionar_archivo(titulo: str = "Seleccionar bitácora Excel") -> Optional
 
 def seleccionar_carpeta(titulo: str = "Seleccionar carpeta destino") -> Optional[str]:
     """
-    Abre un diálogo para elegir carpeta destino.
-    - Título claro.
-    - Abre en la última carpeta usada (o cwd si es la primera vez).
-    Fallback: si Tkinter no está disponible o falla el diálogo (TclError),
-              pide la ruta por consola.
-    Retorna:
-        str  -> ruta de la carpeta elegida
-        None -> si se cancela o la ruta es inválida
+    Abre un diálogo gráfico (Tkinter) para seleccionar una carpeta destino.
+    Si Tkinter no está disponible o falla, solicita la ruta por consola.
+
+    Args:
+        titulo (str): Título del diálogo.
+    Returns:
+        Optional[str]: Ruta de la carpeta seleccionada o None si se cancela/ingresa inválida.
     """
     # Intento de GUI
     try:

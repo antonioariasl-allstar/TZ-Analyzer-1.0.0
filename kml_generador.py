@@ -11,7 +11,15 @@ def hex_to_abgr(hex_color):
 # === Generador de puntos libres ===
 def generar_kml_puntos_libres(df, archivo_salida_kml, config):
     """
-    Genera un KMZ con puntos libres usando el ícono blanco y el color de etiqueta.
+    Genera un archivo KMZ con puntos libres (antenas) usando ícono blanco y color de etiqueta.
+    Filtra coordenadas inválidas y aplica estilos según config.
+
+    Args:
+        df (pd.DataFrame): DataFrame con los puntos a graficar.
+        archivo_salida_kml (str): Ruta de salida para el archivo KML/KMZ.
+        config (dict): Diccionario de configuración global.
+    Returns:
+        None. El archivo KMZ se guarda en disco.
     """
     kml = Kml()
     descartadas = 0
