@@ -1,42 +1,55 @@
-# ======== TZ Analysis - .gitignore ========
-# Ignorar entornos virtuales
+# ======== TZ Analysis — .gitignore ========
+
+# Entornos virtuales
 .venv/
-env/
+.venv*/
 venv/
+venv*/
+env/
+env*/
 
-# Ignorar cachés y temporales
+# Caches y artefactos Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 *.pyd
-*.log
+*.egg-info/
+dist/
+build/
+*.spec
 
-# Ignorar archivos temporales de usuario / sistema
-.DS_Store
-Thumbs.db
-*.tmp
+# Herramientas / pruebas
+.pytest_cache/
+.mypy_cache/
+.coverage
+.tox/
+.nox/
 
-# Ignorar archivos de salida del programa
-*.html
-*.htm
-*.kml
-*.kmz
-*.xlsx
-*.csv
-*.txt
-*.pdf
-*.docx
+# Notebooks y cachés
+.ipynb_checkpoints/
+.cache/
 
-# Ignorar resultados o reportes generados
-/reports/
-/output/
-/export/
-/results/
-
-# Ignorar configuraciones locales de IDE
+# IDEs / editor
 .vscode/
 .idea/
 
-# Ignorar backups o duplicados manuales
+# SO
+.DS_Store
+Thumbs.db
+
+# Salidas del programa (ajusta a tus rutas reales)
+# Evita ignorar extensiones globales; ignora carpetas de salida.
+reportes/
+reports/
+output/
+outputs/
+export/
+exports/
+results/
+renders/
+tmp/
+temp/
+logs/
+
+# Backups o duplicados manuales
 *_copia*
 *_backup*

@@ -59,12 +59,22 @@ TZ-Analyzer/
 ## 🚀 Guía rápida de uso
 
 ### Requisitos
-- **Python 3.10+** (recomendado 3.13.0)
-- **Dependencias**: `pandas`, `simplekml`, `openpyxl`
+- **Python 3.12.8** (versión oficial del proyecto)
+- **Dependencias**: Ver `requirements.txt`
 
 ### Instalación
 ```bash
-pip install pandas simplekml openpyxl
+# Crear entorno virtual (recomendado)
+python -m venv .venv312
+
+# Activar entorno virtual
+# Windows:
+.venv312\Scripts\activate
+# Linux/Mac:
+source .venv312/bin/activate
+
+# Instalar dependencias
+pip install -r requirements.txt
 ```
 
 ### Ejecución
