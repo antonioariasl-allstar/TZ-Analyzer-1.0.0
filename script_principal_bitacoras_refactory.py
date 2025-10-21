@@ -322,7 +322,7 @@ def bootstrap_config() -> None:
     # Banner (antes estaba al nivel superior)
     print(r"""
 ┌───────────────────────────────────────────────┐
-│                 T  Z   A N A L Y S I S       │
+│                 T  Z   A N A L Y Z E R       │
 │        Bitácoras → KML/KMZ + Informe HTML     │
 └───────────────────────────────────────────────┘
 """)
