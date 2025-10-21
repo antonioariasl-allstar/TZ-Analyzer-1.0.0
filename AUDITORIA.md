@@ -1,9 +1,9 @@
 # Auditoría de Código y Mejoras de Seguridad
-## TZ-Analysis 1.0.0 - Branch: copilot/pase-3
+## TZ-Analysis 1.0.0 - Branch: packaging/prep
 
-**Fecha**: 19 de octubre de 2025  
+**Fecha**: 21 de octubre de 2025  
 **Auditor**: GitHub Copilot  
-**Archivo principal**: `script_principal_bitacoras_refactory.py` (7,479 líneas)
+**Archivo principal**: `script_principal_bitacoras_refactory.py` (7,755 líneas)
 
 ---
 
@@ -11,10 +11,11 @@
 
 Se realizó una auditoría completa del código para identificar puntos de quiebre potenciales y riesgos de estabilidad en producción. Se encontraron **40+ excepciones silenciosas**, **doble inicialización de CONFIG**, **fugas de memoria por copias excesivas**. El análisis de optimización HTML reveló que **el código ya implementa las mejores prácticas**.
 
-### Mejoras Implementadas (Fases 1-3 - Todas Completadas)
+### Mejoras Implementadas (Fases 1-4 - Todas Completadas)
 - ✅ **Fase 1**: Validación de entrada + Logging crítico + Consolidación de CONFIG
 - ✅ **Fase 2**: Optimización de memoria (eliminación de `.copy()` innecesarios)
 - ✅ **Fase 3**: Auditoría de rendimiento HTML - **Código ya optimizado**
+- ✅ **Fase 4**: Supresión contextual de "Dirección" + Configurabilidad + Auditoría automatizada
 
 ---
 
@@ -352,16 +353,104 @@ df_modificado['nueva_col'] = valor  # Necesita copia para no mutar original
 
 ---
 
+## � Fase 4: Supresión Contextual de "Dirección" y Configurabilidad (21 Oct 2025)
+
+### Problema Identificado
+Cuando el usuario mapea la misma columna para "antena" y "direccion", la información se duplica en las burbujas KML, mostrando contenido redundante.
+
+### Solución Implementada
+
+#### 1. **Supresión contextual de "Dirección"**
+Se implementó lógica de supresión inteligente que oculta la línea de "Dirección" solo cuando es idéntica a "Antena" (normalizada sin tildes/espacios/mayúsculas):
+
+**Ubicaciones afectadas**:
+- `_armar_descripcion_compacta()` (línea ~1429): Acepta parámetro `suprimir_direccion_si_igual`
+- **todas_las_antenas** (línea ~2084): `suprimir_direccion_si_igual=True`
+- **Top folders** (línea ~2227-2311): `suprimir_direccion_si_igual=False` (siempre muestra)
+- **Modo plano** (línea ~1990): `suprimir_direccion_si_igual=False` (siempre muestra)
+
+**Código de normalización** (líneas 1530-1548):
+```python
+def _norm_text(s):
+    if s is None:
+        return ""
+    try:
+        s = str(s)
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+        s = re.sub(r"\s+", " ", s).strip().lower()
+        return s
+    except Exception:
+        return str(s).strip().lower()
+
+if direccion is not None:
+    mostrar_dir = True
+    if suprimir_direccion_si_igual:
+        if _norm_text(direccion) and _norm_text(ant_line) and _norm_text(direccion) == _norm_text(ant_line):
+            mostrar_dir = False
+    if mostrar_dir:
+        P.append(f"<b>{_label_dir}:</b> {direccion}")
+```
+
+#### 2. **Etiqueta configurable para "Dirección"**
+Expuesta en `config.json` bajo `kml.labels.direccion`:
+
+```json
+{
+  "kml": {
+    "labels": {
+      "direccion": "Direccion"
+    }
+  }
+}
+```
+
+#### 3. **Auditoría automatizada**
+Creado script `tests/audit_kml_checks.py` que valida:
+- ✅ **Caso 1**: Dirección igual a antena → se oculta correctamente
+- ✅ **Caso 2**: Dirección distinta → se muestra correctamente
+- ✅ **Caso 3**: Compactación por coma funciona
+- ✅ **Caso 4**: Límite de palabras/caracteres respeta umbral de 40 caracteres
+
+#### 4. **Corrección de bug crítico de sangría**
+**Problema**: Error de indentación (líneas 2085-2086) causaba que solo se procesara el último item en "todas_las_antenas", dejando carpetas vacías.
+
+**Solución**:
+```python
+# ANTES (líneas desindentadas - fuera del bucle)
+for it in items:
+    n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
+desc_comp = _armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=True)  # ❌
+_crear_feature_kml(obtener_carpeta_fecha(it["fecha"]), it["antena"], it["lon"], it["lat"], desc_comp, it["azimut_f"], CONFIG)  # ❌
+
+# DESPUÉS (líneas correctamente indentadas - dentro del bucle)
+for it in items:
+    n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
+    desc_comp = _armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=True)  # ✅
+    _crear_feature_kml(obtener_carpeta_fecha(it["fecha"]), it["antena"], it["lon"], it["lat"], desc_comp, it["azimut_f"], CONFIG)  # ✅
+```
+
+### Beneficios
+- ✅ Elimina duplicación de información redundante en "todas_las_antenas"
+- ✅ Mantiene visibilidad completa en carpetas "top" y modo plano
+- ✅ Configuración centralizada y documentada
+- ✅ Validación automática mediante suite de pruebas
+- ✅ Sin romper flujos existentes
+
+---
+
 ## 🎯 Conclusión
 
-Las mejoras implementadas en las **Fases 1, 2 y 3** incrementan significativamente la **estabilidad**, **debuggability** y **eficiencia de memoria** del sistema. El código ahora es más resiliente a errores de entrada y más fácil de mantener.
+Las mejoras implementadas en las **Fases 1-4** incrementan significativamente la **estabilidad**, **debuggability**, **eficiencia de memoria** y **experiencia de usuario** del sistema. El código ahora es más resiliente a errores de entrada, más fácil de mantener y ofrece comportamiento contextual inteligente.
 
-**Hallazgo importante**: La auditoría de Fase 3 reveló que el código **ya implementa las mejores prácticas de optimización HTML**, sin necesidad de cambios adicionales.
+**Hallazgos importantes**: 
+- Fase 3: El código **ya implementa las mejores prácticas de optimización HTML**
+- Fase 4: Lógica de supresión contextual previene duplicación sin comprometer visibilidad en contextos críticos
 
-**Estado del proyecto**: ✅ **Todas las fases de auditoría completadas**
+**Estado del proyecto**: ✅ **Todas las fases de auditoría completadas (1-4)**
 
 ---
 
 **Mantenido por**: GitHub Copilot  
-**Última actualización**: 19 de octubre de 2025  
-**Versión del documento**: 1.1
+**Última actualización**: 21 de octubre de 2025  
+**Versión del documento**: 1.2

@@ -1,6 +1,9 @@
 # ======================================================================
 #                 T Z   A N A L Y S I S  —  MAPA DE SECCIONES
 # ======================================================================
+# Este archivo implementa el motor principal del procesador forense TZ Analyzer.
+# Incluye orquestación, normalización, generación de productos y utilidades clave.
+#
 # SECCIÓN 0 · IMPORTS & CONFIG
 #     - Imports estándar y de terceros
 #     - Carga/uso de CONFIG (sin lógica)
@@ -137,6 +140,42 @@ def _clasificar_rango_sv(hhmmss: str):
 # Generación de KML (usa CONFIG)
 # =========================
 def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_float, CONFIG, azimuts_extra=None):
+    # Inicializar nombre_compacto antes de cualquier uso
+    def compactar_nombre_antena_kml(nombre: str) -> str:
+        """
+        Compacta el nombre de antena para el campo 'name' en KML/KMZ.
+        Reglas configurables via CONFIG.kml.name_compaction:
+        - prefer_before_comma: número de secciones a tomar antes de la coma (ej. 2). Si 0/None, ignora.
+        - max_words: si no hay comas o prefer_before_comma no aplica, toma primeras N palabras significativas.
+        - max_chars: tope de caracteres; si excede, recorta y agrega '...'.
+        - stopwords: lista de palabras a omitir.
+        """
+        try:
+            nc = (CONFIG or {}).get("kml", {}).get("name_compaction", {})
+        except Exception:
+            nc = {}
+        prefer_before = int(nc.get("prefer_before_comma", 2) or 0)
+        max_words = int(nc.get("max_words", 5) or 5)
+        max_chars = int(nc.get("max_chars", 40) or 40)
+        stopwords = set(str(w).lower() for w in nc.get("stopwords", ["el","la","los","las","de","del","y","en","a","al","por","para","con","un","una"]))
+        nombre = str(nombre or "").strip()
+        if not nombre:
+            return "SIN NOMBRE"
+        if "," in nombre and prefer_before > 0:
+            secciones = [s.strip() for s in nombre.split(",")]
+            if len(secciones) >= prefer_before:
+                parte = ", ".join(secciones[:prefer_before])
+            else:
+                parte = ", ".join(secciones)
+        else:
+            palabras = [w for w in re.split(r'\s+', nombre) if w and w.lower() not in stopwords]
+            parte = " ".join(palabras[:max_words])
+        if not parte:
+            parte = "SIN NOMBRE"
+        if len(parte) > max_chars:
+            return parte[: max(0, max_chars-3) ] + "..."
+        return parte
+    nombre_compacto = compactar_nombre_antena_kml(nombre_punto)
     """
     Crea una feature KML completa: punto (pin), línea de azimut y cono de orientación.
     Opcionalmente añade azimuts adicionales (para vista 180°).
@@ -180,22 +219,7 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
         return
     az = az % 360.0
     az_int = int(round(az)) % 360
-    try:
-        _hex_to_kml_color
-    except NameError:
-        def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
-            s = (hex_rgb or "").strip().lstrip("#")
-            if len(s) == 3:
-                s = "".join(ch*2 for ch in s)
-            if len(s) != 6:
-                return "ffffffff"
-            try:
-                a = max(0, min(255, int(alpha)))
-            except Exception:
-                a = 255
-            rr, gg, bb = s[0:2], s[2:4], s[4:6]
-            return f"{a:02x}{bb}{gg}{rr}".lower()
-    
+
     # Cache global de estilos reutilizables para evitar crear objetos Style duplicados
     # en cada llamada (mejora rendimiento del KML). Se inicializa una vez con los
     # parámetros de CONFIG y se comparte entre todas las features del documento.
@@ -233,7 +257,8 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
             "line": s_line,
             "cone": s_cone,
         }
-    p = container.newpoint(name=nombre_punto, coords=[(lon, lat)])
+    # Usar nombre compacto para el campo 'name' del punto KML
+    p = container.newpoint(name=nombre_compacto, coords=[(lon, lat)])
     if descripcion:
         p.description = f'<div style="line-height:1.10; font-size:14px">{descripcion}</div>'
     p.style = _REUSABLE_STYLES["pin"]
@@ -327,8 +352,9 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
         esenciales = ["tel", "lat", "long", "fecha", "hora", "azimut"]
     # Actualizar etiquetas para mapeo más claro
     etiquetas_mapeo = {
-        "contacto": "Contacto o Destino",
-        "interaccion": "Interacción o Tipo"
+    "tel": "Tel u Origen",
+    "contacto": "Contacto o Destino",
+    "interaccion": "Interacción o Tipo"
     }
     if no_esenciales is None:
         no_esenciales = [
@@ -952,8 +978,19 @@ DEFAULT_CONFIG = {
 
 # === SECCIÓN: CONFIGURACIÓN Y SINÓNIMOS (carga CONFIG, construye RENAME_MAP) ===
 def cargar_config():
-    """Carga config.json; si no existe o falla, usa DEFAULT_CONFIG y garantiza claves mínimas."""
-    base = os.path.dirname(os.path.abspath(__file__))
+    """
+    Carga la configuración global desde config.json.
+    Si el archivo no existe o falla, retorna DEFAULT_CONFIG y garantiza claves mínimas.
+    Compatible con PyInstaller (detecta sys.frozen y usa sys._MEIPASS).
+
+    Returns:
+        dict: Diccionario de configuración global.
+    """
+    # Detecta base_path según modo de ejecución (normal vs PyInstaller)
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
     ruta_cfg = os.path.join(base, "config.json")
     try:
         with open(ruta_cfg, "r", encoding="utf-8") as f:
@@ -1061,19 +1098,41 @@ CONFIG = None
 OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejecución)
 
 def get_config():
-    """Lazy-load de CONFIG - retorna CONFIG global, inicializándolo si es necesario."""
+    """
+    Lazy-load de CONFIG: retorna el diccionario global de configuración, inicializándolo si es necesario.
+    Resuelve rutas absolutas para logo, compatible con PyInstaller.
+
+    Uso:
+        config = get_config()
+
+    Returns:
+        dict: Diccionario de configuración global.
+    """
+    import sys, os
     global CONFIG
     if CONFIG is None:
+        # cargar_config() ya maneja la detección de ruta correctamente
         CONFIG = cargar_config()
+        
+        # Normaliza ruta de logo para PyInstaller si es necesario
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+            logo_path = CONFIG.get("branding", {}).get("logo_path")
+            if logo_path and not os.path.isabs(logo_path):
+                CONFIG["branding"]["logo_path"] = os.path.join(base_path, logo_path)
     return CONFIG
 
 def _solicitar_color_tema(CONFIG):
     """
-    Pide el color tema:
-      - Si existe style.palette en config.json, muestra un menú numerado.
-      - Acepta número (1..N), 0 = predeterminado, Enter = predeterminado.
-      - También acepta un HEX manual (#RRGGBB o RRGGBB).
-      - Actualiza CONFIG["style"]["theme_hex"] con la elección.
+    Interfaz para elegir el color de tema visual del informe/KML.
+    Si existe una paleta en config.json, muestra menú numerado.
+    Permite elegir por número, HEX manual o usar el predeterminado.
+    Actualiza CONFIG["style"]["theme_hex"] con la elección.
+
+    Args:
+        CONFIG (dict): Diccionario de configuración global.
+    Returns:
+        dict: CONFIG actualizado con el color elegido.
     """
     style = CONFIG.get("style", {}) if isinstance(CONFIG, dict) else {}
     default_hex = style.get("theme_hex", "#ff00ff")
@@ -1367,7 +1426,20 @@ def _formatear_valor_para_burbuja(col, val):
     return s
 
 # --- Descripción compacta para la burbuja ---
-def _armar_descripcion_compacta(campos: dict, count_azimut=None) -> str:
+def _armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direccion_si_igual=True) -> str:
+    """
+    Construye descripción HTML compacta para burbujas KML.
+    
+    Args:
+        campos: Diccionario con datos del registro (antena, fecha, hora, etc.)
+        count_azimut: Contador de activaciones para ese azimut (opcional)
+        suprimir_direccion_si_igual: Si True, oculta línea "Direccion" cuando es idéntica a "Antena" (normalizado)
+                                      Usado en "todas_las_antenas" para evitar duplicación.
+                                      En carpetas "top" y modo plano se pasa False para siempre mostrar.
+    
+    Returns:
+        String HTML formateado para <description> del Placemark
+    """
     P = []
     # Campos opcionales: omitir si faltan (sin "—")
     def fmt(col):
@@ -1463,9 +1535,34 @@ def _armar_descripcion_compacta(campos: dict, count_azimut=None) -> str:
 
         # Dirección (opcional, debajo de Fila 4)
     direccion = fmt("direccion")
+    # Etiqueta configurable para 'Direccion'
+    try:
+        _label_dir = CONFIG.get("kml", {}).get("labels", {}).get("direccion", "Direccion")
+    except Exception:
+        _label_dir = "Direccion"
+
+    # Normalizador para comparar si direccion y antena son "idénticas" (tolerante a mayúsculas/tildes/espacios)
+    def _norm_text(s):
+        if s is None:
+            return ""
+        try:
+            s = str(s)
+            s = unicodedata.normalize("NFKD", s)
+            s = "".join(ch for ch in s if not unicodedata.combining(ch))
+            s = re.sub(r"\s+", " ", s).strip().lower()
+            return s
+        except Exception:
+            return str(s).strip().lower()
+
     if direccion is not None:
-        P.append(f"<b>Dirección:</b> {direccion}")
-        seccion_ubicacion_tuvo_datos = True
+        mostrar_dir = True
+        if suprimir_direccion_si_igual:
+            # Omitir si la dirección es esencialmente igual al texto mostrado como Antena
+            if _norm_text(direccion) and _norm_text(ant_line) and _norm_text(direccion) == _norm_text(ant_line):
+                mostrar_dir = False
+        if mostrar_dir:
+            P.append(f"<b>{_label_dir}:</b> {direccion}")
+            seccion_ubicacion_tuvo_datos = True
 
 
     # Separador tras ubicación/dirección (si hubo algo)
@@ -1538,6 +1635,49 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
     # --- Sanitizar descripción: omitir campos vacíos o marcadores “sin valor” ---
     # Afecta todas las capas que llamen a _crear_feature_kml (por_rango_horario, top_3_*, etc.)
     try:
+
+        # --- Compactación efectiva para el campo 'name' en KML/KMZ ---
+        def compactar_nombre_antena_kml(nombre: str) -> str:
+            """
+            Compacta el nombre de antena para el campo 'name' en KML/KMZ.
+            Reglas configurables via CONFIG.kml.name_compaction:
+            - prefer_before_comma: número de secciones a tomar antes de la coma (ej. 2). Si 0/None, ignora.
+            - max_words: si no hay comas o prefer_before_comma no aplica, toma primeras N palabras significativas.
+            - max_chars: tope de caracteres; si excede, recorta y agrega '...'.
+            - stopwords: lista de palabras a omitir.
+            """
+            try:
+                nc = (CONFIG or {}).get("kml", {}).get("name_compaction", {})
+            except Exception:
+                nc = {}
+            prefer_before = int(nc.get("prefer_before_comma", 2) or 0)
+            max_words = int(nc.get("max_words", 5) or 5)
+            max_chars = int(nc.get("max_chars", 40) or 40)
+            stopwords = set(str(w).lower() for w in nc.get("stopwords", ["el","la","los","las","de","del","y","en","a","al","por","para","con","un","una"]))
+            if not nombre:
+                return ""
+            nombre = str(nombre).strip()
+            if "," in nombre and prefer_before > 0:
+                secciones = [s.strip() for s in nombre.split(",")]
+                if len(secciones) >= prefer_before:
+                    parte = ", ".join(secciones[:prefer_before])
+                else:
+                    parte = ", ".join(secciones)
+            else:
+                palabras = [w for w in re.split(r'\s+', nombre) if w and w.lower() not in stopwords]
+                parte = " ".join(palabras[:max_words])
+            if len(parte) > max_chars:
+                return parte[: max(0, max_chars-3) ] + "..."
+            return parte
+
+        # Usar nombre compacto SOLO para el campo 'name' del punto KML
+        nombre_compacto = nombre_punto
+        if nombre_punto:
+            nombre_compacto = compactar_nombre_antena_kml(nombre_punto)
+
+        # Si hay columna de dirección, no sobreescribir; si no, usar nombre completo como dirección
+        # (esto se debe manejar en el flujo de mapeo, aquí solo se documenta)
+
         if descripcion:
             parts = re.split(r'<br\s*/?>', str(descripcion))
 
@@ -1648,7 +1788,8 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
         }
 
     # ---------- 2) Crear el punto ----------
-    p = container.newpoint(name=nombre_punto, coords=[(lon, lat)])
+    # Usar nombre compacto para la visualización en el mapa
+    p = container.newpoint(name=nombre_compacto, coords=[(lon, lat)])
     if descripcion:
         p.description = f'<div style="line-height:1.10; font-size:14px">{descripcion}</div>'
     p.style = _REUSABLE_STYLES["pin"]
@@ -1837,7 +1978,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
             "lac": row.get("lac", None),
 
             # Dirección / detalle
-            "direccion": row.get("direccion", row.get("detalle", None)),
+            "direccion": row.get("direccion", row.get("detalle", row.get("antena", None))),
 
             # Evento
             "interaccion": row.get("interaccion", None),
@@ -1853,9 +1994,11 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
     if flat:
         # --- Modo plano: todo colgado de la raíz (sin subcarpetas) ---
+        # NOTA: En modo plano, SIEMPRE mostrar "Dirección" (suprimir_direccion_si_igual=False)
+        # para garantizar que la información esté visible en este contexto simplificado
         for it in items:
             n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
-            desc_comp = _armar_descripcion_compacta(it, n_all)
+            desc_comp = _armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=False)
             _crear_feature_kml(kml, it["antena"], it["lon"], it["lat"], desc_comp, it["azimut_f"], CONFIG)
 
         # === GUARDAR SALIDAS (KMZ en misma carpeta; KML opcional) — INICIO ===
@@ -1944,6 +2087,8 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     }
 
     # 5) Siempre TODO en "todas_las_antenas" (sin deduplicar)
+    # NOTA: Aquí se suprime "Dirección" si es igual a "Antena" para evitar duplicación
+    # cuando el usuario mapea la misma columna a ambos campos
     from datetime import datetime
 
     # --- Crear carpetas por fecha en orden cronológico ---
@@ -1953,7 +2098,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
     for it in items:
         n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
-        desc_comp = _armar_descripcion_compacta(it, n_all)
+        desc_comp = _armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=True)
         _crear_feature_kml(obtener_carpeta_fecha(it["fecha"]), it["antena"], it["lon"], it["lat"], desc_comp, it["azimut_f"], CONFIG)
 
     # 6) Preparar contadores para deduplicación por (antena, azimut ENTERO)
@@ -2043,6 +2188,30 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
                                         for a, c in sorted(((a, c) for a, c in datos["azimuts"].items() if a != az_principal),
                                                             key=lambda t: t[1], reverse=True))
 
+            # Etiqueta configurable para Dirección en Top N
+            try:
+                _label_dir_top = CONFIG.get("kml", {}).get("labels", {}).get("direccion", "Direccion")
+            except Exception:
+                _label_dir_top = "Direccion"
+
+            def _norm_text(s):
+                if s is None:
+                    return ""
+                try:
+                    s = str(s)
+                    s = unicodedata.normalize("NFKD", s)
+                    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+                    s = re.sub(r"\s+", " ", s).strip().lower()
+                    return s
+                except Exception:
+                    return str(s).strip().lower()
+
+            _dir_line = ""
+            if direccion not in (None, "", "SinInf"):
+                # Ocultar si dirección == antena (normalizado)
+                if not (_norm_text(direccion) and _norm_text(antena) and _norm_text(direccion) == _norm_text(antena)):
+                    _dir_line = f"<b>{_label_dir_top}:</b> {direccion}<br>"
+
             desc_core = f"""
     <b>Total de activaciones:</b> {total}<br>
     <hr>
@@ -2054,7 +2223,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     <hr>
     <b>Lat:</b> {lat} &nbsp; <b>Long:</b> {lon}<br>
     <b>Celda:</b> {celda}<br>
-    <b>Dirección:</b> {direccion}<br>
+    {_dir_line}
     <hr>
     <b>Azimut principal:</b> {az_p_disp}° ({cuenta_principal} veces)<br>
     <b>Azimuts secundarios:</b> {secundarios_text if secundarios_text else 'Ninguno'}
@@ -2070,12 +2239,121 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
                 _crear_dedup(folder, lst, pair_por_rango.get(clave, {}))
 
     # 8) Top N Global (por antena), deduplicando por azimut ENTERO
+    # NOTA: En carpetas TOP, la dirección SIEMPRE se muestra (suprimir_direccion_si_igual=False en _crear_dedup_top)
+    # para garantizar visibilidad completa de la información crítica
     _n_eff = None if (isinstance(_topN_ant, int) and _topN_ant <= 0) else int(_topN_ant)
     topN_global = ant_global.most_common(_n_eff)
     for i, (ant, _) in enumerate(topN_global, start=1):
         sub = f_top_global.newfolder(name=f"{i}_{ant}")
         lst = [it for it in items if it["antena"] == ant]
-        _crear_dedup(sub, lst, pair_global)
+        # En carpetas top, nunca suprimir dirección aunque sea igual a antena
+        def _crear_dedup_top(container, iterable, pair_counter):
+            import math
+            import unicodedata
+            import re
+            grupos = {}
+            for it in iterable:
+                key = (it["antena"], it["lat"], it["lon"])
+                az = str(it.get("azimut_f", "SinInf")).strip()
+                if key not in grupos:
+                    grupos[key] = {"items": [], "azimuts": {}, "antena": it["antena"], "lat": it["lat"], "lon": it["lon"]}
+                grupos[key]["items"].append(it)
+                grupos[key]["azimuts"][az] = grupos[key]["azimuts"].get(az, 0) + 1
+
+            def getv_group(*cands):
+                def _sin_tildes(s):
+                    return (s.replace("á","a").replace("é","e").replace("í","i")
+                            .replace("ó","o").replace("ú","u").replace("Á","A")
+                            .replace("É","E").replace("Í","I").replace("Ó","O")
+                            .replace("Ú","U").replace("ñ","n").replace("Ñ","N"))
+                def _norm_key(k):
+                    return _sin_tildes(str(k).strip().lower())
+                def _norm_val(v):
+                    try:
+                        if v is None: return "SinInf"
+                        if isinstance(v, float) and math.isnan(v): return "SinInf"
+                        s = str(v).strip()
+                        return "SinInf" if s == "" or s.lower() == "nan" else s
+                    except:
+                        s = str(v).strip()
+                        return "SinInf" if s == "" else s
+                cand_norm = [_norm_key(c) for c in cands]
+                for it_row in datos["items"]:
+                    row = {_norm_key(k): _norm_val(v) for k, v in it_row.items()}
+                    for cn in cand_norm:
+                        val = row.get(cn, "SinInf")
+                        if val != "SinInf":
+                            return val
+                return "SinInf"
+
+            def _fmt_az(v):
+                try:
+                    f = float(v)
+                    return str(int(f)) if f.is_integer() else str(f).rstrip('0').rstrip('.')
+                except:
+                    return str(v)
+
+            for (antena, lat, lon), datos in grupos.items():
+                total = sum(datos["azimuts"].values())
+                az_principal = max(datos["azimuts"], key=datos["azimuts"].get)
+                az_sec = [az for az, _c in sorted(datos["azimuts"].items(), key=lambda t: t[1], reverse=True) if az != az_principal]
+                cuenta_principal = datos["azimuts"][az_principal]
+                secundarios = [f"{az}° ({c})" for az, c in datos["azimuts"].items() if az != az_principal]
+
+                numero   = getv_group('tel','numero','msisdn_origen','msisdn','telefono')
+                imei     = getv_group('imei','imei_origen')
+                alias    = getv_group('alias','alias_usuario')
+                usuario  = getv_group('nombre_usuario','usuario')
+                abonado  = getv_group('abonado','nombre_abonado')
+                celda    = getv_group('cod_celda_inicial','celda')
+                direccion= getv_group('ubicacion_inicio','direccion')
+
+                az_p_disp = _fmt_az(az_principal)
+                secundarios_text = ", ".join(f"{_fmt_az(a)}° ({c})"
+                                            for a, c in sorted(((a, c) for a, c in datos["azimuts"].items() if a != az_principal),
+                                                                key=lambda t: t[1], reverse=True))
+                try:
+                    _label_dir_top = CONFIG.get("kml", {}).get("labels", {}).get("direccion", "Direccion")
+                except Exception:
+                    _label_dir_top = "Direccion"
+
+                def _norm_text(s):
+                    if s is None:
+                        return ""
+                    try:
+                        s = str(s)
+                        s = unicodedata.normalize("NFKD", s)
+                        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+                        s = re.sub(r"\s+", " ", s).strip().lower()
+                        return s
+                    except Exception:
+                        return str(s).strip().lower()
+
+                _dir_line = ""
+                if direccion not in (None, "", "SinInf"):
+                    # En top: nunca ocultar dirección
+                    _dir_line = f"<b>{_label_dir_top}:</b> {direccion}<br>"
+
+                desc_core = f"""
+    <b>Total de activaciones:</b> {total}<br>
+    <hr>
+    <b>Número:</b> {numero}<br>
+    <b>IMEI:</b> {imei}<br>
+    <b>Alias:</b> {alias}<br>
+    <b>Usuario:</b> {usuario}<br>
+    <b>Abonado:</b> {abonado}<br>
+    <hr>
+    <b>Lat:</b> {lat} &nbsp; <b>Long:</b> {lon}<br>
+    <b>Celda:</b> {celda}<br>
+    {_dir_line}
+    <hr>
+    <b>Azimut principal:</b> {az_p_disp}° ({cuenta_principal} veces)<br>
+    <b>Azimuts secundarios:</b> {secundarios_text if secundarios_text else 'Ninguno'}
+    """
+
+                _crear_feature_kml(container, antena, lon, lat, desc_core, az_principal, CONFIG, azimuts_extra=az_sec)
+
+        _crear_dedup_top(sub, lst, pair_global)
 
     # 9) Top N por rango (por antena), deduplicando por azimut ENTERO
     for clave, padre in top_rango_folders.items():
@@ -2087,7 +2365,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
         for i, (ant, _) in enumerate(topN_r, start=1):
             sub = padre.newfolder(name=f"{i}_{ant}")
             lst = [it for it in items_r if it["antena"] == ant]
-            _crear_dedup(sub, lst, pair_por_rango.get(clave, {}))
+            _crear_dedup_top(sub, lst, pair_por_rango.get(clave, {}))
 
     # 10) Guardar (KMZ en misma carpeta; KML opcional)
     solo_kmz = bool(CONFIG.get("salida", {}).get("solo_kmz", False))
@@ -2548,7 +2826,7 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
 <style>
 #interacciones-recientes .tabla-compacta { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
 #interacciones-recientes .tabla-compacta th, 
-#interacciones-recientes .tabla-compacta td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+#interacciones-recientes .tabla-compacta td { border: 1px solid #ddd; padding: 16px 32px; text-align: center; }
 #interacciones-recientes .tabla-compacta th { background: #f2f2f2; }
 #interacciones-recientes .tabla-scroll { overflow-x: auto; }
 #interacciones-recientes tr.resalte { font-weight: 600; }
@@ -2633,10 +2911,10 @@ def _construir_seccion_todos_contactos(df, columnas_config=None):
         for i, row in tb.iterrows():
             out.append(
                 "<tr>"
-                f"<td class='mono'>{i+1}</td>"
-                f"<td class='mono'>{row['contacto']}</td>"
-                f"<td class='mono'>{int(row['conteo']):,}</td>"
-                f"<td class='mono'>{int(row['minutos']):,}</td>"
+                f"<td class='mono' style='text-align:center'>{i+1}</td>"
+                f"<td class='mono' style='text-align:center'>{row['contacto']}</td>"
+                f"<td class='mono' style='text-align:center'>{int(row['conteo']):,}</td>"
+                f"<td class='mono' style='text-align:center'>{int(row['minutos']):,}</td>"
                 "</tr>"
             )
         out.append("</tbody></table></div></section>")
@@ -3128,9 +3406,25 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     ident_rows = ""
     ident_rows = ""
     # 1) Número telefónico (antes decía "Número analizado")
-    ident_rows += _row_html("Número telefónico", tel_disp,  tel_n,  tel_list,  tel_more,  mono=True)
-    # [IMSI] fila en Metadatos (entre Número y IMEI)
-    ident_rows += _row_html("IMSI", imsi_disp, imsi_n, imsi_list, imsi_more, mono=True)
+    # Asociar IMSI a cada número telefónico si existen
+    if tel_list and imsi_list:
+        # Si hay varios números, asociar IMSI por número si posible
+        tel_imsi = []
+        for tel in tel_list:
+            # Buscar IMSI asociados a ese número (si hay relación en el DataFrame)
+            imsis = set()
+            for idx, row in df.iterrows():
+                if str(row.get('tel','')).strip() == str(tel):
+                    imsi_val = row.get('imsi','')
+                    if imsi_val:
+                        imsis.add(str(imsi_val).strip())
+            if imsis:
+                tel_imsi.append(f"{tel} — IMSI: {', '.join(imsis)}")
+            else:
+                tel_imsi.append(str(tel))
+        ident_rows += _row_html("Número telefónico", None, len(tel_imsi), tel_imsi, 0, mono=True)
+    else:
+        ident_rows += _row_html("Número telefónico", tel_disp,  tel_n,  tel_list,  tel_more,  mono=True)
     # 2) IMEI (subimos esta fila para que quede inmediatamente debajo del número)
     ident_rows += _row_html("IMEI",             imei_disp,  ime_n,  imei_list, imei_more, mono=True)
     # 3) Alias

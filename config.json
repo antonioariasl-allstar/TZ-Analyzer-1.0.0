@@ -49,6 +49,17 @@
   "kml": {
     "azimuth_km": 1.5,
     "incluir_por_rango_horario": false,
+    "_comment_labels": "Etiquetas configurables para campos en burbujas KML",
+    "labels": {
+      "direccion": "Direccion"
+    },
+    "_comment_name_compaction": "Reglas para compactar nombres largos de antenas en placemarks",
+    "name_compaction": {
+      "prefer_before_comma": 2,
+      "max_words": 5,
+      "max_chars": 40,
+      "stopwords": ["el","la","los","las","de","del","y","en","a","al","por","para","con","un","una"]
+    },
     "cone": {
       "half_degrees": 35,
       "fill_color": "7fffffff"
