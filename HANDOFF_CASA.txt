@@ -1,0 +1,86 @@
+# Handoff para sesión en casa
+
+Fecha: 2025-10-21
+Repositorio: TZ-Analysis-1.0.0
+Rama base de trabajo: main (remoto en f22869c, "Merge PR #6")
+Rama preparada para GUI futura: feature/gui-customtkinter-wizard (creada desde main)
+
+Objetivo de este archivo
+- Facilitar continuidad del trabajo en la PC de casa sin acceso a este chat.
+- Explicar exactamente qué se hizo hoy y qué debe hacerse allá.
+- Pedir que todo lo hecho en casa quede documentado para retomar en el trabajo.
+
+Resumen de lo hecho hoy (en oficina)
+- Verificación del repo y limpieza de ramas fusionadas (se eliminaron ramas antiguas locales/remotas: copilot/pase-1, copilot/pase-3, packaging/prep).
+- Se dejó main como rama única y estable, actualizada con PR #6.
+- Se creó y publicó la rama feature/gui-customtkinter-wizard (para empezar GUI más adelante). Aún NO iniciaremos el GUI; la rama queda lista para cuando toque.
+- Recordatorio de entorno: Python 3.12.8. Dependencias instaladas vía requirements.txt (incluye simplekml).
+
+Qué hacer en casa (paso a paso)
+1) Obtener código y ramas actualizadas
+   PowerShell (Windows):
+   
+   git fetch --all --prune
+   git switch main
+   git pull
+   
+   Nota: Solo cambia a la rama feature/gui-customtkinter-wizard cuando vayamos a empezar el GUI. Por ahora, las pruebas/manuales van sobre main.
+
+2) Asegurar el entorno Python 3.12.8
+   - Verifica versión:
+     
+     python --version
+     
+   - Si no es 3.12.8, instala Python 3.12.8 y crea un venv local en la carpeta del repo:
+     
+     python -m venv .venv312
+     .\.venv312\Scripts\Activate.ps1
+     python --version  # debe mostrar 3.12.8
+     
+   - Instala dependencias:
+     
+     pip install --upgrade pip
+     pip install -r requirements.txt
+
+3) Prueba rápida de regresión (opcional pero recomendable)
+   - Ejecuta el test de regresión para validar generación KMZ:
+     
+     python .\tests\test_kml_regresion.py
+
+4) Pruebas manuales del programa (menú principal)
+   - Ejecuta el entrypoint:
+     
+     python run.py
+     
+   - Recorre los flujos del menú (opciones 1, 2 y 3) con archivos de ejemplo. Anota cualquier error o comportamiento inesperado.
+
+5) Documenta lo realizado en casa
+   - Actualiza TODO.md con una sección "Sesión en casa - YYYY-MM-DD" resumiendo:
+     - Qué opciones del menú probaste y resultados.
+     - Cualquier problema encontrado (con mensajes completos de error, si aplica).
+     - Decisiones o cambios pendientes.
+   - Alternativamente, crea un archivo nuevo del estilo `BITACORA_CASA_YYYYMMDD.txt` en la raíz del repo con el mismo contenido.
+   - Haz commit/push de esa documentación para que en la oficina podamos sincronizarnos fácilmente.
+
+6) Siguiente hito (cuando las pruebas manuales estén OK)
+   - Preparar empaquetado con PyInstaller (pendiente de ejecutar después de validar):
+     - Incluir `config.json` como dato junto al ejecutable.
+     - Objetivo: ejecutable onefile y sin consola.
+     - Ejemplo de comando (ajustar rutas si es necesario):
+       
+       pyinstaller --noconsole --onefile --name "TZ-Analysis" --add-data "config.json;." run.py
+       
+     - Probar el binario resultante en una máquina limpia.
+
+Notas clave
+- Evita usar emojis al imprimir en PowerShell si ves errores de encoding.
+- Si necesitas trabajar en una mejora mayor (ej. GUI), crea commits en `feature/gui-customtkinter-wizard` y abre un Pull Request hacia `main`.
+- Cualquier ajuste de dependencias debe reflejarse en `requirements.txt` (y registrar el motivo en TODO.md o bitácora).
+
+Qué esperamos ver al volver a la oficina
+- Repo en GitHub con:
+  - TODO.md o BITACORA_CASA_YYYYMMDD.txt actualizados con los hallazgos.
+  - Si hubo problemas, issues/PRs creados o notas claras para reproducir.
+  - Si todo estuvo OK, anotar “listo para empaquetar” y cualquier detalle requerido (datos/archivos necesarios).
+
+Gracias. Este archivo es la guía para mantener el flujo de trabajo continuo entre entornos.
