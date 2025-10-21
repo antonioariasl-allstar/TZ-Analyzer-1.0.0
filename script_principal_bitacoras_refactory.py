@@ -58,6 +58,13 @@ import sys
 import unicodedata
 import logging
 import traceback
+import io
+import base64
+try:
+    from PIL import Image, ImageDraw
+except Exception:
+    Image = None
+    ImageDraw = None
 
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
@@ -1761,14 +1768,43 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
         # Si line_abgr está en config, úsalo directamente; si no, convierte theme_hex
         line_color = line_abgr if line_abgr else _hex_to_kml_color(theme_hex, 255)
         cone_color = _hex_to_kml_color(theme_hex, int(max(0, min(1.0, cone_opac)) * 255))
+            # Utilidad: generar un icono PNG circular con el color elegido y devolver data URI
+            def _generate_colored_icon_data_uri(hex_color: str, size: int = 48) -> Optional[str]:
+                """Genera un PNG circular RGBA en memoria y devuelve 'data:image/png;base64,...'"""
+                if Image is None or ImageDraw is None:
+                    return None
+                # hex_color puede venir en formato '#rrggbb' o 'rrggbb'
+                h = hex_color.lstrip('#')
+                if len(h) == 8:  # AABBGGRR (kml) -> convertir a RRGGBB
+                    # tomar los últimos 6 (BBGGRR) y revertir a RRGGBB
+                    h = h[6:8] + h[4:6] + h[2:4]
+                if len(h) != 6:
+                    return None
+                r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+                img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(img)
+                # Dibujar círculo centrado
+                pad = max(1, size // 12)
+                draw.ellipse([pad, pad, size - pad - 1, size - pad - 1], fill=(r, g, b, 255))
+                bio = io.BytesIO()
+                img.save(bio, format='PNG')
+                bio.seek(0)
+                data = base64.b64encode(bio.read()).decode('ascii')
+                return f"data:image/png;base64,{data}"
 
-        # Estilo del PIN
-        s_pin = sk.Style()
-        s_pin.iconstyle.color = pin_color
-        s_pin.iconstyle.scale = pin_scale
-        s_pin.iconstyle.icon.href = pin_icon_url
-        s_pin.labelstyle.color = pin_color
-        s_pin.labelstyle.scale = label_scale
+            # Estilo del PIN
+            s_pin = sk.Style()
+            s_pin.iconstyle.color = pin_color
+            s_pin.iconstyle.scale = pin_scale
+            # Generar icono en base al color para asegurar que el icono también tome el color
+            generated_icon = _generate_colored_icon_data_uri(theme_hex, size=48)
+            if generated_icon:
+                s_pin.iconstyle.icon.href = generated_icon
+            else:
+                # Fallback a la URL configurada si Pillow no está disponible
+                s_pin.iconstyle.icon.href = pin_icon_url
+            s_pin.labelstyle.color = pin_color
+            s_pin.labelstyle.scale = label_scale
 
         # Estilo de la LÍNEA
         s_line = sk.Style()
