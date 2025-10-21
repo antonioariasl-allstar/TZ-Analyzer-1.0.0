@@ -3,6 +3,8 @@ Rama: copilot/pase-3
 Pase: 3 (migración a Python 3.12.8)  
 Fecha: 2025-10-21  
 
+> **📋 Handoff para casa:** Ver archivo `HANDOFF_CASA.txt` en la raíz del repo con instrucciones paso a paso para continuar el trabajo en casa.
+
 ## ✅ Migración a Python 3.12.8 (completada)
 **Fecha:** 21 de octubre de 2025  
 **Estado:** ✅ Completada exitosamente
