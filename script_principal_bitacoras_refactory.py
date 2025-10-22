@@ -260,7 +260,9 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
     # Usar nombre compacto para el campo 'name' del punto KML
     p = container.newpoint(name=nombre_compacto, coords=[(lon, lat)])
     if descripcion:
-        p.description = f'<div style="line-height:1.10; font-size:14px">{descripcion}</div>'
+        # Escribir la descripción dentro de un CDATA para preservar el HTML
+        # (evita que simplekml/kml escape las etiquetas como &lt;b&gt;)
+        p.description = f'<![CDATA[<div style="line-height:1.10; font-size:14px">{descripcion}</div>]]>'
     p.style = _REUSABLE_STYLES["pin"]
     try:
         az = float(azimut_float) if azimut_float is not None else float("nan")
@@ -335,7 +337,28 @@ def bootstrap_config() -> None:
 MANUAL_QC_MAPPING = True
 def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
     """Guía el mapeo de columnas esenciales/no esenciales y persiste decisiones en CONFIG si aplica."""
-    cols_menu = list(map(str, getattr(df, "_orig_cols", list(df.columns))))
+    # Preferir `_orig_cols` si existe (preserva orden original del archivo),
+    # pero sanitizar para evitar que haya entradas que no correspondan a
+    # columnas reales del DataFrame (por ejemplo 'Unnamed: ...' u valores vacíos)
+    raw_cols = list(map(str, getattr(df, "_orig_cols", list(df.columns))))
+    actual_cols = [str(c) for c in list(df.columns)]
+    seen = set()
+    cols_menu = []
+    for c in raw_cols:
+        c_s = (c or '').strip()
+        if not c_s:
+            continue
+        # Omitir columnas que claramente vienen de pandas como 'Unnamed: N'
+        if c_s.lower().startswith('unnamed'):
+            continue
+        # Solo incluir si realmente existe en df.columns (evita columnas inventadas)
+        if c_s in actual_cols and c_s not in seen:
+            cols_menu.append(c_s)
+            seen.add(c_s)
+    # Si por alguna razón no quedó nada (por ejemplo _orig_cols tenía nombres distintos),
+    # usar las columnas reales del DataFrame en su lugar.
+    if not cols_menu:
+        cols_menu = actual_cols.copy()
     def _menu_horizontal(_cols, per_line=6):
         filas, fila = [], []
         for i, c in enumerate(_cols, 1):
@@ -1651,12 +1674,28 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
             except Exception:
                 nc = {}
             prefer_before = int(nc.get("prefer_before_comma", 2) or 0)
-            max_words = int(nc.get("max_words", 5) or 5)
+            # Por defecto tomamos 4 palabras cuando el nombre es muy largo
+            max_words = int(nc.get("max_words", 4) or 4)
             max_chars = int(nc.get("max_chars", 40) or 40)
             stopwords = set(str(w).lower() for w in nc.get("stopwords", ["el","la","los","las","de","del","y","en","a","al","por","para","con","un","una"]))
             if not nombre:
                 return ""
             nombre = str(nombre).strip()
+            # Si el nombre original excede el umbral de caracteres, aplicar
+            # la estrategia: tomar las primeras `max_words` palabras y, si
+            # siguen sobrepasando `max_chars`, truncar y añadir '...'.
+            if len(nombre) > max_chars:
+                palabras_all = [w for w in re.split(r'\s+', nombre) if w]
+                palabras = [w for w in palabras_all if w and w.lower() not in stopwords]
+                if palabras:
+                    parte = " ".join(palabras[:max_words])
+                else:
+                    # Si no quedó ninguna palabra por stopwords, fallback a cortar el nombre
+                    parte = nombre[:max_chars]
+                if len(parte) > max_chars:
+                    return parte[: max(0, max_chars-3) ] + "..."
+                return parte
+
             if "," in nombre and prefer_before > 0:
                 secciones = [s.strip() for s in nombre.split(",")]
                 if len(secciones) >= prefer_before:
@@ -1791,7 +1830,8 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
     # Usar nombre compacto para la visualización en el mapa
     p = container.newpoint(name=nombre_compacto, coords=[(lon, lat)])
     if descripcion:
-        p.description = f'<div style="line-height:1.10; font-size:14px">{descripcion}</div>'
+        # Usar CDATA también en este punto para mantener el mismo formato
+        p.description = f'<![CDATA[<div style="line-height:1.10; font-size:14px">{descripcion}</div>]]>'
     p.style = _REUSABLE_STYLES["pin"]
 
     # ---------- 3) Si hay azimut, dibujar LÍNEA y CONO con estilos ----------
@@ -1994,11 +2034,11 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
     if flat:
         # --- Modo plano: todo colgado de la raíz (sin subcarpetas) ---
-        # NOTA: En modo plano, SIEMPRE mostrar "Dirección" (suprimir_direccion_si_igual=False)
-        # para garantizar que la información esté visible en este contexto simplificado
+        # En modo plano usamos la regla por defecto: suprimir Dirección si es igual a Antena
+        # (evita duplicación cuando el usuario mapea la misma columna a ambos campos)
         for it in items:
             n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
-            desc_comp = _armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=False)
+            desc_comp = _armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=True)
             _crear_feature_kml(kml, it["antena"], it["lon"], it["lat"], desc_comp, it["azimut_f"], CONFIG)
 
         # === GUARDAR SALIDAS (KMZ en misma carpeta; KML opcional) — INICIO ===
@@ -5938,6 +5978,8 @@ def main():
 
     # Snapshot de columnas originales (antes de cualquier mapeo/rename)
     cols_originales = list(df.columns)
+    # Guardar también _orig_cols aquí para el wizard QC (antes de coalesce)
+    df._orig_cols = list(df.columns)
 
 
     # === VALIDACIÓN DE SCHEMA (aborto elegante) — INICIO =======================
@@ -6853,54 +6895,56 @@ def main():
     # Validación
     columnas_esenciales = ["antena", "lat", "long"]
     # --- QC: coalesce de fecha/hora y limpieza de duplicados antes de validar ---
-    # 1) Normalizar 'fecha' tomando inicio si existe
-    if "fecha" not in df.columns:
-        if "fecha_inicial" in df.columns:
-            df["fecha"] = df["fecha_inicial"]
-        elif "fecha_final" in df.columns:
-            df["fecha"] = df["fecha_final"]
+    # Solo ejecutar coalesce automático si NO estamos en modo MANUAL_QC_MAPPING
+    if not MANUAL_QC_MAPPING:
+        # 1) Normalizar 'fecha' tomando inicio si existe
+        if "fecha" not in df.columns:
+            if "fecha_inicial" in df.columns:
+                df["fecha"] = df["fecha_inicial"]
+            elif "fecha_final" in df.columns:
+                df["fecha"] = df["fecha_final"]
 
-    # 2) Normalizar 'hora' tomando inicio si existe
-    if "hora" not in df.columns:
-        if "hora_inicial" in df.columns:
-            df["hora"] = df["hora_inicial"]
-        elif "hora_final" in df.columns:
-            df["hora"] = df["hora_final"]
+        # 2) Normalizar 'hora' tomando inicio si existe
+        if "hora" not in df.columns:
+            if "hora_inicial" in df.columns:
+                df["hora"] = df["hora_inicial"]
+            elif "hora_final" in df.columns:
+                df["hora"] = df["hora_final"]
 
-    # 3) Asegurar canónica 'lon' si vino como 'long' o similares
-    if "lon" not in df.columns:
-        if "longitud_inicial_objetivo" in df.columns:
-            df["lon"] = df["longitud_inicial_objetivo"]
-        elif "long" in df.columns:
-            df["lon"] = df["long"]
+        # 3) Asegurar canónica 'lon' si vino como 'long' o similares
+        if "lon" not in df.columns:
+            if "longitud_inicial_objetivo" in df.columns:
+                df["lon"] = df["longitud_inicial_objetivo"]
+            elif "long" in df.columns:
+                df["lon"] = df["long"]
+
+        # --- PROCESADA: completar canónicos mínimos antes de validar ---
+        # tel
+        if "tel" not in df.columns:
+            for c in ("msisdn_origen","msisdn","telefono","tel"):
+                if c in df.columns:
+                    df["tel"] = df[c]
+                    print("[QC] tel <-", c)
+                    break
+
+        # interaccion
+        if "interaccion" not in df.columns:
+            for c in ("tipo","tipo2","contacto","usuario"):
+                if c in df.columns:
+                    df["interaccion"] = df[c]
+                    print("[QC] interaccion <-", c)
+                    break
+
+        # antena
+        if "antena" not in df.columns:
+            for c in ("siteid","cod_celda_inicial","celda"):
+                if c in df.columns:
+                    df["antena"] = df[c]
+                    print("[QC] antena <-", c)
+                    break
 
     # 4) Eliminar columnas duplicadas por nombre (pandas permite duplicados)
     df = df.loc[:, ~df.columns.duplicated(keep="first")]
-
-    # --- PROCESADA: completar canónicos mínimos antes de validar ---
-    # tel
-    if "tel" not in df.columns:
-        for c in ("msisdn_origen","msisdn","telefono","tel"):
-            if c in df.columns:
-                df["tel"] = df[c]
-                print("[QC] tel <-", c)
-                break
-
-    # interaccion (solo si NO estamos en mapeo manual)
-    if not MANUAL_QC_MAPPING and "interaccion" not in df.columns:
-        for c in ("tipo","tipo2","contacto","usuario"):
-            if c in df.columns:
-                df["interaccion"] = df[c]
-                print("[QC] interaccion <-", c)
-                break
-
-    # antena (solo si NO estamos en mapeo manual)
-    if not MANUAL_QC_MAPPING and "antena" not in df.columns:
-        for c in ("siteid","cod_celda_inicial","celda"):
-            if c in df.columns:
-                df["antena"] = df[c]
-                print("[QC] antena <-", c)
-                break
 
 
     # --- QC: verificación rápida y tipado numérico ---
@@ -6926,7 +6970,7 @@ def main():
         print("\n[QC] Iniciando wizard QC (mapeo manual).")
         esenciales_qc = ["tel", "lat", "lon", "fecha", "hora", "azimut", "imei", "antena", "interaccion", "contacto"]
         no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
-        df._orig_cols = list(df.columns)
+        # Ya tenemos df._orig_cols asignado arriba (línea ~5982) antes del coalesce
         df, _mapeo = _wizard_qc_mapeo(df, esenciales=esenciales_qc, no_esenciales=no_esenciales_qc)
         # --- Compatibilidad lon/long para KPIs/HTML ---
         if "lon" in df.columns and "long" not in df.columns:

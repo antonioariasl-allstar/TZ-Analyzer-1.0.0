@@ -49,14 +49,14 @@ def run_checks(out_dir):
         }]),
         'expect_name_contains': 'Aaaa Bbbb, Cccc Dddd'
     })
-    # Caso 4: compactación por palabras (5 sin artículos)
+    # Caso 4: compactación por palabras (4 sin artículos)
     cases.append({
         'df': pd.DataFrame([{
             'fecha':'01/01/2025','hora':'10:00:00','lat':13.7,'long':-89.2,'azimut':120,
             'antena':'El Gran Sitio De Las Flores Hermosas',
             'direccion':'Dummy','tel':'70000000','imei':'350000000000000'
         }]),
-        'expect_name_words': 5
+        'expect_name_words': 4
     })
 
     bootstrap_config()
