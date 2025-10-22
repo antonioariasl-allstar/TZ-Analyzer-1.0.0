@@ -317,8 +317,6 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
 #=================================================================================
 
 def bootstrap_config() -> None:
-html += '<div style="font-size:13px; color:#444; margin-bottom:8px;">Esta lista muestra todos los contactos detectados para el usuario del número analizado durante el período seleccionado. Cada registro corresponde a un contacto con el que se ha registrado alguna interacción, sin importar la frecuencia o tipo de comunicación.</div>'
-html += '<div style="font-size:13px; color:#444; margin-bottom:8px;">Esta lista muestra todas las antenas que el usuario del número analizado ha activado durante el período analizado. Cada registro corresponde a una antena donde se ha detectado actividad, sin importar la frecuencia o duración de la conexión.</div>'
     """
     Inicializa configuración y rename map, y muestra banner.
     Evita ejecutar esto en import; llamarlo solo desde el entrypoint.
@@ -2251,11 +2249,16 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     # para garantizar visibilidad completa de la información crítica
     _n_eff = None if (isinstance(_topN_ant, int) and _topN_ant <= 0) else int(_topN_ant)
     topN_global = ant_global.most_common(_n_eff)
-    for i, (ant, _) in enumerate(topN_global, start=1):
-        sub = f_top_global.newfolder(name=f"{i}_{ant}")
-        lst = [it for it in items if it["antena"] == ant]
-        # En carpetas top, nunca suprimir dirección aunque sea igual a antena
-        def _crear_dedup_top(container, iterable, pair_counter):
+    
+    # Definir campos base para deduplicación y descripción
+    campos = {
+        "nombre_usuario": None,
+        "abonado": None,
+        "alias": None,
+    }
+    
+    # Definir función de deduplicación para carpetas top ANTES del bucle
+    def _crear_dedup_top(container, iterable, pair_counter, campos):
             import math
             import unicodedata
             import re
@@ -2361,7 +2364,11 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
                 _crear_feature_kml(container, antena, lon, lat, desc_core, az_principal, CONFIG, azimuts_extra=az_sec)
 
-        _crear_dedup_top(sub, lst, pair_global)
+    # Aplicar deduplicación en carpetas top
+    for i, (ant, _) in enumerate(topN_global, start=1):
+        sub = f_top_global.newfolder(name=f"{i}_{ant}")
+        lst = [it for it in items if it["antena"] == ant]
+        _crear_dedup_top(sub, lst, pair_global, campos)
 
     # 9) Top N por rango (por antena), deduplicando por azimut ENTERO
     for clave, padre in top_rango_folders.items():
@@ -2373,7 +2380,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
         for i, (ant, _) in enumerate(topN_r, start=1):
             sub = padre.newfolder(name=f"{i}_{ant}")
             lst = [it for it in items_r if it["antena"] == ant]
-            _crear_dedup_top(sub, lst, pair_por_rango.get(clave, {}))
+            _crear_dedup_top(sub, lst, pair_por_rango.get(clave, {}), campos)
 
     # 10) Guardar (KMZ en misma carpeta; KML opcional)
     solo_kmz = bool(CONFIG.get("salida", {}).get("solo_kmz", False))
@@ -2912,6 +2919,7 @@ def _construir_seccion_todos_contactos(df, columnas_config=None):
         out = []
         out.append('<section id="todos-contactos">')
         out.append('<h2>Todos los contactos</h2>')
+        out.append('<div style="font-size:13px; color:#444; margin-bottom:8px;">Esta lista muestra todos los contactos detectados para el usuario del número analizado durante el período seleccionado. Cada registro corresponde a un contacto con el que se ha registrado alguna interacción, sin importar la frecuencia o tipo de comunicación.</div>')
         out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
         out.append('<thead><tr>'
                    '<th>#</th><th>Contacto</th><th>Conteo llamadas</th><th>Minutos acumulados</th>'
@@ -3970,6 +3978,7 @@ section{{margin-top:22px}}
   
     <section>
     <h2>Contactos con más comunicación</h2>
+    <p class="nota"><b>Nota:</b> Los rankings de contactos consideran tanto llamadas y mensajes salientes como entrantes. Se muestran dos tablas: una por cantidad de interacciones y otra por minutos acumulados. Esto permite identificar los contactos más frecuentes y aquellos con mayor duración de comunicación, que pueden ser diferentes. Analizar ambos rankings ayuda a comprender mejor los patrones de comunicación registrados en la bitácora.</p>
     <div class="two">
       <div>
         <h3 class="small">Por número de interacciones <span class="sub">(Top {_topC})</span></h3>
@@ -4301,7 +4310,7 @@ section{{margin-top:22px}}
                             az_dom = str(vc.index[0])
                             parts = [f"Azimut {int(float(k))}: {int(v)} {'vez' if int(v)==1 else 'veces'}"
                                      for k, v in vc.head(3).items()]
-                            desg = " | ".join(parts) + (" …" if len(vc) > 3 else "")
+                            desg = "<br>".join(parts) + (" …" if len(vc) > 3 else "")
 
                     # mapa
                     if (lt is not None) and (lg is not None):
@@ -4317,6 +4326,7 @@ section{{margin-top:22px}}
                 out = []
                 out.append('<section id="resumen-antenas">')
                 out.append('<h2>Antenas más activadas (Top {n})</h2>'.format(n=_topN))
+                out.append('<p class="nota"><b>Nota:</b> Si desea verificar la ubicación de una antena, puede hacer clic en el nombre para abrir su posición en Google Maps.</p>')
                 out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
                 out.append('<thead><tr>'
                         '<th>#</th>'
@@ -4378,6 +4388,11 @@ section{{margin-top:22px}}
                 bloque = bloque.replace(
                     "<h2>Top antenas</h2>",
                     "<h2>Todas las antenas que ha activado en el período analizado</h2>"
+                )
+                # agregar nota explicativa después del h2
+                bloque = bloque.replace(
+                    "<h2>Todas las antenas que ha activado en el período analizado</h2>",
+                    '<h2>Todas las antenas que ha activado en el período analizado</h2><div style="font-size:13px; color:#444; margin-bottom:8px;">Esta lista muestra todas las antenas que el usuario del número analizado ha activado durante el período analizado. Cada registro corresponde a una antena donde se ha detectado actividad, sin importar la frecuencia o duración de la conexión.</div><p class="nota"><b>Nota:</b> Si desea verificar la ubicación de una antena, puede hacer clic en el nombre para abrir su posición en Google Maps.</p>'
                 )
                 # quitar del lugar original
                 html = html[:ini] + html[fin+10:]
@@ -4480,6 +4495,7 @@ section{{margin-top:22px}}
                 out = []
                 out.append('<section id="antenas-rangos">')
                 out.append('<h2>Antenas por rango horario</h2>')
+                out.append('<p class="nota"><b>Nota:</b> Si desea verificar la ubicación de una antena, puede hacer clic en el nombre para abrir su posición en Google Maps.</p>')
                 out.append('<style>#antenas-rangos h3.sub{background:#f7f7f7;border:1px solid #e6e6e6;border-radius:6px;padding:.5rem .75rem;margin:1rem 0 .5rem}#antenas-rangos .mono{font-family:ui-monospace,Menlo,Consolas,monospace}#antenas-rangos .nowrap{white-space:nowrap}</style>')
                 if hours is not None:
                     rangos = hours.map(_lab)
@@ -4549,7 +4565,7 @@ section{{margin-top:22px}}
                                     vc = azv.value_counts().head(3)
                                     if not vc.empty:
                                         parts = [f"Azimut {int(k)}: {int(v)} {'vez' if int(v)==1 else 'veces'}" for k, v in vc.items()]
-                                        az_s = " | ".join(parts)
+                                        az_s = "<br>".join(parts)
                                 except Exception:
                                     pass
 
