@@ -345,10 +345,15 @@ def generar_kml_antenas(df: pd.DataFrame, archivo_salida_kml: str, config: dict,
                 ln.style = styles["line"]
         # Guardar KML y KMZ
         if not solo_kmz:
-            try: kml.save(archivo_salida_kml)
-            except Exception: pass
+            try: 
+                kml.save(archivo_salida_kml)
+            except Exception as e:
+                print(f"[ERROR kml_generador] Al guardar KML '{archivo_salida_kml}': {e}")
+                import traceback
+                traceback.print_exc()
         try:
-            kmz_path = os.path.splitext(archivo_salida_kml)[0] + ".kmz"; kml.savekmz(kmz_path)
+            kmz_path = os.path.splitext(archivo_salida_kml)[0] + ".kmz"
+            kml.savekmz(kmz_path)
             try:
                 if bool((config or {}).get("salida", {}).get("separar_kml_kmz", False)):
                     parent = os.path.basename(os.path.dirname(archivo_salida_kml)).lower()
@@ -359,7 +364,10 @@ def generar_kml_antenas(df: pd.DataFrame, archivo_salida_kml: str, config: dict,
                         shutil.copy2(kmz_path, os.path.join(kmz_dir, os.path.basename(kmz_path)))
             except Exception:
                 pass
-        except Exception: pass
+        except Exception as e:
+            print(f"[ERROR kml_generador] Al guardar KMZ '{kmz_path}': {e}")
+            import traceback
+            traceback.print_exc()
         return archivo_salida_kml, descartadas
 
     # Estructura por carpetas (simplificada)
@@ -376,9 +384,13 @@ def generar_kml_antenas(df: pd.DataFrame, archivo_salida_kml: str, config: dict,
     try:
         if not solo_kmz:
             kml.save(archivo_salida_kml)
-    except Exception: pass
+    except Exception as e:
+        print(f"[ERROR kml_generador (2)] Al guardar KML '{archivo_salida_kml}': {e}")
+        import traceback
+        traceback.print_exc()
     try:
-        kmz_path = os.path.splitext(archivo_salida_kml)[0] + ".kmz"; kml.savekmz(kmz_path)
+        kmz_path = os.path.splitext(archivo_salida_kml)[0] + ".kmz"
+        kml.savekmz(kmz_path)
         try:
             if bool((config or {}).get("salida", {}).get("separar_kml_kmz", False)):
                 parent = os.path.basename(os.path.dirname(archivo_salida_kml)).lower()
@@ -387,9 +399,14 @@ def generar_kml_antenas(df: pd.DataFrame, archivo_salida_kml: str, config: dict,
                     kmz_dir = os.path.join(base_dir, "kmz")
                     os.makedirs(kmz_dir, exist_ok=True)
                     shutil.copy2(kmz_path, os.path.join(kmz_dir, os.path.basename(kmz_path)))
-        except Exception:
-            pass
-    except Exception: pass
+        except Exception as e:
+            print(f"[ERROR kml_generador (3)] Copiar KMZ a carpeta separada: {e}")
+            import traceback
+            traceback.print_exc()
+    except Exception as e:
+        print(f"[ERROR kml_generador (4)] Al guardar KMZ '{kmz_path}': {e}")
+        import traceback
+        traceback.print_exc()
     return archivo_salida_kml, descartadas
 
 # === Helpers internos: estilos y geodesia ===

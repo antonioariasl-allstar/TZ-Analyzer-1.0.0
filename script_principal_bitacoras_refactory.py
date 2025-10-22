@@ -26,7 +26,7 @@
 #     - Resúmenes y contadores (válidas/descartadas)
 #
 # SECCIÓN 4 · VISTAS HTML
-#     - Metadatos (alias/usuario/abonado si existen)
+#     - Metadatos (alias/nombre_usuario/abonado si existen)
 #     - “Periodo analizado”: dd/mm/yyyy HH:MM — dd/mm/yyyy HH:MM
 #     - Tablas (incluye “Antenas más activadas” con azimut sin decimales)
 #
@@ -40,7 +40,7 @@
 #
 # SECCIÓN 7 · MENÚ / ORQUESTACIÓN
 #     - Menú único (loop en modo manual)
-#     - Flujo: menú → color → entrada → mapeo → preguntas finales (alias/usuario/abonado/top) → carpeta destino → generar
+#     - Flujo: menú → color → entrada → mapeo → preguntas finales (alias/nombre_usuario/abonado/top) → carpeta destino → generar
 #
 # NOTA: Este bloque solo documenta y ordena la lectura del archivo. No modifica funcionalidad.
 # ======================================================================
@@ -60,11 +60,6 @@ import logging
 import traceback
 import io
 import base64
-try:
-    from PIL import Image, ImageDraw
-except Exception:
-    Image = None
-    ImageDraw = None
 
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
@@ -327,11 +322,11 @@ def bootstrap_config() -> None:
     Evita ejecutar esto en import; llamarlo solo desde el entrypoint.
     """
     # Banner (antes estaba al nivel superior)
-    print(r"""
-┌───────────────────────────────────────────────┐
-│                 T  Z   A N A L Y Z E R       │
-│        Bitácoras → KML/KMZ + Informe HTML     │
-└───────────────────────────────────────────────┘
+    print("""
+===============================================
+           T  Z   A N A L Y Z E R
+    Bitacoras -> KML/KMZ + Informe HTML
+===============================================
 """)
     # Configuración y mapa de sinónimos (antes estaban al nivel superior)
     global CONFIG, RENAME_MAP
@@ -365,7 +360,7 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
     }
     if no_esenciales is None:
         no_esenciales = [
-            "alias", "usuario", "abonado", "celda", "direccion", "imei", "imsi", "duracion",
+            "alias", "nombre_usuario", "abonado", "celda", "direccion", "imei", "imsi", "duracion",
             "contacto", "interaccion"
         ]
 
@@ -442,7 +437,7 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
 
     # =============================================================
     # === Mapeo de CANÓNICOS NO ESENCIALES ===
-    # Incluye alias, usuario y abonado, junto con otros campos opcionales.
+    # Incluye alias, nombre_usuario y abonado, junto con otros campos opcionales.
     # El usuario puede asignar columna, valor fijo o dejarlo omitido.
     # El menú se muestra una sola vez y se pregunta en orden.
     # =============================================================
@@ -532,11 +527,11 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
 
 
     # =============================================================
-    # === Pregunta de identidad (alias/usuario/abonado) ===
+    # === Pregunta de identidad (alias/nombre_usuario/abonado) ===
     # Si no existen o están vacíos, ofrecer cargarlos como un valor único para toda la ejecución.
     # Esto garantiza que siempre se puedan incorporar estos metadatos.
     # =============================================================
-    for etiqueta in ("alias", "usuario", "abonado"):
+    for etiqueta in ("alias", "nombre_usuario", "abonado"):
         falta_col = etiqueta not in df.columns
         vacio = False
         if not falta_col:
@@ -563,7 +558,7 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
         pass
 
     # --- Aviso post-mapeo: columnas recomendadas omitidas (remapeo rápido) ---
-    recomendadas = ["duracion"]  # podés sumar "alias","usuario","abonado" si querés
+    recomendadas = ["duracion"]  # podés sumar "alias","nombre_usuario","abonado" si querés
     falt = [c for c in recomendadas if c not in df.columns]
     if falt:
         print("\n[QC] Aviso: omitiste asignar -> " + ", ".join(falt))
@@ -608,7 +603,7 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
         elif op == "R":
             # elegir canónico a remapear (menú claro y orden fijo)
             orden_fijo = ["tel","lat","lon","fecha","hora","azimut","imei","antena",
-                          "interaccion","contacto","alias","usuario","abonado",
+                          "interaccion","contacto","alias","nombre_usuario","abonado",
                           "celda","direccion","imsi","duracion"]
             todos_base = list(dict.fromkeys((esenciales + no_esenciales)))
             todos = [c for c in orden_fijo if c in todos_base] + [c for c in todos_base if c not in orden_fijo]
@@ -974,7 +969,7 @@ DEFAULT_CONFIG = {
         "line": {"color": "ffff00ff", "width": 5},
         "description": [
             # Bloque 2: Tel + identidad (agregamos Alias; cambiamos etiqueta de Usuario)
-            [["Tel","tel"], ["IMEI","imei"], ["Alias","alias"], ["Nombre del Usuario","usuario"], ["Abonado","abonado"]],
+            [["Tel","tel"], ["IMEI","imei"], ["Alias","alias"], ["Nombre de Usuario","nombre_usuario"], ["Abonado","abonado"]],
             # Bloque 3: datos de antena/posiciones
             [["Antena","antena"], ["Detalle","detalle"], ["Lat","lat"], ["Long","long"], ["Azimut","azimut"], ["Celda","celda"], ["LAC","lac"]],
             # Bloque 4: interacción + duración (SIN líneas separadas de Tel/Nombre Contacto)
@@ -1483,12 +1478,12 @@ def _armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcc
 
     # Fila 3a: Alias · Usuario
     alias = campos.get("alias", None)
-    usuario = campos.get("usuario", None)
+    nombre_usuario = campos.get("nombre_usuario", None)
     l3a = []
     if _tiene_valor(alias):
         l3a.append(f"<b>Alias:</b> {str(alias).strip()}")
-    if _tiene_valor(usuario):
-        l3a.append(f"<b>Usuario:</b> {str(usuario).strip()}")
+    if _tiene_valor(nombre_usuario):
+        l3a.append(f"<b>Nombre de Usuario:</b> {str(nombre_usuario).strip()}")
     if l3a:
         P.append(" &middot; ".join(l3a))
         grupo_identidad_tuvo_datos = True
@@ -1768,43 +1763,14 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
         # Si line_abgr está en config, úsalo directamente; si no, convierte theme_hex
         line_color = line_abgr if line_abgr else _hex_to_kml_color(theme_hex, 255)
         cone_color = _hex_to_kml_color(theme_hex, int(max(0, min(1.0, cone_opac)) * 255))
-            # Utilidad: generar un icono PNG circular con el color elegido y devolver data URI
-            def _generate_colored_icon_data_uri(hex_color: str, size: int = 48) -> Optional[str]:
-                """Genera un PNG circular RGBA en memoria y devuelve 'data:image/png;base64,...'"""
-                if Image is None or ImageDraw is None:
-                    return None
-                # hex_color puede venir en formato '#rrggbb' o 'rrggbb'
-                h = hex_color.lstrip('#')
-                if len(h) == 8:  # AABBGGRR (kml) -> convertir a RRGGBB
-                    # tomar los últimos 6 (BBGGRR) y revertir a RRGGBB
-                    h = h[6:8] + h[4:6] + h[2:4]
-                if len(h) != 6:
-                    return None
-                r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-                img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-                draw = ImageDraw.Draw(img)
-                # Dibujar círculo centrado
-                pad = max(1, size // 12)
-                draw.ellipse([pad, pad, size - pad - 1, size - pad - 1], fill=(r, g, b, 255))
-                bio = io.BytesIO()
-                img.save(bio, format='PNG')
-                bio.seek(0)
-                data = base64.b64encode(bio.read()).decode('ascii')
-                return f"data:image/png;base64,{data}"
 
-            # Estilo del PIN
-            s_pin = sk.Style()
-            s_pin.iconstyle.color = pin_color
-            s_pin.iconstyle.scale = pin_scale
-            # Generar icono en base al color para asegurar que el icono también tome el color
-            generated_icon = _generate_colored_icon_data_uri(theme_hex, size=48)
-            if generated_icon:
-                s_pin.iconstyle.icon.href = generated_icon
-            else:
-                # Fallback a la URL configurada si Pillow no está disponible
-                s_pin.iconstyle.icon.href = pin_icon_url
-            s_pin.labelstyle.color = pin_color
-            s_pin.labelstyle.scale = label_scale
+        # Estilo del PIN
+        s_pin = sk.Style()
+        s_pin.iconstyle.color = pin_color
+        s_pin.iconstyle.scale = pin_scale
+        s_pin.iconstyle.icon.href = pin_icon_url
+        s_pin.labelstyle.color = pin_color
+        s_pin.labelstyle.scale = label_scale
 
         # Estilo de la LÍNEA
         s_line = sk.Style()
@@ -2044,15 +2010,19 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
         if not solo_kmz:
             try:
                 kml.save(archivo_salida_kml)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.error(f"Error al guardar KML '{archivo_salida_kml}': {e}")
+                import traceback
+                traceback.print_exc()
 
         # KMZ siempre junto al archivo base, sin subcarpetas
         try:
             kmz_path = os.path.splitext(archivo_salida_kml)[0] + ".kmz"
             kml.savekmz(kmz_path)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Error al guardar KMZ '{kmz_path}': {e}")
+            import traceback
+            traceback.print_exc()
 
         # Nota: mantenemos el retorno original para no romper llamadas aguas arriba
         return archivo_salida_kml, descartadas
@@ -2376,7 +2346,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     <b>Número:</b> {numero}<br>
     <b>IMEI:</b> {imei}<br>
     <b>Alias:</b> {alias}<br>
-    <b>Usuario:</b> {usuario}<br>
+    <b>Nombre de Usuario:</b> {campos.get("nombre_usuario", "")}<br>
     <b>Abonado:</b> {abonado}<br>
     <hr>
     <b>Lat:</b> {lat} &nbsp; <b>Long:</b> {lon}<br>
