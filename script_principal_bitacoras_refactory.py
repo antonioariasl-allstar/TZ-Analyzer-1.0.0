@@ -4049,6 +4049,9 @@ section{{margin-top:22px}}
             _links.append('<a href="#meta">Metadatos</a>')
         if 'id="resumen-antenas"' in html:
             _links.append('<a href="#resumen-antenas">Antenas más activadas</a>')
+        # Incluir enlace a Heatmap si existe
+        if 'id="heatmap-actividad"' in html:
+            _links.append('<a href="#heatmap-actividad">Mapa de calor de actividad</a>')
         if 'id="interacciones"' in html:
             _links.append('<a href="#interacciones">Contactos con más comunicación</a>')
         # Aceptar dos posibles IDs para rangos horarios
@@ -4408,7 +4411,10 @@ section{{margin-top:22px}}
     #     y manda "Todas las antenas..." hasta el final, ANTES de escribir el archivo.
     try:
         # === HTML-ANTENAS-RANGOS-1: Antenas por rango horario (debajo del Top antenas) ===
+        # Además, prepararemos la nueva sección de "Mapa de calor de actividad" (heatmap)
+        # para insertarla entre "Antenas más activadas" y "Contactos con más comunicación".
         sec_ant_rangos = ""
+        sec_heatmap = ""
         try:
             # --- 1) Detección robusta de columnas ---
             cols_low = {c.lower(): c for c in df.columns}
@@ -4579,7 +4585,6 @@ section{{margin-top:22px}}
     )
 
                         out.append("</tbody></table>")
-                        
 
                 out.append("</section>")
                 sec_ant_rangos = "\n".join(out)
@@ -4587,6 +4592,134 @@ section{{margin-top:22px}}
         except Exception:
             sec_ant_rangos = ""
         # === FIN HTML-ANTENAS-RANGOS-1 ===
+
+        # === HTML-HEATMAP-1: Generar bloque de Mapa de Calor de actividad ===
+        # Contrato de datos: puntos [lat, lon, weight] donde weight se normaliza (0..1) por
+        # la frecuencia de activaciones (conteo por coordenada redondeada). Este bloque es
+        # autónomo y se insertará entre el resumen de antenas y el bloque de contactos.
+        # MEJORA: Incluye marcadores (pines) de las antenas Top N para hacerlo más comprensible.
+        try:
+            if col_lat and col_lon and (col_lat in df.columns) and (col_lon in df.columns):
+                import json as _json
+                _tmp = df.copy()
+                _tmp["_lat"] = pd.to_numeric(_tmp.get(col_lat, pd.Series(dtype=float)), errors="coerce")
+                _tmp["_lon"] = pd.to_numeric(_tmp.get(col_lon, pd.Series(dtype=float)), errors="coerce")
+                _valid = (
+                    _tmp["_lat"].between(-90, 90) &
+                    _tmp["_lon"].between(-180, 180) &
+                    ~((_tmp["_lat"].abs() < 1e-9) & (_tmp["_lon"].abs() < 1e-9))
+                )
+                _geo = _tmp.loc[_valid, ["_lat", "_lon"]]
+                # Agrupar por coord redondeada para evitar duplicados excesivos
+                if not _geo.empty:
+                    _geo["_latr"] = _geo["_lat"].round(5)
+                    _geo["_lonr"] = _geo["_lon"].round(5)
+                    _grp = _geo.groupby(["_latr", "_lonr"]).size().reset_index(name="cnt").sort_values("cnt", ascending=False)
+                    # Cap en cantidad de puntos para tamaño de HTML (ej. top 1500)
+                    _grp = _grp.head(1500)
+                    _max = float(_grp["cnt"].max()) if not _grp.empty else 0.0
+                    heat_points = []
+                    if _max > 0:
+                        for _, rr in _grp.iterrows():
+                            w = float(rr["cnt"]) / _max
+                            heat_points.append([float(rr["_latr"]), float(rr["_lonr"]), round(w, 4)])
+                    
+                    # NUEVO: Preparar marcadores de antenas Top N (mismo criterio que sec_ant)
+                    markers_data = []
+                    if col_ant and (col_ant in df.columns):
+                        try:
+                            # Obtener top_N del config
+                            _topN_markers = 5  # default
+                            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
+                                _topN_markers = int(OVERRIDE_TOPS.get('antenas'))
+                            elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
+                                _topN_markers = int(CONFIG.get("top_antenas", CONFIG.get("html", {}).get("top_antenas_n", 5)))
+                            
+                            _dfv = df.copy()
+                            _dfv[col_ant] = _dfv[col_ant].astype(str).str.strip()
+                            _dfv = _dfv[_dfv[col_ant].notna() & (_dfv[col_ant] != "") & (_dfv[col_ant] != "0")]
+                            if (col_lat in _dfv.columns) and (col_lon in _dfv.columns):
+                                _dfv = _dfv[_dfv.apply(lambda r: _valid_latlon(r[col_lat], r[col_lon]), axis=1)]
+                            
+                            if not _dfv.empty:
+                                _top = (_dfv.groupby(col_ant)
+                                        .size()
+                                        .reset_index(name="activaciones")
+                                        .sort_values("activaciones", ascending=False))
+                                if int(_topN_markers) > 0:
+                                    _top = _top.head(int(_topN_markers))
+                                
+                                for _, _r in _top.iterrows():
+                                    _ant = str(_r[col_ant])
+                                    _sub = _dfv[_dfv[col_ant] == _ant]
+                                    _lt = float(_sub[col_lat].astype(float).mean()) if (col_lat in _sub.columns) else None
+                                    _lg = float(_sub[col_lon].astype(float).mean()) if (col_lon in _sub.columns) else None
+                                    _act = int(_r["activaciones"])
+                                    if (_lt is not None) and (_lg is not None):
+                                        markers_data.append({
+                                            "lat": round(_lt, 6),
+                                            "lon": round(_lg, 6),
+                                            "name": _ant,
+                                            "count": _act
+                                        })
+                        except Exception:
+                            pass
+                    
+                    # Si no hay puntos suficientes, omitimos la sección
+                    if heat_points:
+                        _heat_js = _json.dumps(heat_points, ensure_ascii=False)
+                        _markers_js = _json.dumps(markers_data, ensure_ascii=False)
+                        sec_heatmap = f"""
+<section id=\"heatmap-actividad\">
+  <h2>Mapa de calor de actividad</h2>
+  <p class=\"nota\"><b>Nota:</b> La intensidad del color representa la frecuencia relativa de activaciones. Los marcadores (📍) indican las antenas principales del Top {len(markers_data)}. Puede hacer clic en cada marcador para ver el nombre de la antena y su número de activaciones.</p>
+  <div id=\"heatmap\" style=\"height:560px; border:1px solid #ddd; border-radius:8px; overflow:hidden;\"></div>
+
+  <!-- Dependencias Leaflet desde CDN -->
+  <link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\"/>
+  <script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>
+  <script src=\"https://unpkg.com/leaflet.heat/dist/leaflet-heat.js\"></script>
+
+  <script>
+    (function() {{
+      const heatData = { _heat_js };
+      const markers = { _markers_js };
+      if (!Array.isArray(heatData) || heatData.length === 0) return;
+      
+      const map = L.map('heatmap', {{ scrollWheelZoom: false }});
+      const tiles = L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+        attribution: '&copy; OpenStreetMap'
+      }}).addTo(map);
+      
+      // Agregar capa de calor
+      const latlngs = heatData.map(p => [p[0], p[1]]);
+      const bounds = L.latLngBounds(latlngs);
+      try {{ map.fitBounds(bounds.pad(0.15)); }} catch(e) {{ map.setView(latlngs[0], 12); }}
+      L.heatLayer(heatData, {{ radius: 22, blur: 18, maxZoom: 16, minOpacity: 0.3 }}).addTo(map);
+      
+      // Agregar marcadores de antenas Top N
+      if (Array.isArray(markers) && markers.length > 0) {{
+        markers.forEach((m, idx) => {{
+          const marker = L.marker([m.lat, m.lon], {{
+            title: m.name
+          }}).addTo(map);
+          
+          marker.bindPopup(`
+            <div style="font-family:sans-serif;">
+              <strong style="font-size:14px;">${{m.name}}</strong><br>
+              <span style="color:#666; font-size:12px;">Activaciones: ${{m.count.toLocaleString()}}</span>
+            </div>
+          `);
+        }});
+      }}
+    }})();
+  </script>
+</section>
+"""
+                        log(f"[DEBUG] Heatmap: {len(sec_heatmap)} chars, puntos={len(heat_points)}")
+        except Exception:
+            sec_heatmap = ""
+        # === FIN HTML-HEATMAP-1 ===
 
         # 1) Mover "Top antenas" inmediatamente después de "Indicadores" (si aún no lo está)
         idx_ind = html.find("<h2>Indicadores</h2>")
@@ -4602,7 +4735,9 @@ section{{margin-top:22px}}
 
                 # REORDENAR-SECCIONES-2: mover "<h2>Contactos con más comunicación" debajo de "Antenas más activadas"
         try:
-            # 2A) Mover bloque "<h2>Contactos con más comunicación" justo después del resumen de antenas
+            # 2A) Insertar primero el HEATMAP (si existe) y luego mover
+            #     el bloque "Contactos con más comunicación" inmediatamente
+            #     después del heatmap. Si no hay heatmap, va debajo del resumen.
             hdr_resumen = "<h2>Antenas más activadas"
             idx_res = html.find(hdr_resumen)
             if idx_res != -1:
@@ -4618,10 +4753,26 @@ section{{margin-top:22px}}
                         bloque_int = html[ini_int:fin_int+10]
                         # quitar del lugar original
                         html = html[:ini_int] + html[fin_int+10:]
-                        # insertar después del resumen
+                        # 2A.1) Insertar HEATMAP justo después del resumen (si lo tenemos)
                         fin_res = html.find("</section>", idx_res)
-                        if fin_res != -1:
-                            html = html[:fin_res+10] + "\n" + bloque_int + html[fin_res+10:]
+                        if fin_res != -1 and sec_heatmap:
+                            html = html[:fin_res+10] + "\n" + sec_heatmap + html[fin_res+10:]
+                            # recalcular punto de inserción para contactos: después del heatmap
+                            idx_hm = html.find('id="heatmap-actividad"', fin_res)
+                            if idx_hm != -1:
+                                fin_hm = html.find("</section>", idx_hm)
+                                if fin_hm != -1:
+                                    html = html[:fin_hm+10] + "\n" + bloque_int + html[fin_hm+10:]
+                                else:
+                                    # fallback: si no encontramos cierre, insertar tras resumen
+                                    html = html[:fin_res+10] + "\n" + bloque_int + html[fin_res+10:]
+                            else:
+                                # fallback por si no quedó el id (no debería ocurrir)
+                                html = html[:fin_res+10] + "\n" + bloque_int + html[fin_res+10:]
+                        else:
+                            # si no hay heatmap, insertar interacciones debajo del resumen
+                            if fin_res != -1:
+                                html = html[:fin_res+10] + "\n" + bloque_int + html[fin_res+10:]
 
             # 2B) Insertar "Antenas por rango horario" debajo de "Interacciones" (si existe); si no, debajo del resumen
             if sec_ant_rangos:
@@ -5139,6 +5290,8 @@ section{{margin-top:22px}}
             _links.append('<a href="#meta">Metadatos</a>')
         if _has("resumen-antenas"):
             _links.append('<a href="#resumen-antenas">Antenas más activadas</a>')
+        if _has("heatmap-actividad"):
+            _links.append('<a href="#heatmap-actividad">Mapa de calor de actividad</a>')
         if _has("interacciones"):
             _links.append('<a href="#interacciones">Contactos con más comunicación</a>')
         # Rangos: aceptar cualquiera de los dos IDs posibles
