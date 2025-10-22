@@ -317,6 +317,8 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
 #=================================================================================
 
 def bootstrap_config() -> None:
+html += '<div style="font-size:13px; color:#444; margin-bottom:8px;">Esta lista muestra todos los contactos detectados para el usuario del número analizado durante el período seleccionado. Cada registro corresponde a un contacto con el que se ha registrado alguna interacción, sin importar la frecuencia o tipo de comunicación.</div>'
+html += '<div style="font-size:13px; color:#444; margin-bottom:8px;">Esta lista muestra todas las antenas que el usuario del número analizado ha activado durante el período analizado. Cada registro corresponde a una antena donde se ha detectado actividad, sin importar la frecuencia o duración de la conexión.</div>'
     """
     Inicializa configuración y rename map, y muestra banner.
     Evita ejecutar esto en import; llamarlo solo desde el entrypoint.
@@ -5052,13 +5054,15 @@ section{{margin-top:22px}}
                 _footer_html = ""
                 if _legal or _byline:
                     _by  = f'<span class="by" style="display:block;text-align:center">{_byline}</span>' if _byline else ""
-                    _txt = f'<span class="legal-text">{_legal}</span>' if _legal else ""
+                    # Eliminar cualquier mención de fecha o versión al final del pie legal
+                    _legal_sin_fecha = re.sub(r'Generado.*?\d{2}/\d{2}/\d{4}.*?Versi[óo]n.*', '', _legal, flags=re.I)
+                    _txt = f'<span class="legal-text">{_legal_sin_fecha.strip()}</span>' if _legal_sin_fecha.strip() else ""
                     _footer_html = (
-                    f'<footer class="legal" style="text-align:center">'
-                    f'<span class="legal-text" style="display:block;text-align:center">{_txt}</span>'
-                    f'{_by}'
-                    f'</footer>'
-                )
+                        f'<footer class="legal" style="text-align:center">'
+                        f'<span class="legal-text" style="display:block;text-align:center">{_txt}</span>'
+                        f'{_by}'
+                        f'</footer>'
+                    )
 
 
                     # 0) Eliminar cualquier footer previo (ambas comillas)
