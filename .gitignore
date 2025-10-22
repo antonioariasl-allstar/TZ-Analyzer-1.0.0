@@ -3,6 +3,7 @@
 .venv/
 env/
 venv/
+.env312/
 
 # Ignorar cachés y temporales
 __pycache__/
@@ -23,9 +24,12 @@ Thumbs.db
 *.kmz
 *.xlsx
 *.csv
-*.txt
 *.pdf
 *.docx
+
+# NOTA: antes se ignoraban todos los "*.txt". Cambiado para permitir añadir notas/documentación
+# Si quieres añadir un TXT de auditoría o un archivo de Copilot, colócalo en `docs/` y se podrá versionar.
+# Si necesitas seguir ignorando txt de salida, añade reglas específicas (p.ej. /tests/out/*.txt)
 
 # Ignorar resultados o reportes generados
 /reports/
