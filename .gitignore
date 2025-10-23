@@ -3,6 +3,7 @@
 # Entornos virtuales
 .venv/
 .venv*/
+ .venv312/
 venv/
 venv*/
 env/
