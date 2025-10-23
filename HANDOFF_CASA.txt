@@ -111,8 +111,44 @@ Implementación completa de visualización geográfica interactiva.
 - Label: "Mapa de calor de actividad"
 
 ## Archivos modificados (pendientes de commit)
-- script_principal_bitacoras_refactory.py (7,952 líneas)
+- script_principal_bitacoras_refactory.py (8,264 líneas)
 - config.json (pie legal actualizado)
+- HANDOFF_CASA.txt (actualizado con cambios del 2025-10-23)
+
+### 3. Historial de cambios de antena ✅ COMPLETADO (Sesión 2025-10-23)
+Implementación completa de detección y visualización de saltos entre antenas.
+
+**Ubicación**: Después de "Antenas por rango horario"
+
+**Características**:
+- Detección automática de cambios de antena (cuando el dispositivo pasa de una antena a otra)
+- Cálculo de distancia en km entre antenas usando fórmula de Haversine
+- Tabla ordenada cronológicamente con: #, Fecha/Hora, Antena Origen, Antena Destino, Distancia
+- Límite de 100 saltos para mantener HTML manejable (configurable)
+
+**Función generar_historial_cambios_antena()**:
+- Ubicación: línea ~1353 (después de _tiene_valor)
+- Detecta automáticamente columnas de antena, timestamp, lat, lon
+- Filtra registros válidos (sin antenas '0' o vacías)
+- Ordena cronológicamente por timestamp
+- Calcula distancia cuando hay coordenadas disponibles
+- Retorna lista de diccionarios con: origen, destino, timestamp, coordenadas, distancia_km
+
+**Código**:
+- Generación: líneas ~4831-4880 en script_principal_bitacoras_refactory.py
+- Bloque identificado como: HTML-HISTORIAL-CAMBIOS-1
+- Variable: sec_historial
+- Inserción: bloque 2C en reordenamiento (línea ~5075)
+
+**Enlace en TOC**:
+- Agregado automáticamente si la sección existe
+- ID: #historial-cambios
+- Label: "Historial de cambios de antena"
+- Ubicado después de "Antenas por rango horario"
+
+**Nota explicativa incluida**:
+"Esta tabla muestra los cambios de antena detectados en orden cronológico. 
+Cada fila representa un momento en que el dispositivo cambió de una antena a otra."
 
 # ============================================================
 # IDEAS PROPUESTAS PARA FUTURAS ITERACIONES
@@ -177,14 +213,16 @@ y qué no se puede"
 # ============================================================
 
 ## Prioridad ALTA
-[ ] Commit de cambios actuales (mejoras visuales + heatmap)
-    - Título sugerido: "feat: Add interactive heatmap with antenna markers and visual improvements"
+[ ] Commit de cambios actuales (mejoras visuales + heatmap + historial)
+    - Título sugerido: "feat: Add interactive heatmap, antenna markers and change history"
     - Descripción: ver sección "Últimos cambios" arriba
     
-[ ] Integrar "Historial de cambios de antena" (parcialmente iniciado)
-    - Función generar_historial_cambios_antena() ya existe
-    - Falta: crear bloque HTML e insertar en flujo de reporte
-    - Ubicación sugerida: después de tabla de antenas
+[X] Integrar "Historial de cambios de antena" ✅ COMPLETADO (2025-10-23)
+    - Función generar_historial_cambios_antena() implementada (línea ~1353)
+    - Bloque HTML sec_historial creado con tabla de saltos
+    - Insertado después de "Antenas por rango horario"
+    - Enlaces agregados al TOC
+    - Ver detalles en sección "3. Historial de cambios de antena" abajo
 
 ## Prioridad MEDIA
 [ ] Implementar detección de alertas/patrones sospechosos
@@ -301,16 +339,32 @@ Próximos pasos sugeridos:
 # ============================================================
 # LOGS DE COMUNICACIÓN ENTRE AGENTES
 # ============================================================
-5) Documenta lo realizado en casa
+
 [2025-10-22 - Agente Oficina]
 - Implementado heatmap con marcadores
 - Mejoradas notas explicativas en todas las secciones
 - Documentadas ideas futuras para discusión
 - Preparado handoff completo para agente de casa
-6) Siguiente hito (cuando las pruebas manuales estén OK)
+
+[2025-10-23 - Agente Casa - Sesión Mañana]
+- ✅ Implementado "Historial de cambios de antena"
+  * Función generar_historial_cambios_antena() creada (línea ~1353)
+  * Detecta saltos entre antenas con cálculo de distancia
+  * Bloque HTML con tabla cronológica insertado después de "Antenas por rango horario"
+  * Enlaces agregados al TOC en ambas zonas
+  * Compilación exitosa sin errores
+- 📝 Actualizado HANDOFF_CASA.txt con detalles de implementación
+- ⚠️ PENDIENTE: Validar integración con prueba real (ejecutar script con datos)
+
+PRÓXIMO PASO SUGERIDO:
+1. Ejecutar script con archivo de prueba para validar que:
+   - La sección "Historial de cambios" aparece correctamente
+   - El TOC incluye el enlace
+   - No se rompen otras secciones
+   - Los saltos se detectan y la distancia se calcula bien
+2. Si todo OK → commit con mensaje: "feat: Add antenna change history tracking"
+
 [SIGUIENTE AGENTE: actualizar aquí al tomar el relevo]
-Notas clave
-- Evita usar emojis al imprimir en PowerShell si ves errores de encoding.
 # ============================================================
 # FIN DEL DOCUMENTO
 # ============================================================
