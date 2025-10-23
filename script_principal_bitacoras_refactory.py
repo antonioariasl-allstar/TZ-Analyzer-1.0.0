@@ -1350,6 +1350,120 @@ def _tiene_valor(v):
         return False
     return True
 
+def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100):
+    """
+    Extrae la secuencia de saltos entre antenas (cambios de antena en el tiempo).
+    
+    Args:
+        df: DataFrame con columnas 'antena', 'fecha y hora' (o similar), 'lat', 'long'
+        max_saltos: Límite máximo de saltos a retornar (para no saturar HTML)
+    
+    Returns:
+        Lista de diccionarios con: {origen, destino, timestamp, lat_origen, lon_origen, lat_destino, lon_destino, distancia_km}
+    """
+    try:
+        # Detectar columnas de antena y timestamp
+        cols_low = {c.lower(): c for c in df.columns}
+        col_ant = None
+        col_ts = None
+        col_lat = None
+        col_lon = None
+        
+        for name_var in ["antena", "antenanombre", "antena_nombre"]:
+            if name_var in cols_low:
+                col_ant = cols_low[name_var]
+                break
+        
+        for name_var in ["fecha y hora", "fechahora", "datetime", "timestamp", "fecha_hora", "fechayhora"]:
+            if name_var in cols_low:
+                col_ts = cols_low[name_var]
+                break
+        
+        for name_var in ["lat", "latitud"]:
+            if name_var in cols_low:
+                col_lat = cols_low[name_var]
+                break
+        
+        for name_var in ["long", "lon", "longitud"]:
+            if name_var in cols_low:
+                col_lon = cols_low[name_var]
+                break
+        
+        if not col_ant or not col_ts:
+            return []
+        
+        # Copiar y limpiar
+        work_df = df.copy()
+        work_df[col_ant] = work_df[col_ant].astype(str).str.strip()
+        
+        # Convertir timestamp
+        work_df['_ts'] = pd.to_datetime(work_df[col_ts], errors='coerce')
+        
+        # Filtrar válidos y sin antena = '0' o vacío
+        work_df = work_df[
+            (work_df['_ts'].notna()) &
+            (work_df[col_ant] != '') &
+            (work_df[col_ant] != '0') &
+            (work_df[col_ant].notna())
+        ].sort_values('_ts').reset_index(drop=True)
+        
+        if len(work_df) < 2:
+            return []
+        
+        # Convertir lat/lon
+        if col_lat and col_lat in work_df.columns:
+            work_df[col_lat] = pd.to_numeric(work_df[col_lat], errors='coerce')
+        if col_lon and col_lon in work_df.columns:
+            work_df[col_lon] = pd.to_numeric(work_df[col_lon], errors='coerce')
+        
+        # Detectar saltos (cambios de antena)
+        saltos = []
+        for i in range(1, len(work_df)):
+            ant_prev = str(work_df.iloc[i-1][col_ant]).strip()
+            ant_curr = str(work_df.iloc[i][col_ant]).strip()
+            ts_curr = work_df.iloc[i]['_ts']
+            
+            if ant_prev != ant_curr:
+                lat_prev = work_df.iloc[i-1].get(col_lat) if col_lat else None
+                lon_prev = work_df.iloc[i-1].get(col_lon) if col_lon else None
+                lat_curr = work_df.iloc[i].get(col_lat) if col_lat else None
+                lon_curr = work_df.iloc[i].get(col_lon) if col_lon else None
+                
+                # Calcular distancia si hay coords
+                dist_km = None
+                if (lat_prev is not None and lon_prev is not None and 
+                    lat_curr is not None and lon_curr is not None and
+                    not (pd.isna(lat_prev) or pd.isna(lon_prev) or pd.isna(lat_curr) or pd.isna(lon_curr))):
+                    try:
+                        from math import radians, cos, sin, asin, sqrt
+                        lon1, lat1, lon2, lat2 = map(radians, [float(lon_prev), float(lat_prev), float(lon_curr), float(lat_curr)])
+                        dlon = lon2 - lon1
+                        dlat = lat2 - lat1
+                        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+                        c = 2 * asin(sqrt(a))
+                        dist_km = 6371 * c
+                    except Exception:
+                        dist_km = None
+                
+                saltos.append({
+                    'origen': ant_prev,
+                    'destino': ant_curr,
+                    'timestamp': ts_curr,
+                    'lat_origen': lat_prev,
+                    'lon_origen': lon_prev,
+                    'lat_destino': lat_curr,
+                    'lon_destino': lon_curr,
+                    'distancia_km': dist_km
+                })
+                
+                if len(saltos) >= max_saltos:
+                    break
+        
+        return saltos
+    except Exception as e:
+        log(f"[WARNING] Error generando historial de cambios de antena: {e}")
+        return []
+
 HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
 
 # --- Formateo para burbuja (números, decimales, duración) ---
@@ -4100,14 +4214,14 @@ section{{margin-top:22px}}
   
     <section>
     <h2>Contactos con más comunicación</h2>
-    <p class="nota"><b>Nota:</b> Los rankings de contactos consideran tanto llamadas y mensajes salientes como entrantes. Se muestran dos tablas: una por cantidad de interacciones y otra por minutos acumulados. Esto permite identificar los contactos más frecuentes y aquellos con mayor duración de comunicación, que pueden ser diferentes. Analizar ambos rankings ayuda a comprender mejor los patrones de comunicación registrados en la bitácora.</p>
+    <p class="nota"><b>Nota:</b> A continuación se le muestran 2 tablas con un TOP LIST de los principales contactos con los que registra mayor interacciones tanto entrantes como salientes. el primer top list se construyo a partir del recuento de las interacciones tanto salietes como entrantes; el segundo se construyo a partir de los contactos con los que acumula más minutos tanto en interaciones entrantes como salientes. Le servirá para detectar patrones en la comunicación del número analizado.</p>
     <div class="two">
       <div>
-        <h3 class="small">Por número de interacciones <span class="sub">(Top {_topC})</span></h3>
+        <h3 class="small">Top List por recuento de interacciones <span class="sub">(Top {_topC})</span></h3>
         {top_contactos_cnt_html}
       </div>
       <div>
-        <h3 class="small">Por minutos acumulados <span class="sub">(Top {_topC})</span></h3>
+        <h3 class="small">Top List por recuento de minutos acumulados <span class="sub">(Top {_topC})</span></h3>
         {top_contactos_dur_html}
       </div>
     </div>
@@ -4171,9 +4285,7 @@ section{{margin-top:22px}}
             _links.append('<a href="#meta">Metadatos</a>')
         if 'id="resumen-antenas"' in html:
             _links.append('<a href="#resumen-antenas">Antenas más activadas</a>')
-        # Incluir enlace a Heatmap si existe
-        if 'id="heatmap-actividad"' in html:
-            _links.append('<a href="#heatmap-actividad">Mapa de calor de actividad</a>')
+        # Heatmap integrado visualmente en "Antenas más activadas"; no añadimos enlace separado al TOC.
         if 'id="interacciones"' in html:
             _links.append('<a href="#interacciones">Contactos con más comunicación</a>')
         # Aceptar dos posibles IDs para rangos horarios
@@ -4184,6 +4296,9 @@ section{{margin-top:22px}}
             _id_rangos = 'rangos'
         if _id_rangos:
             _links.append(f'<a href="#{_id_rangos}">Antenas por rango horario</a>')
+        # Incluir enlace a Historial de cambios si existe
+        if 'id="historial-cambios"' in html:
+            _links.append('<a href="#historial-cambios">Historial de cambios de antena</a>')
         if 'id="interacciones-recientes"' in html:
             _links.append('<a href="#interacciones-recientes">Interacciones recientes</a>')
         if 'id="top-antenas"' in html:
@@ -4451,7 +4566,7 @@ section{{margin-top:22px}}
                 out = []
                 out.append('<section id="resumen-antenas">')
                 out.append('<h2>Antenas más activadas (Top {n})</h2>'.format(n=_topN))
-                out.append('<p class="nota"><b>Nota:</b> Si desea verificar la ubicación de una antena, puede hacer clic en el nombre para abrir su posición en Google Maps.</p>')
+                out.append('<p class="nota"><b>Nota:</b> En las siguientes secciones verá las antenas que más suele activar en determinados rangos de horas; le servirá para inferir en que sector suele permancer en determinada hora, responderse preguntas como ¿Dóde anochece?, ¿Dónde amanece?, etc., se le muestra un top list, pero procure darle prioridad a la primera de la lista -- Importante: puede hacer clic en el nombre de la antena para abrir la posición en Google Maps.</p>')
                 out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
                 out.append('<thead><tr>'
                         '<th>#</th>'
@@ -4715,6 +4830,60 @@ section{{margin-top:22px}}
             sec_ant_rangos = ""
         # === FIN HTML-ANTENAS-RANGOS-1 ===
 
+        # === HTML-HISTORIAL-CAMBIOS-1: Generar bloque de Historial de cambios de antena ===
+        sec_historial = ""
+        try:
+            saltos = generar_historial_cambios_antena(df, max_saltos=100)
+            if saltos:
+                out = []
+                out.append('<section id="historial-cambios">')
+                out.append('<h2>Historial de cambios de antena</h2>')
+                out.append('<p class="nota"><b>Nota:</b> Esta tabla muestra los cambios de antena detectados en orden cronológico. Cada fila representa un momento en que el dispositivo cambió de una antena a otra.</p>')
+                out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
+                out.append('<thead><tr>'
+                          '<th>#</th>'
+                          '<th>Fecha y Hora</th>'
+                          '<th>Antena Origen</th>'
+                          '<th>Antena Destino</th>'
+                          '<th>Distancia (km)</th>'
+                          '</tr></thead><tbody>')
+                
+                for idx, salto in enumerate(saltos, start=1):
+                    ts_str = salto['timestamp'].strftime('%d/%m/%Y %H:%M:%S') if salto['timestamp'] else '—'
+                    origen = salto['origen']
+                    destino = salto['destino']
+                    
+                    # Formato distancia
+                    if salto['distancia_km'] is not None:
+                        dist_str = f"{salto['distancia_km']:.2f}"
+                    else:
+                        dist_str = '—'
+                    
+                    out.append('<tr>'
+                              f'<td>{idx}</td>'
+                              f'<td>{ts_str}</td>'
+                              f'<td>{origen}</td>'
+                              f'<td>{destino}</td>'
+                              f'<td>{dist_str}</td>'
+                              '</tr>')
+                
+                out.append('</tbody></table></div>')
+                out.append("""
+<style>
+#historial-cambios .tabla-compacta { border-collapse: collapse; width:100%; font-size:0.95rem; }
+#historial-cambios .tabla-compacta th, #historial-cambios .tabla-compacta td { border:1px solid #ddd; padding:6px 8px; text-align:left; }
+#historial-cambios .tabla-compacta th { background:#f2f2f2; font-weight:600; }
+#historial-cambios .tabla-scroll { overflow-x:auto; }
+</style>
+""")
+                out.append('</section>')
+                sec_historial = "\n".join(out)
+                log(f"[DEBUG] Historial de cambios: {len(saltos)} saltos detectados")
+        except Exception as e:
+            log(f"[WARNING] Error generando historial de cambios: {e}")
+            sec_historial = ""
+        # === FIN HTML-HISTORIAL-CAMBIOS-1 ===
+
         # === HTML-HEATMAP-1: Generar bloque de Mapa de Calor de actividad ===
         # Contrato de datos: puntos [lat, lon, weight] donde weight se normaliza (0..1) por
         # la frecuencia de activaciones (conteo por coordenada redondeada). Este bloque es
@@ -4777,12 +4946,27 @@ section{{margin-top:22px}}
                                     _lt = float(_sub[col_lat].astype(float).mean()) if (col_lat in _sub.columns) else None
                                     _lg = float(_sub[col_lon].astype(float).mean()) if (col_lon in _sub.columns) else None
                                     _act = int(_r["activaciones"])
+                                    
+                                    # Extraer azimuts únicos si existen
+                                    _azimuts = []
+                                    if col_az and (col_az in _sub.columns):
+                                        try:
+                                            _az_vals = (_sub[col_az].astype(str).str.strip()
+                                                       .replace({"": np.nan, "nan": np.nan})
+                                                       .dropna()
+                                                       .apply(lambda x: int(float(x))))
+                                            _az_counts = _az_vals.value_counts().sort_values(ascending=False)
+                                            _azimuts = [{"deg": int(k), "n": int(v)} for k, v in _az_counts.items()]
+                                        except Exception:
+                                            pass
+                                    
                                     if (_lt is not None) and (_lg is not None):
                                         markers_data.append({
                                             "lat": round(_lt, 6),
                                             "lon": round(_lg, 6),
                                             "name": _ant,
-                                            "count": _act
+                                            "count": _act,
+                                            "azimuts": _azimuts
                                         })
                         except Exception:
                             pass
@@ -4791,11 +4975,15 @@ section{{margin-top:22px}}
                     if heat_points:
                         _heat_js = _json.dumps(heat_points, ensure_ascii=False)
                         _markers_js = _json.dumps(markers_data, ensure_ascii=False)
+                        # Sección integrada al bloque de "Antenas más activadas":
+                        # sin H2 ni nota, para que el mapa se perciba como parte del resumen de antenas.
                         sec_heatmap = f"""
 <section id=\"heatmap-actividad\">
-  <h2>Mapa de calor de actividad</h2>
-  <p class=\"nota\"><b>Nota:</b> La intensidad del color representa la frecuencia relativa de activaciones. Los marcadores (📍) indican las antenas principales del Top {len(markers_data)}. Puede hacer clic en cada marcador para ver el nombre de la antena y su número de activaciones.</p>
-  <div id=\"heatmap\" style=\"height:560px; border:1px solid #ddd; border-radius:8px; overflow:hidden;\"></div>
+    <!-- Nota informativa: este mapa forma parte de "Antenas más activadas" -->
+    <p class=\"nota\">Nota: en el siguiente mapa puede visualizar la ubicación de las antenas reflejadas en la tabla anterior;  haga clic en el punto para desplegar la información de cada antena y para ver la orientación del azimut principal o más activado en cada una.</p>
+    <div style=\"margin:0 40px;\">
+        <div id=\"heatmap\" style=\"height:560px; border:1px solid #ddd; border-radius:8px; overflow:hidden;\"></div>
+    </div>
 
   <script>
     (function() {{
@@ -4808,6 +4996,61 @@ section{{margin-top:22px}}
         attribution: '&copy; OpenStreetMap'
       }}).addTo(map);
       
+                    // === Utilidades para dibujar la orientación (azimut principal) ===
+                    const AZ_COLOR = '#e74c3c';
+                    const AZ_LINE_LEN_M = 1500;      // longitud de la flecha
+                    const AZ_LINE_WEIGHT = 5;         // grosor de la línea del azimut
+                    const AZ_CONE_HALF_DEG = 30;      // medio ángulo del cono (±30°)
+                    const AZ_CONE_STEPS = 24;         // discretización del arco
+            // Convertir grados a radianes
+            const toRad = d => d * Math.PI / 180;
+            // Convertir radianes a grados
+            const toDeg = r => r * 180 / Math.PI;
+            // Calcula un punto destino a partir de lat, lon, rumbo (grados) y distancia (m)
+            function destinationPoint(lat, lon, bearingDeg, distanceM) {{
+                const R = 6371000; // radio medio de la Tierra, en metros
+                const δ = distanceM / R;
+                const θ = toRad(bearingDeg);
+                const φ1 = toRad(lat);
+                const λ1 = toRad(lon);
+                const sinφ1 = Math.sin(φ1), cosφ1 = Math.cos(φ1);
+                const sinδ = Math.sin(δ), cosδ = Math.cos(δ);
+                const sinφ2 = sinφ1 * cosδ + cosφ1 * sinδ * Math.cos(θ);
+                const φ2 = Math.asin(sinφ2);
+                const y = Math.sin(θ) * sinδ * cosφ1;
+                const x = cosδ - sinφ1 * sinφ2;
+                const λ2 = λ1 + Math.atan2(y, x);
+                return [toDeg(φ2), ((toDeg(λ2) + 540) % 360) - 180]; // normaliza longitud a [-180,180]
+            }}
+            // Selecciona el azimut principal: mayor 'n'; si empata, el menor grado
+            function principalAzimut(azimuts) {{
+                if (!Array.isArray(azimuts) || azimuts.length === 0) return null;
+                let best = null;
+                azimuts.forEach(a => {{
+                    const n = (a && typeof a.n === 'number') ? a.n : 0;
+                    const d = (a && typeof a.deg === 'number') ? a.deg : null;
+                    if (d === null) return;
+                    if (!best || n > best.n || (n === best.n && d < best.deg)) best = {{ deg: d, n }};
+                }});
+                return best ? best.deg : null;
+            }}
+                    // Construye un polígono en forma de cono desde el punto de origen
+                    function buildCone(lat, lon, bearingDeg, halfDeg, radiusM, steps) {{
+                        const pts = [];
+                        pts.push([lat, lon]);
+                        const start = bearingDeg - halfDeg;
+                        const end = bearingDeg + halfDeg;
+                        const cnt = Math.max(3, steps|0);
+                        for (let i = 0; i <= cnt; i++) {{
+                            const b = start + (i * (end - start) / cnt);
+                            pts.push(destinationPoint(lat, lon, b, radiusM));
+                        }}
+                        pts.push([lat, lon]);
+                        return pts;
+                    }}
+                    let currentAzLine = null; // polyline activo del último popup
+                    let currentAzCone = null; // polígono del cono activo
+
       // Agregar capa de calor
       const latlngs = heatData.map(p => [p[0], p[1]]);
       const bounds = L.latLngBounds(latlngs);
@@ -4821,12 +5064,39 @@ section{{margin-top:22px}}
             title: m.name
           }}).addTo(map);
           
-          marker.bindPopup(`
-            <div style="font-family:sans-serif;">
-              <strong style="font-size:14px;">${{m.name}}</strong><br>
-              <span style="color:#666; font-size:12px;">Activaciones: ${{m.count.toLocaleString()}}</span>
-            </div>
-          `);
+          // Construir popup con información completa
+          let popupContent = `<div style="font-family:sans-serif; font-size:13px;">`;
+          popupContent += `<strong style="font-size:14px;">${{m.name}}</strong><br>`;
+          popupContent += `<span style="color:#666;">Activaciones: ${{m.count.toLocaleString()}}</span><br>`;
+                    popupContent += `<span style="color:#666;">Coordenadas: ${{m.lat.toFixed(6)}}, ${{m.lon.toFixed(6)}}</span>`;
+          
+          // Agregar azimuts si existen
+                                if (m.azimuts && m.azimuts.length > 0) {{
+                                    m.azimuts.forEach(a => {{
+                                        popupContent += `<br><span style=\"color:#666;\">Azimut ${{a.deg}}°</span>`;
+                                    }});
+                                }}
+          
+          popupContent += `</div>`;
+          marker.bindPopup(popupContent);
+
+                                // Dibuja la flecha y el cono del azimut principal al abrir el popup; limpia al cerrar
+                    marker.on('popupopen', () => {{
+                                    if (currentAzLine) {{ try {{ map.removeLayer(currentAzLine); }} catch(e) {{}} currentAzLine = null; }}
+                                    if (currentAzCone) {{ try {{ map.removeLayer(currentAzCone); }} catch(e) {{}} currentAzCone = null; }}
+                        const bearing = principalAzimut(m.azimuts);
+                        if (typeof bearing === 'number' && isFinite(bearing)) {{
+                            const p1 = [m.lat, m.lon];
+                                        const p2 = destinationPoint(m.lat, m.lon, bearing, AZ_LINE_LEN_M);
+                                        currentAzLine = L.polyline([p1, p2], {{ color: AZ_COLOR, weight: AZ_LINE_WEIGHT, opacity: 1.0 }}).addTo(map);
+                                        const conePts = buildCone(m.lat, m.lon, bearing, AZ_CONE_HALF_DEG, AZ_LINE_LEN_M, AZ_CONE_STEPS);
+                                        currentAzCone = L.polygon(conePts, {{ color: AZ_COLOR, weight: 1, opacity: 0.9, fillColor: AZ_COLOR, fillOpacity: 0.18 }}).addTo(map);
+                        }}
+                    }});
+                    marker.on('popupclose', () => {{
+                                    if (currentAzLine) {{ try {{ map.removeLayer(currentAzLine); }} catch(e) {{}} currentAzLine = null; }}
+                                    if (currentAzCone) {{ try {{ map.removeLayer(currentAzCone); }} catch(e) {{}} currentAzCone = null; }}
+                    }});
         }});
       }}
     }})();
@@ -4907,13 +5177,37 @@ section{{margin-top:22px}}
                     if i != -1:
                         j = html.find("</section>", i)
                         if j != -1:
-                            html = html[:j+10] + "\n" + sec_ant_rangos + html[j+10:]
+                            html = html[:j+10] + "\n" + sec_ant_rangos + html[j_int+10:]
                     else:
                         # si no hay ninguna de las dos, mándalo al final
                         if "</body>" in html:
                             html = html.replace("</body>", sec_ant_rangos + "\n</body>")
                         else:
                             html += sec_ant_rangos
+
+            # 2C) Insertar "Historial de cambios de antena" debajo de "Antenas por rango horario" (si existe)
+            if sec_historial:
+                # intentar ponerlo después del bloque de antenas por rango
+                i_rangos = html.find('id="antenas-rangos"')
+                if i_rangos != -1:
+                    j_rangos = html.find("</section>", i_rangos)
+                    if j_rangos != -1:
+                        html = html[:j_rangos+10] + "\n" + sec_historial + html[j_rangos+10:]
+                else:
+                    # fallback: después de interacciones
+                    i_int = html.find('id="interacciones"')
+                    if i_int == -1:
+                        i_int = html.find("<h2>Contactos con más comunicación")
+                    if i_int != -1:
+                        j_int = html.find("</section>", i_int)
+                        if j_int != -1:
+                            html = html[:j_int+10] + "\n" + sec_historial + html[j_int+10:]
+                    else:
+                        # último fallback: al final
+                        if "</body>" in html:
+                            html = html.replace("</body>", sec_historial + "\n</body>")
+                        else:
+                            html += sec_historial
         except Exception:
             pass
 
@@ -5407,14 +5701,15 @@ section{{margin-top:22px}}
             _links.append('<a href="#meta">Metadatos</a>')
         if _has("resumen-antenas"):
             _links.append('<a href="#resumen-antenas">Antenas más activadas</a>')
-        if _has("heatmap-actividad"):
-            _links.append('<a href="#heatmap-actividad">Mapa de calor de actividad</a>')
+        # Heatmap integrado en el resumen de antenas: no incluir enlace específico en el TOC.
         if _has("interacciones"):
             _links.append('<a href="#interacciones">Contactos con más comunicación</a>')
         # Rangos: aceptar cualquiera de los dos IDs posibles
         if _has("antenas-rangos") or _has("rangos"):
             _id_rangos = "antenas-rangos" if _has("antenas-rangos") else "rangos"
             _links.append(f'<a href="#{_id_rangos}">Antenas por rango horario</a>')
+        if _has("historial-cambios"):
+            _links.append('<a href="#historial-cambios">Historial de cambios de antena</a>')
         if _has("interacciones-recientes"):
             _links.append('<a href="#interacciones-recientes">Interacciones recientes</a>')
         if _has("top-antenas"):
