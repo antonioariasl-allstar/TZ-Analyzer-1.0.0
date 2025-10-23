@@ -2834,6 +2834,120 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
             out.append('</ul></div>')
         # === ALERTAS-2 (fin) ===
 
+        # === Mini-heatmap diario: genera un pequeño mapa por fecha ===
+        # Se muestra DESPUÉS de las tablas y alertas
+        try:
+            # preparar filas válidas con lat/lon (usa el validador ya definido)
+            if col_lat and col_long and (col_lat in df_d.columns) and (col_long in df_d.columns):
+                df_points = df_d[df_d.apply(_es_valida_latlon, axis=1)]
+            else:
+                df_points = df_d.iloc[0:0]
+
+            day_str = pd.to_datetime(d).strftime('%Y%m%d')
+
+            def render_heatmap_html_for_day(df_day, day_id):
+                """
+                Genera un mapa que muestra TODAS las antenas únicas activadas en el día.
+                Cada antena se muestra como un marcador con su nombre y conteo de activaciones.
+                """
+                antenas_dict = {}
+                total_filas = 0
+                if df_day is None or df_day.empty:
+                    return f"<div class='map-notice'>Sin datos de ubicación para {pd.to_datetime(d).strftime('%d/%m/%Y')}</div>"
+                
+                # Recolectar y agrupar TODAS las antenas únicas del día
+                for _, rr in df_day.iterrows():
+                    total_filas += 1
+                    try:
+                        lat = float(rr[col_lat])
+                        lon = float(rr[col_long])
+                    except Exception:
+                        continue
+                    
+                    # Agrupar por antena (usar lat/lon/nombre como clave única)
+                    if col_antena and col_antena in df_day.columns:
+                        name = str(rr.get(col_antena, ''))
+                        if name and name != 'nan' and name != '':
+                            # Usar coordenadas redondeadas para agrupar antenas muy cercanas
+                            lat_round = round(lat, 5)  # ~1 metro de precisión
+                            lon_round = round(lon, 5)
+                            key = (lat_round, lon_round, name)
+                            if key not in antenas_dict:
+                                antenas_dict[key] = {'lat': lat, 'lon': lon, 'name': name, 'count': 0}
+                            antenas_dict[key]['count'] += 1
+
+                if not antenas_dict:
+                    return f"<div class='map-notice'>Sin antenas válidas para mapear en {pd.to_datetime(d).strftime('%d/%m/%Y')} (se procesaron {total_filas} registros con coordenadas)</div>"
+
+                # Convertir TODAS las antenas a lista (sin limitar a top N)
+                markers = list(antenas_dict.values())
+                num_antenas = len(markers)
+                
+                # Log para debugging
+                log(f"[DEBUG] Día {day_id}: {total_filas} registros procesados, {num_antenas} antenas únicas mapeadas")
+                for m in markers:
+                    log(f"  - {m['name']}: {m['count']} activaciones en ({m['lat']:.6f}, {m['lon']:.6f})")
+                
+                _markers_js = json.dumps(markers, ensure_ascii=False)
+                div_id = f"heatmap-{day_id}"
+                
+                html = f'''<div style="margin:16px auto; max-width:95%; padding:0 20px;">
+  <h3 style="font-size:14px; color:#333; margin:8px 0;">📍 Mapa de Antenas del Día</h3>
+  <p style="font-size:12px; color:#666; margin:4px 0 8px;">
+    Se muestran <strong>{num_antenas} antena(s)</strong> con coordenadas válidas de este día. 
+    Haz clic en los marcadores para ver detalles de cada ubicación.
+  </p>
+  <div id="{div_id}" style="height:350px; width:100%; margin-bottom:12px; border:1px solid #ddd; border-radius:6px;"></div>
+</div>
+<script>
+  (function(){{
+    var markers = {_markers_js};
+    if (!Array.isArray(markers) || markers.length === 0) return;
+    try {{
+      var map = L.map('{div_id}', {{ scrollWheelZoom: false }});
+      L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ attribution: '&copy; OpenStreetMap' }}).addTo(map);
+      
+      // Crear bounds a partir de todos los marcadores
+      var latlngs = markers.map(m => [m.lat, m.lon]);
+      var bounds = L.latLngBounds(latlngs);
+      try {{ map.fitBounds(bounds.pad(0.15)); }} catch(e) {{ map.setView(latlngs[0], 12); }}
+      
+      // Agregar TODOS los marcadores de antenas
+      markers.forEach(function(m, idx) {{
+        var mk = L.marker([m.lat, m.lon], {{
+          icon: L.divIcon({{
+            className: 'custom-marker',
+            html: '<div style="background:#e74c3c;color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;border:3px solid white;box-shadow:0 3px 6px rgba(0,0,0,0.4);">�</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+          }})
+        }}).addTo(map);
+        
+        // Log para verificar que se agregó
+        console.log('Marcador ' + (idx+1) + ': ' + m.name + ' en [' + m.lat + ', ' + m.lon + '] con ' + m.count + ' activaciones');
+        
+        mk.bindPopup(`
+          <div style="font-family:sans-serif;min-width:180px;">
+            <strong style="font-size:14px;color:#e74c3c;">📍 Antena #${{idx+1}}</strong><br>
+            <strong style="font-size:13px;color:#333;">${{m.name}}</strong><br>
+            <span style="font-size:12px;color:#666;">✓ Activaciones: ${{m.count}}</span><br>
+            <span style="font-size:11px;color:#999;">📌 Lat: ${{m.lat.toFixed(6)}}, Lon: ${{m.lon.toFixed(6)}}</span>
+          </div>
+        `, {{ maxWidth: 250 }});
+      }});
+    }} catch(err) {{ console.error('heatmap-day error', err); }}
+  }})();
+</script>'''
+                return html
+
+            sec_day_heatmap = render_heatmap_html_for_day(df_points, day_str)
+            out.append(sec_day_heatmap)
+        except Exception as e:
+            # no bloquear la generación por un fallo en el mapa
+            log(f"[WARN] Error generando mini-heatmap para {day_str}: {e}")
+            import traceback
+            log(traceback.format_exc())
+
 
 
     # Estilos mínimos (reusa tu CSS si ya existe; acá defensivo)
@@ -3907,7 +4021,15 @@ section > h2{{background:#000;color:#fff;padding:8px 10px;border-radius:6px;marg
 /* separador visual entre secciones */
 section{{margin-top:22px}}
 .barrow td{{padding-top:0}}
+/* estilos para mini-mapas por día */
+.map-notice{{ padding:12px; background:#f0f0f0; border:1px solid #ddd; border-radius:6px; color:#666; text-align:center; font-size:13px; }}
 </style>
+
+<!-- Dependencias de Leaflet para mapas de calor -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+
 </head>
 <body>
   <header>
@@ -4674,11 +4796,6 @@ section{{margin-top:22px}}
   <h2>Mapa de calor de actividad</h2>
   <p class=\"nota\"><b>Nota:</b> La intensidad del color representa la frecuencia relativa de activaciones. Los marcadores (📍) indican las antenas principales del Top {len(markers_data)}. Puede hacer clic en cada marcador para ver el nombre de la antena y su número de activaciones.</p>
   <div id=\"heatmap\" style=\"height:560px; border:1px solid #ddd; border-radius:8px; overflow:hidden;\"></div>
-
-  <!-- Dependencias Leaflet desde CDN -->
-  <link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\"/>
-  <script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>
-  <script src=\"https://unpkg.com/leaflet.heat/dist/leaflet-heat.js\"></script>
 
   <script>
     (function() {{
