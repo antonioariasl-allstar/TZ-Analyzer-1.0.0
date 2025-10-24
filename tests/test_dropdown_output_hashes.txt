@@ -1,0 +1,7 @@
+Hashes generados: 2025-10-23 22:48:12
+
+[HTML] test_dropdown_output_informe.html
+  Ruta: c:\python_proyectos\TZ_Analysis_1.0.0_REPO\tests\test_dropdown_output_informe.html
+  Tamaño: 1678320 bytes
+  MD5: 030bfe52acb836e0547abe68daac8d9c
+  SHA256: b5c7485839a1916ca7e30a59fd157c7db0d971f313a1f36f464de00f1c6177fd
