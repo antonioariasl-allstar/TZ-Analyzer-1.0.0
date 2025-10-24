@@ -2529,7 +2529,7 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
     # Helpers
     def _pick_col(df, candidatos):
         for c in candidatos:
-            if c in df.columns:
+            if c and c in df.columns:  # Ignora None y strings vacíos
                 return c
         return None
 
@@ -2566,36 +2566,52 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
         s = total_seconds % 60
         return f"{h:02d}:{m:02d}:{s:02d}"
 
-    # Column mapping
+    # Column mapping - buscar primero por config, luego por nombres canónicos y fallbacks
     columnas_config = columnas_config or {}
+    
+    # Si viene mapeado desde config, usar ese nombre; si no, buscar por nombres estándar
     col_contacto = _pick_col(df, [
-        columnas_config.get('tel_contacto', 'tel_contacto'),
-        columnas_config.get('destino', 'destino'),
-        columnas_config.get('b_party', 'b_party'),
-        columnas_config.get('to', 'to'),
-        columnas_config.get('callee', 'callee'),
-        columnas_config.get('contacto', 'contacto'),
+        columnas_config.get('contacto'),
+        columnas_config.get('tel_contacto'),
+        columnas_config.get('destino'),
+        columnas_config.get('b_party'),
+        'contacto', 'tel_contacto', 'destino', 'b_party', 'to', 'callee'
     ]) or 'tel_contacto'  # si no existe, más abajo se maneja
 
     col_duracion = _pick_col(df, [
-        columnas_config.get('duracion', 'duracion'),
-        'dur', 'duration', 'segundos', 'tiempo'
+        columnas_config.get('duracion'),
+        'duracion', 'dur', 'duration', 'segundos', 'tiempo'
     ])
     col_antena = _pick_col(df, [
-        columnas_config.get('antena', 'antena'),
-        'nombre_antena', 'site_name', 'cell_name'
+        columnas_config.get('antena'),
+        'antena', 'nombre_antena', 'site_name', 'cell_name'
     ])
     col_lat = _pick_col(df, [
-        columnas_config.get('lat', 'lat'),
-        'latitud', 'latitude'
+        columnas_config.get('lat'),
+        'lat', 'latitud', 'latitude'
     ])
     col_long = _pick_col(df, [
-        columnas_config.get('long', 'long'),
-        'lon', 'longitud', 'lng', 'longitude'
+        columnas_config.get('long'),
+        columnas_config.get('lon'),
+        'long', 'lon', 'longitud', 'lng', 'longitude'
     ])
     col_azimut = _pick_col(df, [
-        columnas_config.get('azimut', 'azimut'),
-        'azimuth', 'azi', 'angulo'
+        columnas_config.get('azimut'),
+        'azimut', 'azimuth', 'azi', 'angulo'
+    ])
+
+    # Columnas adicionales para la tabla detallada
+    col_tipo = _pick_col(df, [
+        columnas_config.get('tipo'),
+        'tipo', 'interaccion', 'tipo_interaccion', 'interaction', 'tipo_llamada'
+    ])
+    col_celda = _pick_col(df, [
+        columnas_config.get('celda'),
+        'celda', 'cod_celda_inicial', 'cell_id', 'cgi'
+    ])
+    col_hora = _pick_col(df, [
+        columnas_config.get('hora'),
+        'hora', 'hora_inicial', 'time', 'timestamp'
     ])
 
     # === TOP-ANTENA-1A: bbox y validadores de coordenadas ===
@@ -2643,19 +2659,12 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
     if df_local.empty:
         return ""
 
-    # Últimos N días distintos a partir del máximo
+    # TODOS los días con actividad (ordenados de más reciente a más antiguo)
     fechas_ord = sorted(df_local['_fecha'].dropna().unique().tolist(), reverse=True)
     if not fechas_ord:
         return ""
-    # Configurable por CONFIG si existe
-    try:
-        if 'CONFIG' in globals() and isinstance(CONFIG, dict):
-            dias_cfg = CONFIG.get("html", {}).get("interacciones_ultimos_dias", None)
-            if isinstance(dias_cfg, int) and dias_cfg > 0:
-                dias = dias_cfg
-    except Exception:
-        pass
-    fechas_sel = fechas_ord[:dias]
+    # Ya no limitamos por 'dias', mostramos TODOS los días con actividad
+    fechas_sel = fechas_ord
 
     # Si no hay columna de contacto, crea una genérica SIN DETERMINAR
     if col_contacto not in df_local.columns:
@@ -2691,60 +2700,103 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
     else:
         df_local['_dur_sec'] = 0
 
-    # HTML build
+    # HTML con dropdown y tabla por registro (con paginación 20 + ver más de 10)
     out = []
     out.append('<section id="interacciones-recientes">')
-    out.append('<h2>Interacciones de los últimos días registrados en bitácora</h2>')
-    out.append(f'<p>Nota: En esta sección se muestra el consolidado de interacciones salientes y entrantes de los ultimos <strong>{len(fechas_sel)}</strong> día(s) que registra la bitácora.</p>')
+    out.append('<h2>Filtrar interacciones por fecha</h2>')
+    out.append(f'<p>Nota: Se muestran <strong>{len(fechas_sel)}</strong> día(s) con actividad.</p>')
+
+    # Banner de rango + dropdown (solo fechas)
+    fmin = min(fechas_sel)
+    fmax = max(fechas_sel)
+    out.append(f"""
+<div style="background:#e7f3ff;border-left:4px solid #2196F3;padding:12px;margin:12px 0;">
+  <strong>📅 Rango:</strong> {pd.to_datetime(fmin).strftime('%d/%m/%Y')} — {pd.to_datetime(fmax).strftime('%d/%m/%Y')}
+</div>
+<div style="margin:12px 0 18px 0;">
+  <label for="dia-selector" style="font-weight:600;margin-right:8px;">Seleccionar día:</label>
+  <select id="dia-selector" style="padding:8px;font-size:1rem;border:1px solid #ccc;border-radius:4px;">
+""")
+    for d in fechas_sel:
+        _dt = pd.to_datetime(d)
+        label = _dt.strftime("%d/%m/%Y")
+        out.append(f'<option value="{_dt.strftime("%Y-%m-%d")}">{label}</option>')
+    out.append('</select></div>')
 
     # Recorre fechas seleccionadas
     for d in fechas_sel:
-        df_d = df_local[df_local['_fecha'] == d]
-        # ¿Fecha sin antenas válidas?
+        df_d = df_local[df_local['_fecha'] == d].copy()
+        # Orden cronológico por hora/_dt
+        try:
+            df_d = df_d.sort_values(by=['_dt'])
+        except Exception:
+            pass
+
+        # ¿Fecha con alguna antena válida?
         antenas_validas = False
         if col_lat and col_long and (col_lat in df_d.columns) and (col_long in df_d.columns):
             antenas_validas = df_d[col_lat].notna().any() and df_d[col_long].notna().any()
 
-        out.append(f'<h3>{pd.to_datetime(d).strftime("%d/%m/%Y")}</h3>')
-        # KPIs del día: totales, duración, antenas únicas y % sin antena válida
-        total_dia = int(len(df_d))
+        fecha_h = pd.to_datetime(d).strftime("%d/%m/%Y")
+        out.append(f'<div id="content-{pd.to_datetime(d).strftime("%Y-%m-%d")}" class="day-content" style="display:none;">')
+        out.append(f'<h3>Se muestran las interacciones del día: {fecha_h}</h3>')
 
-        # Duración total del día (usa el helper _fmt_hms que ya existe)
+        # KPIs del día
+        total_dia = int(len(df_d))
         dur_total_dia = _fmt_hms(df_d['_dur_sec'].sum() if '_dur_sec' in df_d.columns else 0)
 
-        # Antenas únicas (solo válidas si tenemos lat/long y no son 0.0)
-        def _es_valida_latlon(row):
+        # Validador de coordenadas con bbox El Salvador
+        def _es_valida_latlon_row(row):
             try:
                 lt = float(row[col_lat]) if (col_lat and col_lat in df_d.columns) else None
                 lg = float(row[col_long]) if (col_long and col_long in df_d.columns) else None
                 if lt is None or lg is None:
                     return False
-                return not (np.isnan(lt) or np.isnan(lg) or (abs(lt) < 1e-9 and abs(lg) < 1e-9))
+                if np.isnan(lt) or np.isnan(lg):
+                    return False
+                if abs(lt) < 1e-9 and abs(lg) < 1e-9:
+                    return False
+                # BBOX El Salvador
+                try:
+                    if 'CONFIG' in globals() and isinstance(CONFIG, dict):
+                        bbox = CONFIG.get("geografia", {}).get("sv_bbox", None)
+                        if bbox and isinstance(bbox, dict):
+                            lat_min = bbox.get("lat_min", 12.9)
+                            lat_max = bbox.get("lat_max", 14.5)
+                            lon_min = bbox.get("lon_min", -90.3)
+                            lon_max = bbox.get("lon_max", -87.6)
+                        else:
+                            lat_min, lat_max, lon_min, lon_max = 12.9, 14.5, -90.3, -87.6
+                    else:
+                        lat_min, lat_max, lon_min, lon_max = 12.9, 14.5, -90.3, -87.6
+                    return (lat_min <= lt <= lat_max) and (lon_min <= lg <= lon_max)
+                except Exception:
+                    return True  # si falla el bbox, al menos validamos que no sea 0,0
             except Exception:
                 return False
 
         if total_dia > 0:
             if col_antena and (col_antena in df_d.columns):
-                _valid_rows = df_d[df_d.apply(_es_valida_latlon, axis=1)]
+                _valid_rows = df_d[df_d.apply(_es_valida_latlon_row, axis=1)]
                 antenas_unicas = int(_valid_rows[col_antena].dropna().astype(str).nunique()) if not _valid_rows.empty else 0
             else:
                 antenas_unicas = 0
-            # % sin antena válida (faltan lat/long o son 0.0)
             if col_lat and col_long and (col_lat in df_d.columns) and (col_long in df_d.columns):
-                sin_antena_cnt = int((~df_d.apply(_es_valida_latlon, axis=1)).sum())
+                sin_antena_cnt = int((~df_d.apply(_es_valida_latlon_row, axis=1)).sum())
             else:
-                sin_antena_cnt = total_dia  # si no hay columnas, consideramos 100% sin antena válida
+                sin_antena_cnt = total_dia
             pct_sin_antena = (sin_antena_cnt / total_dia) * 100.0
         else:
             antenas_unicas = 0
             pct_sin_antena = 0.0
 
-        # Render KPI compacto debajo del título del día
+        contactos_unicos = int(df_d['_contacto'].nunique()) if '_contacto' in df_d.columns else 0
         out.append(
             f'<p class="kpis-dia">'
             f'<span><strong>Interacciones:</strong> {total_dia}</span>'
             f' &nbsp;|&nbsp; <span><strong>Duración:</strong> {dur_total_dia}</span>'
             f' &nbsp;|&nbsp; <span><strong>Antenas únicas:</strong> {antenas_unicas}</span>'
+            f' &nbsp;|&nbsp; <span><strong>Contactos únicos:</strong> {contactos_unicos}</span>'
             f' &nbsp;|&nbsp; <span><strong>Sin antena válida:</strong> {pct_sin_antena:.0f}%</span>'
             f'</p>'
         )
@@ -2752,116 +2804,101 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
         if not antenas_validas:
             out.append('<p><em>Nota:</em> Esta fecha no registró antenas válidas en la bitácora.</p>')
 
-        # Agrupación por contacto
         if df_d.empty:
             out.append('<p>Sin interacciones registradas.</p>')
+            out.append('</div>')
             continue
 
-        # Antena top por contacto (modo)
-        def _antena_top(gr):
-            """Devuelve la antena top SOLO entre filas con coords válidas (bbox/NaN/0.0),
-            junto con lat, lon y azimut de esa antena; si no hay válidas, devuelve None."""
-            if not (col_antena and (col_antena in gr.columns)):
-                return None, None, None, None
-
-            # Filtrar filas con coordenadas válidas (usa los validadores de 4.1)
-            if (col_lat in gr.columns) and (col_long in gr.columns):
-                gr_valid = gr[gr.apply(_es_valida_latlon_row, axis=1)]
-            else:
-                gr_valid = gr.iloc[0:0]  # vacío
-
-            if not gr_valid.empty:
-                # Top por frecuencia de antena entre las VÁLIDAS
-                vc = gr_valid[col_antena].dropna().astype(str).value_counts()
-                if not vc.empty:
-                    top_name = vc.index[0]
-                    fila = gr_valid[gr_valid[col_antena].astype(str) == top_name].iloc[0]
-                    lt = fila[col_lat] if col_lat in gr_valid.columns else None
-                    lg = fila[col_long] if col_long in gr_valid.columns else None
-                    az = fila[col_azimut] if col_azimut in gr_valid.columns else None
-                    return top_name, lt, lg, az
-
-            # Si no hay ninguna válida, devolvemos None y la fila mostrará "—"
-            return None, None, None, None
-
-
-
-        # Agregado por contacto
-        agg = (df_d
-               .groupby('_contacto', dropna=False)
-               .agg(interacciones=('_contacto', 'size'),
-                    dur_total=('_dur_sec', 'sum'))
-               .reset_index())
-
-        # Orden: más interacciones, luego mayor duración
-        agg = agg.sort_values(['interacciones', 'dur_total'], ascending=[False, False])
-
-        # Render tabla
+        # Tabla detallada por registro
+        include_celda = bool(col_celda) and (col_celda in df_d.columns)
         out.append('<div class="tabla-scroll">')
         out.append('<table class="tabla-compacta">')
-        out.append('<thead><tr>'
-                   '<th>Contacto</th>'
-                   '<th># Interacciones</th>'
-                   '<th>Duración acumulada</th>'
-                   '<th>Antena (top)</th>'
-                   '<th>Latitud</th>'
-                   '<th>Longitud</th>'
-                   '<th>Azimut</th>'
-                   '</tr></thead><tbody>')
+        thead_cols = ["#","contacto","hora","tipo de interacción","duración","antena","lat","long","azimut"]
+        if include_celda:
+            thead_cols.append("celda")
+        out.append('<thead><tr>' + ''.join(f'<th>{c}</th>' for c in thead_cols) + '</tr></thead><tbody>')
 
-        for _, row in agg.iterrows():
-            contacto = str(row['_contacto'])
-            inter = int(row['interacciones'])
-            dur_hms = _fmt_hms(row['dur_total'])
-            # Extrae antena top de las filas del contacto en el día
-            gr = df_d[df_d['_contacto'] == row['_contacto']]
-            ant, lt, lg, az = _antena_top(gr)
-            # Antena formateada (con link a Google Maps si hay lat/lon válidas)
-            def _ant_fmt(ant, lt, lg):
-                try:
-                    if ant and (lt is not None) and (lg is not None):
-                        lt_f = float(lt); lg_f = float(lg)
-                        # np ya está importado arriba en esta función
-                        if not (np.isnan(lt_f) or np.isnan(lg_f)):
-                            url = f"https://www.google.com/maps?q={lt_f:.6f},{lg_f:.6f}"
-                            return f'<a href="{url}" target="_blank" rel="noopener">{ant}</a>'
-                except Exception:
-                    pass
-                return (ant or "—")
-
-            ant_fmt = _ant_fmt(ant, lt, lg)
-
-
-            def _fmt_coord(v):
-                try:
-                    if v is None or (isinstance(v, float) and np.isnan(v)):
-                        return '—'
-                    return f"{float(v):.6f}"
-                except Exception:
+        def _fmt_coord(val):
+            try:
+                if val is None:
                     return '—'
+                val_f = float(val)
+                if np.isnan(val_f):
+                    return '—'
+                return f"{val_f:.6f}"
+            except Exception:
+                return '—'
 
-            az_fmt = '—'
-            if az is not None:
-                try:
-                    az_f = float(az)
-                    az_fmt = f"{int(round(az_f))}"
-                except Exception:
-                    az_fmt = str(az) if str(az).strip() else '—'
+        def _fmt_az(v):
+            if v is None:
+                return '—'
+            try:
+                f = float(v)
+                return f"{int(round(f))}"
+            except Exception:
+                s = str(v).strip()
+                return s if s else '—'
 
-            # Resalte opcional si interacciones >= 3
-            clase = ' class="resalte"' if inter >= 3 else ''
+        def _fmt_hora(row):
+            try:
+                if col_hora and (col_hora in row.index):
+                    s = str(row[col_hora]).strip()
+                    return s if s else '—'
+                if pd.notna(row.get('_dt')):
+                    return pd.to_datetime(row['_dt']).strftime('%H:%M:%S')
+            except Exception:
+                pass
+            return '—'
 
-            out.append(f'<tr{clase}>'
-                       f'<td>{contacto}</td>'
-                       f'<td>{inter}</td>'
-                       f'<td>{dur_hms}</td>'
-                       f'<td>{ant_fmt}</td>'
-                       f'<td>{_fmt_coord(lt)}</td>'
-                       f'<td>{_fmt_coord(lg)}</td>'
-                       f'<td>{az_fmt}</td>'
-                       '</tr>')
+        def _ant_fmt_link(ant, lt, lg):
+            try:
+                if ant and (lt is not None) and (lg is not None):
+                    lt_f = float(lt); lg_f = float(lg)
+                    if not (np.isnan(lt_f) or np.isnan(lg_f)):
+                        url = f"https://www.google.com/maps?q={lt_f:.6f},{lg_f:.6f}"
+                        return f'<a href="{url}" target="_blank" rel="noopener">{ant}</a>'
+            except Exception:
+                pass
+            return (str(ant).strip() if str(ant).strip() else '—')
+
+        # Render filas: 20 visibles, resto ocultas; botón "Ver más" muestra +10
+        for idx, (_, r) in enumerate(df_d.iterrows(), start=1):
+            contacto = str(r.get('_contacto', 'SIN DETERMINAR'))
+            hora_val = _fmt_hora(r)
+            tipo_val = (str(r.get(col_tipo, '')).strip() if col_tipo and (col_tipo in r.index) else '—')
+            dur_hms = _fmt_hms(r.get('_dur_sec', 0))
+            ant_val = _ant_fmt_link(r.get(col_antena, ''), r.get(col_lat, None), r.get(col_long, None)) if col_antena else '—'
+            lat_val = _fmt_coord(r.get(col_lat, None))
+            long_val = _fmt_coord(r.get(col_long, None))
+            az_val = _fmt_az(r.get(col_azimut, None)) if col_azimut else '—'
+            celda_val = (str(r.get(col_celda, '')).strip() if (include_celda and (col_celda in r.index)) else None)
+
+            row_cls = '' if idx <= 20 else ' style="display:none" class="row-hidden"'
+            tds = [
+                f'<td class="mono">{idx}</td>',
+                f'<td>{contacto}</td>',
+                f'<td class="mono nowrap">{hora_val}</td>',
+                f'<td>{tipo_val}</td>',
+                f'<td class="mono nowrap">{dur_hms}</td>',
+                f'<td>{ant_val}</td>',
+                f'<td class="mono nowrap">{lat_val}</td>',
+                    f'<td class="mono nowrap">{long_val}</td>',
+                    f'<td class="mono">{az_val}°</td>'
+                ]
+            if include_celda:
+                tds.append(f'<td class="mono">{(celda_val if celda_val else "—")}</td>')
+            out.append('<tr data-day="' + pd.to_datetime(d).strftime('%Y-%m-%d') + '"' + row_cls + '>' + ''.join(tds) + '</tr>')
 
         out.append('</tbody></table></div>')
+
+        # Botón Ver más (incrementa de 10 en 10) - solo si hay más de 20 registros
+        if len(df_d) > 20:
+            out.append(
+                f"<div style='margin:10px 0;'>"
+                f"<button class='ver-mas-btn' data-day='{pd.to_datetime(d).strftime('%Y-%m-%d')}' "
+                f"style='padding:8px 12px;border:1px solid #ccc;border-radius:6px;background:#f8f8f8;cursor:pointer;'>Ver más registros</button>"
+                f"</div>"
+            )
         # === ALERTAS-2: avisos por fecha (concentración, movilidad, calidad) ===
         # Helper: distancia (km)
         def _haversine_km(lat1, lon1, lat2, lon2):
@@ -2888,6 +2925,18 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
             return str(s)
 
         alertas = []
+
+        # Agregación mínima por contacto para alertas de concentración
+        try:
+            if total_dia > 0:
+                agg = (df_d.groupby('_contacto')
+                              .agg(interacciones=('_contacto', 'size'),
+                                   dur_total=('_dur_sec', 'sum'))
+                              .reset_index())
+            else:
+                agg = pd.DataFrame()
+        except Exception:
+            agg = pd.DataFrame()
 
         # 1) Concentración por interacciones
         if total_dia > 0 and not agg.empty:
@@ -2951,9 +3000,9 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
         # === Mini-heatmap diario: genera un pequeño mapa por fecha ===
         # Se muestra DESPUÉS de las tablas y alertas
         try:
-            # preparar filas válidas con lat/lon (usa el validador ya definido)
+            # preparar filas válidas con lat/lon (usa el validador ya definido arriba con bbox)
             if col_lat and col_long and (col_lat in df_d.columns) and (col_long in df_d.columns):
-                df_points = df_d[df_d.apply(_es_valida_latlon, axis=1)]
+                df_points = df_d[df_d.apply(_es_valida_latlon_row, axis=1)]
             else:
                 df_points = df_d.iloc[0:0]
 
@@ -2987,14 +3036,34 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
                             lon_round = round(lon, 5)
                             key = (lat_round, lon_round, name)
                             if key not in antenas_dict:
-                                antenas_dict[key] = {'lat': lat, 'lon': lon, 'name': name, 'count': 0}
+                                antenas_dict[key] = {'lat': lat, 'lon': lon, 'name': name, 'count': 0, 'azs': {}}
                             antenas_dict[key]['count'] += 1
+                            # Registrar azimut si existe
+                            if col_azimut and (col_azimut in df_day.columns):
+                                try:
+                                    azv = rr.get(col_azimut, None)
+                                    if azv is not None and str(azv).strip() != '':
+                                        azf = int(round(float(azv)))
+                                        antenas_dict[key]['azs'][azf] = antenas_dict[key]['azs'].get(azf, 0) + 1
+                                except Exception:
+                                    pass
 
                 if not antenas_dict:
                     return f"<div class='map-notice'>Sin antenas válidas para mapear en {pd.to_datetime(d).strftime('%d/%m/%Y')} (se procesaron {total_filas} registros con coordenadas)</div>"
 
                 # Convertir TODAS las antenas a lista (sin limitar a top N)
-                markers = list(antenas_dict.values())
+                # Convertir a lista y calcular azimut principal por antena
+                markers = []
+                for item in antenas_dict.values():
+                    azimut_principal = None
+                    if item.get('azs'):
+                        try:
+                            azimut_principal = max(item['azs'].items(), key=lambda t: t[1])[0]
+                        except Exception:
+                            azimut_principal = None
+                    markers.append({
+                        'lat': item['lat'], 'lon': item['lon'], 'name': item['name'], 'count': item['count'], 'azimut': azimut_principal
+                    })
                 num_antenas = len(markers)
                 
                 # Log para debugging
@@ -3004,53 +3073,71 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
                 
                 _markers_js = json.dumps(markers, ensure_ascii=False)
                 div_id = f"heatmap-{day_id}"
-                
+
                 html = f'''<div style="margin:16px auto; max-width:95%; padding:0 20px;">
-  <h3 style="font-size:14px; color:#333; margin:8px 0;">📍 Mapa de Antenas del Día</h3>
-  <p style="font-size:12px; color:#666; margin:4px 0 8px;">
-    Se muestran <strong>{num_antenas} antena(s)</strong> con coordenadas válidas de este día. 
-    Haz clic en los marcadores para ver detalles de cada ubicación.
-  </p>
-  <div id="{div_id}" style="height:350px; width:100%; margin-bottom:12px; border:1px solid #ddd; border-radius:6px;"></div>
+    <p style="font-size:12px; color:#666; margin:4px 0 8px;">
+        Se muestran <strong>{num_antenas} antena(s)</strong> con coordenadas válidas de este día. 
+        Haz clic en los marcadores para ver detalles de cada ubicación.
+    </p>
+    <div id="wrap-{div_id}" class="tz-map-wrap" style="position:relative;">
+        <button class="tz-fs-btn" title="Pantalla completa" data-map-id="{div_id}" style="position:absolute; right:10px; top:10px; z-index:1000; background:#ffffffc9; border:1px solid #bbb; border-radius:6px; padding:6px 8px; cursor:pointer;">⛶</button>
+        <div id="{div_id}" style="height:clamp(420px, 70vh, 720px); width:100%; margin-bottom:12px; border:1px solid #ddd; border-radius:6px;"></div>
+    </div>
 </div>
 <script>
-  (function(){{
-    var markers = {_markers_js};
-    if (!Array.isArray(markers) || markers.length === 0) return;
-    try {{
-      var map = L.map('{div_id}', {{ scrollWheelZoom: false }});
-      L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ attribution: '&copy; OpenStreetMap' }}).addTo(map);
+    (function(){{
+        var markers = {_markers_js};
+        if (!Array.isArray(markers) || markers.length === 0) return;
+        try {{
+            var map = L.map('{div_id}', {{ scrollWheelZoom: false }});
+            L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ attribution: '&copy; OpenStreetMap' }}).addTo(map);
       
-      // Crear bounds a partir de todos los marcadores
-      var latlngs = markers.map(m => [m.lat, m.lon]);
-      var bounds = L.latLngBounds(latlngs);
-      try {{ map.fitBounds(bounds.pad(0.15)); }} catch(e) {{ map.setView(latlngs[0], 12); }}
+            // Crear bounds a partir de todos los marcadores
+            var latlngs = markers.map(function(m){{ return [m.lat, m.lon]; }});
+            var bounds = L.latLngBounds(latlngs);
+            
+            // Si solo hay 1 marcador, usar zoom 12; si hay varios, fitBounds con padding muy generoso
+            if (markers.length === 1) {{
+                map.setView([markers[0].lat, markers[0].lon], 12);
+            }} else {{
+                try {{ 
+                    map.fitBounds(bounds, {{ padding: [80, 80] }}); 
+                }} catch(e) {{ 
+                    map.setView(latlngs[0], 10); 
+                }}
+            }}
       
-      // Agregar TODOS los marcadores de antenas
-      markers.forEach(function(m, idx) {{
-        var mk = L.marker([m.lat, m.lon], {{
-          icon: L.divIcon({{
-            className: 'custom-marker',
-            html: '<div style="background:#e74c3c;color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;border:3px solid white;box-shadow:0 3px 6px rgba(0,0,0,0.4);">�</div>',
-            iconSize: [28, 28],
-            iconAnchor: [14, 14]
-          }})
-        }}).addTo(map);
+            // Agregar TODOS los marcadores de antenas
+            markers.forEach(function(m, idx) {{
+                var mk = L.marker([m.lat, m.lon]).addTo(map);
         
-        // Log para verificar que se agregó
-        console.log('Marcador ' + (idx+1) + ': ' + m.name + ' en [' + m.lat + ', ' + m.lon + '] con ' + m.count + ' activaciones');
+                // Log para verificar que se agregó
+                console.log('Marcador ' + (idx+1) + ': ' + m.name + ' en [' + m.lat + ', ' + m.lon + '] con ' + m.count + ' activaciones');
         
-        mk.bindPopup(`
-          <div style="font-family:sans-serif;min-width:180px;">
-            <strong style="font-size:14px;color:#e74c3c;">📍 Antena #${{idx+1}}</strong><br>
-            <strong style="font-size:13px;color:#333;">${{m.name}}</strong><br>
-            <span style="font-size:12px;color:#666;">✓ Activaciones: ${{m.count}}</span><br>
-            <span style="font-size:11px;color:#999;">📌 Lat: ${{m.lat.toFixed(6)}}, Lon: ${{m.lon.toFixed(6)}}</span>
-          </div>
-        `, {{ maxWidth: 250 }});
-      }});
-    }} catch(err) {{ console.error('heatmap-day error', err); }}
-  }})();
+                var popupHtml = '' +
+                    '<div style="font-family:sans-serif;min-width:180px;">' +
+                    '<strong style="font-size:14px;">Antena #' + (idx+1) + '</strong><br>' +
+                    '<strong style="font-size:13px;color:#333;">' + (m.name || '') + '</strong><br>' +
+                    '<span style="font-size:12px;color:#666;">Activaciones: ' + (m.count || 0) + '</span><br>' +
+                    '<span style="font-size:11px;color:#999;">Coordenadas: ' + (typeof m.lat==='number'? m.lat.toFixed(6): m.lat) + ', ' + (typeof m.lon==='number'? m.lon.toFixed(6): m.lon) + '</span>' +
+                    ((m.azimut !== null && m.azimut !== undefined) ? "<br><span style=\'font-size:12px;color:#666;\'>Azimut principal: " + m.azimut + "°</span>" : '') +
+                    '</div>';
+                mk.bindPopup(popupHtml, {{ maxWidth: 250 }});
+            }});
+
+            // Registrar mapa y bounds para re-encuadre al cambiar de día
+            try {{
+                window.__tzDailyMaps = window.__tzDailyMaps || {{}};
+                window.__tzDailyMaps['{div_id}'] = {{
+                    map: map,
+                    bounds: bounds,
+                    markersCount: markers.length,
+                    center: (latlngs && latlngs.length>0) ? latlngs[0] : null,
+                    wrapperId: 'wrap-{div_id}'
+                }};
+            }} catch(e) {{}}
+        }} catch(err) {{ console.error('heatmap-day error', err); }}
+    }})();
 </script>'''
                 return html
 
@@ -3062,7 +3149,8 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
             import traceback
             log(traceback.format_exc())
 
-
+        # Cerrar contenedor del día
+        out.append('</div>')  # cierra day-content
 
     # Estilos mínimos (reusa tu CSS si ya existe; acá defensivo)
     out.append("""
@@ -3073,6 +3161,8 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
 #interacciones-recientes .tabla-compacta th { background: #f2f2f2; }
 #interacciones-recientes .tabla-scroll { overflow-x: auto; }
 #interacciones-recientes tr.resalte { font-weight: 600; }
+#interacciones-recientes .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+#interacciones-recientes .nowrap { white-space: nowrap; }
 </style>
 """)
     out.append("""
@@ -3087,6 +3177,103 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
 #interacciones-recientes .alertas-dia ul { margin: 0 0 0 18px; padding: 0; }
 #interacciones-recientes .alerta-item { color: #b45309; }
 </style>
+""")
+    # JS: mostrar/ocultar contenedores + ver más por día
+    out.append("""
+<script>
+(function(){
+    function showDay(dateStr){
+        var all = document.querySelectorAll('#interacciones-recientes .day-content');
+        all.forEach(function(el){ el.style.display = 'none'; });
+        var el = document.getElementById('content-' + dateStr);
+        if(el){
+            el.style.display = 'block';
+            // Reencuadrar el mapa del día mostrado (Leaflet necesita invalidateSize en contenedores que estaban ocultos)
+            setTimeout(function(){
+                try {
+                    var key = 'heatmap-' + String(dateStr).replace(/-/g,'');
+                    var reg = (window.__tzDailyMaps || {})[key];
+                    if (reg && reg.map) {
+                        reg.map.invalidateSize();
+                        if (reg.markersCount === 1 && reg.center) {
+                            reg.map.setView(reg.center, 12);
+                        } else if (reg.bounds) {
+                            reg.map.fitBounds(reg.bounds, { padding: [80, 80] });
+                        }
+                    }
+                } catch(e) {}
+            }, 0);
+        }
+    }
+    var sel = document.getElementById('dia-selector');
+    if(sel){ sel.addEventListener('change', function(){ showDay(this.value); });
+             if(sel.options.length>0){ showDay(sel.options[0].value); } }
+
+    // Ver más: revela 10 filas ocultas por click
+    document.querySelectorAll('#interacciones-recientes .ver-mas-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            var day = this.getAttribute('data-day');
+            var rows = document.querySelectorAll('tr[data-day="' + day + '"].row-hidden');
+            var reveal = 10;
+            var count = 0;
+            for(var i=0;i<rows.length && count<reveal;i++,count++){
+                rows[i].style.display = 'table-row';
+                rows[i].classList.remove('row-hidden');
+            }
+            if(document.querySelectorAll('tr[data-day="' + day + '"].row-hidden').length === 0){
+                this.style.display = 'none';
+            }
+        });
+    });
+
+    // Delegación: botón de pantalla completa en mapas diarios
+    document.addEventListener('click', function(ev){
+        var btn = ev.target.closest('.tz-fs-btn');
+        if(!btn) return;
+        var mapId = btn.getAttribute('data-map-id');
+        var reg = (window.__tzDailyMaps || {})[mapId];
+        if(!reg || !reg.map) return;
+        var wrap = document.getElementById('wrap-' + mapId);
+        if(!wrap) return;
+        var mapEl = document.getElementById(mapId);
+        if(!mapEl) return;
+
+        var fs = wrap.classList.toggle('tz-fs-active');
+        if(fs){
+            // Entrar a pseudo pantalla completa
+            wrap.setAttribute('data-prev-scroll', String(window.scrollY||0));
+            mapEl.setAttribute('data-prev-height', mapEl.style.height || '');
+            // Estilos para overlay
+            wrap.style.position = 'fixed';
+            wrap.style.inset = '0';
+            wrap.style.zIndex = '9999';
+            mapEl.style.height = '100%';
+            document.body.style.overflow = 'hidden';
+        } else {
+            // Salir
+            var prevH = mapEl.getAttribute('data-prev-height') || '';
+            mapEl.style.height = prevH;
+            wrap.style.position = 'relative';
+            wrap.style.inset = '';
+            wrap.style.zIndex = '';
+            document.body.style.overflow = '';
+            var sy = parseInt(wrap.getAttribute('data-prev-scroll')||'0',10) || 0;
+            window.scrollTo(0, sy);
+        }
+        // Recalcular mapa
+        setTimeout(function(){
+            try{
+                reg.map.invalidateSize();
+                if (reg.markersCount === 1 && reg.center) {
+                    reg.map.setView(reg.center, fs ? 13 : 12);
+                } else if (reg.bounds) {
+                    reg.map.fitBounds(reg.bounds, { padding: fs ? [100,100] : [80,80] });
+                }
+            }catch(e){}
+        }, 50);
+    });
+})();
+</script>
 """)
 
     out.append('</section>')
@@ -4214,7 +4401,7 @@ section{{margin-top:22px}}
   
     <section>
     <h2>Contactos con más comunicación</h2>
-    <p class="nota"><b>Nota:</b> A continuación se le muestran 2 tablas con un TOP LIST de los principales contactos con los que registra mayor interacciones tanto entrantes como salientes. el primer top list se construyo a partir del recuento de las interacciones tanto salietes como entrantes; el segundo se construyo a partir de los contactos con los que acumula más minutos tanto en interaciones entrantes como salientes. Le servirá para detectar patrones en la comunicación del número analizado.</p>
+    <p class="nota"><b>Nota:</b> en esta sección se muestran dos TOP LIST de los principales contactos con los que registra mayor interacciones tanto entrantes como salientes. el primer top list se construyo a partir del recuento de las interacciones tanto salietes como entrantes; el segundo se construyo a partir de los contactos con los que acumula más minutos tanto en interaciones entrantes como salientes. Le servirá para detectar patrones en la comunicación del número analizado.</p>
     <div class="two">
       <div>
         <h3 class="small">Top List por recuento de interacciones <span class="sub">(Top {_topC})</span></h3>
@@ -4307,13 +4494,16 @@ section{{margin-top:22px}}
             _links.append('<a href="#todos-contactos">Todos los contactos</a>')
 
         if _links:
-            _toc_html = '<nav id="toc" class="toc" style="position:sticky; top:0; z-index:999; background:#fff; border-bottom:1px solid #e5e7eb; box-shadow:0 2px 6px rgba(0,0,0,.06); padding:8px 12px;">' + ' ... '.join(_links) + '</nav>'
+            _toc_html = '<nav id="toc" class="toc" style="z-index:999; background:#fff; border-bottom:1px solid #e5e7eb; box-shadow:0 2px 6px rgba(0,0,0,.06); padding:8px 12px;">' + ' ... '.join(_links) + '</nav>'
 
-            # 3) CSS para la barra sticky
+            # 3) CSS para la barra sticky (desactivada en móvil)
             _css_toc = """
 .toc{position:sticky;top:0;background:#fff;padding:8px 0 10px;margin:6px 0 10px;border-bottom:1px solid #eee;z-index:999}
 .toc a{margin-right:10px;text-decoration:none;color:var(--accent);font-size:13px}
 .toc a:hover{text-decoration:underline}
+@media (max-width: 768px) {
+  .toc{position:relative;top:auto;}
+}
 """
             # Inyectar CSS dentro del <style>
             html = html.replace("</style>", _css_toc + "</style>", 1)
@@ -4432,6 +4622,28 @@ section{{margin-top:22px}}
         </style>
         """
         html = html.replace("</style>", _css_resp + "</style>", 1)
+        # === HTML-RESPONSIVE-2: Mejoras de usabilidad táctil en móvil ===
+        _css_mobile_touch = """
+        <style>
+        html{ scroll-behavior: smooth; }
+        @media (max-width: 768px) {
+            /* Selector de día: más grande y de ancho completo */
+            #dia-selector{ display:block; width:100%; font-size:16px; padding:12px 14px; border-radius:8px; }
+            /* Botón Ver más: área táctil mínima 44px */
+            .ver-mas-btn{ padding:10px 14px !important; min-height:44px; font-size:15px; border-radius:8px; }
+            /* Botón fullscreen del mini-mapa: un poco más grande */
+            .tz-fs-btn{ padding:10px 12px !important; font-size:18px; }
+            /* Controles de zoom de Leaflet: más grandes para dedo */
+            .leaflet-control-zoom a{ width:44px; height:44px; line-height:44px; font-size:22px; }
+            .leaflet-control-zoom{ box-shadow:0 1px 4px rgba(0,0,0,.15); }
+            /* Links del menú TOC: más área clicable y separación vertical */
+            .toc a{ display:inline-block; padding:10px 12px; margin:4px 8px 6px 0; border-radius:999px; }
+            /* Tablas: más aire y legibilidad */
+            table.tbl th, table.tbl td{ padding:10px 12px; font-size:14px; line-height:1.35; }
+        }
+        </style>
+        """
+        html = html.replace("</style>", _css_mobile_touch + "</style>", 1)
         
 
     except Exception:
@@ -4566,7 +4778,7 @@ section{{margin-top:22px}}
                 out = []
                 out.append('<section id="resumen-antenas">')
                 out.append('<h2>Antenas más activadas (Top {n})</h2>'.format(n=_topN))
-                out.append('<p class="nota"><b>Nota:</b> En las siguientes secciones verá las antenas que más suele activar en determinados rangos de horas; le servirá para inferir en que sector suele permancer en determinada hora, responderse preguntas como ¿Dóde anochece?, ¿Dónde amanece?, etc., se le muestra un top list, pero procure darle prioridad a la primera de la lista -- Importante: puede hacer clic en el nombre de la antena para abrir la posición en Google Maps.</p>')
+                out.append('<p class="nota"><b>Nota:</b> En esta sección se muestra un top list de las antenas más activadas en el periodo analizado; seguidamente se muestra la ubicación de esas antenas segun sus coordenadas.</p>')
                 out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
                 out.append('<thead><tr>'
                         '<th>#</th>'
@@ -4980,9 +5192,9 @@ section{{margin-top:22px}}
                         sec_heatmap = f"""
 <section id=\"heatmap-actividad\">
     <!-- Nota informativa: este mapa forma parte de "Antenas más activadas" -->
-    <p class=\"nota\">Nota: en el siguiente mapa puede visualizar la ubicación de las antenas reflejadas en la tabla anterior;  haga clic en el punto para desplegar la información de cada antena y para ver la orientación del azimut principal o más activado en cada una.</p>
-    <div style=\"margin:0 40px;\">
-        <div id=\"heatmap\" style=\"height:560px; border:1px solid #ddd; border-radius:8px; overflow:hidden;\"></div>
+    <p class=\"nota\">Nota: Recomendación: para mejorar la visualización del mapa desde un celular, hágalo con la pantalla horizontal; al hacer clic en un punto de la antena se desplegará la información y se habilitará el azimut.</p>
+    <div id=\"wrap-heatmap\" class=\"tz-map-wrap\" style=\"position:relative; margin:0 40px;\">
+            <button class=\"tz-fs-btn\" title=\"Pantalla completa\" data-map-id=\"heatmap\" style=\"position:absolute; right:10px; top:10px; z-index:1000; background:#ffffffc9; border:1px solid #bbb; border-radius:6px; padding:6px 8px; cursor:pointer;\">⛶</button>\n        <div id=\"heatmap\" style=\"height:560px; border:1px solid #ddd; border-radius:8px; overflow:hidden;\"></div>
     </div>
 
   <script>
@@ -5099,6 +5311,17 @@ section{{margin-top:22px}}
                     }});
         }});
       }}
+      // Registrar mapa global para fullscreen
+      try {{
+        window.__tzDailyMaps = window.__tzDailyMaps || {{}};
+        window.__tzDailyMaps['heatmap'] = {{
+          map: map,
+          bounds: bounds,
+          markersCount: (Array.isArray(markers) && markers.length>0) ? markers.length : latlngs.length,
+          center: bounds.getCenter(),
+          wrapperId: 'wrap-heatmap'
+        }};
+      }} catch(e) {{}}
     }})();
   </script>
 </section>
@@ -5718,7 +5941,7 @@ section{{margin-top:22px}}
             _links.append('<a href="#todos-contactos">Todos los contactos</a>')
 
         if _links:
-            _toc_html = '<nav id="toc" class="toc" style="position:sticky; top:0; z-index:999; background:#fff; border-bottom:1px solid #e5e7eb; box-shadow:0 2px 6px rgba(0,0,0,.06); padding:8px 12px;">' + ' ... '.join(_links) + '</nav>'
+            _toc_html = '<nav id="toc" class="toc" style="z-index:999; background:#fff; border-bottom:1px solid #e5e7eb; box-shadow:0 2px 6px rgba(0,0,0,.06); padding:8px 12px;">' + ' ... '.join(_links) + '</nav>'
             # Si ya existe un TOC, reemplazarlo; si no, insertarlo después del </header>
             i = html.find('<nav id="toc"')
             if i != -1:
