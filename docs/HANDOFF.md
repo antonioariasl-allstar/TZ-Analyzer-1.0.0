@@ -278,3 +278,100 @@ def render_heatmap_html_for_day(df_day, day_id):
 El usuario quiere mejorar la claridad del reporte. Hemos identificado que la discrepancia entre tabla (resumen por contacto) y mapa (todas las antenas) genera confusión. La solución acordada es implementar un sistema de pestañas que ofrezca múltiples perspectivas de los datos. Todo el análisis está documentado en esta sesión. El código actual funciona bien, solo falta implementar el nuevo diseño.
 
 ---
+
+## Sesión 2025-10-23 (Noche) - UX Móvil y Fullscreen en Mapas
+
+**Responsable:** GitHub Copilot (Claude Sonnet 3.5)  
+**Rama:** `feature/dropdown-clean`  
+**Archivos modificados:** `script_principal_bitacoras_refactory.py`
+
+### ✅ Mejoras implementadas:
+
+1. **Menú de navegación no sticky en móvil**
+   - Eliminado `position:sticky; top:0` de los atributos inline del `<nav id="toc">`
+   - Añadido media query `@media (max-width: 768px)` que cambia `.toc` a `position:relative`
+   - En computadora: menú sigue siendo sticky (fijo al hacer scroll)
+   - En móvil: menú se desplaza con el contenido, liberando espacio vertical
+
+2. **Mejoras táctiles para móvil (≤768px)**
+   - Selector de día (`#dia-selector`): ancho 100%, font 16px, padding 12px
+   - Botones "Ver más" (`.ver-mas-btn`): min-height 44px, padding aumentado
+   - Botón fullscreen (`.tz-fs-btn`): padding aumentado, font 18px
+   - Controles de zoom Leaflet: 44x44px (estándar táctil)
+   - Enlaces del menú TOC: padding 10px con área clicable mayor
+   - Tablas: padding 10px en celdas, font 14px
+
+3. **Scroll suave global**
+   - Añadido `html{ scroll-behavior: smooth; }` para navegación fluida
+
+4. **Botón de pantalla completa en TODOS los mapas**
+   - **Mapas diarios** (ya existía): Botón "⛶" funcional con toggle fullscreen
+   - **Mapa global/heatmap** (NUEVO): Añadido wrapper `#wrap-heatmap` y botón fullscreen
+   - Ambos mapas registrados en `window.__tzDailyMaps` con:
+     - `map`, `bounds`, `center`, `markersCount`, `wrapperId`
+   - Handler de fullscreen unificado por delegación de eventos
+   - Al entrar: overlay fijo z-index:9999, bloqueo de scroll body, altura 100%
+   - Al salir: restaura altura previa, scroll position, y posición relativa
+   - Reencuadre automático con `invalidateSize()` y `fitBounds()` al cambiar estado
+
+### 📊 Código actualizado:
+
+**Ubicación del mapa global con fullscreen** (líneas ~5196-5327):
+```python
+# Wrapper con botón fullscreen
+<div id="wrap-heatmap" class="tz-map-wrap" style="position:relative; margin:0 40px;">
+    <button class="tz-fs-btn" title="Pantalla completa" data-map-id="heatmap" ...>⛶</button>
+    <div id="heatmap" style="height:560px; ..."></div>
+</div>
+
+# Registro en JS
+window.__tzDailyMaps['heatmap'] = {
+  map: map,
+  bounds: bounds,
+  markersCount: ...,
+  center: bounds.getCenter(),
+  wrapperId: 'wrap-heatmap'
+};
+```
+
+**Handler de fullscreen** (líneas ~3230-3270):
+```javascript
+document.addEventListener('click', function(ev){
+    var btn = ev.target.closest('.tz-fs-btn');
+    if(!btn) return;
+    var mapId = btn.getAttribute('data-map-id');
+    var reg = (window.__tzDailyMaps || {})[mapId];
+    // ... toggle fullscreen con reencuadre
+});
+```
+
+### 🧪 Validación:
+
+- Generado HTML de prueba exitosamente
+- Verificado que el botón "⛶" aparece en:
+  - Mapa global/heatmap (esquina superior derecha)
+  - Todos los mini-mapas diarios
+- CSS mobile responsive aplicado correctamente
+- Menú TOC ya no sticky en móvil confirmado
+
+### 📝 Notas técnicas:
+
+1. **Compatibilidad:** Fullscreen API simulado con CSS (fixed overlay) para máxima compatibilidad
+2. **Performance:** Delegación de eventos evita listeners por cada botón
+3. **Accesibilidad:** Botones con `title` descriptivo y área táctil 44px mínimo
+4. **Responsive:** Altura de mapas diarios con `clamp(420px, 70vh, 720px)`
+5. **Zoom preservado:** No se modificó la lógica de zoom ni fitBounds existente
+
+### 🚀 Próximos pasos sugeridos:
+
+1. **Opcional - Modo offline:** Documentar uso de tiles locales (alternativa a CDN)
+2. **Opcional - Thead sticky:** Hacer que encabezados de tabla sean sticky en scroll
+3. **Opcional - Back to top:** Botón flotante para volver al TOC en móvil
+4. **Testing:** Migrar `test_dropdown_feature.py` a pytest con asserts
+5. **Refactoring:** Ver TODO.md para plan de mejoras estructurales (logging, plantillas, etc.)
+
+### ✉️ Para el siguiente asistente:
+
+Todas las mejoras de UX móvil están completas y validadas. El informe ahora es más usable en teléfonos (menú no estorba, controles táctiles grandes, fullscreen en todos los mapas). El código está listo para commit en `feature/dropdown-clean`. Si el usuario pide más cambios móviles, revisar el TODO.md para ideas adicionales (thead sticky, back-to-top). Si pide cambios estructurales, consultar AUDITORIA.md para el plan de refactoring priorizado.
+
+---
