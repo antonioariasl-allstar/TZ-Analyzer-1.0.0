@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Importar módulo a testear
-from tz_core.utils import sha256_de_archivo
+from tz_core.utils import sha256_de_archivo, escribe_hashes_txt
 
 
 def test_sha256_de_archivo():
@@ -76,13 +76,73 @@ def test_sha256_archivo_vacio():
             pass  # Ignorar errores de limpieza en Windows
 
 
+def test_escribe_hashes_txt():
+    """Test de escritura de archivo de hashes"""
+    print("🧪 Testing escribe_hashes_txt...")
+    
+    # Crear archivos temporales de prueba
+    test_files = []
+    test_pares = []
+    
+    try:
+        # Crear dos archivos con contenido conocido
+        for i, content in enumerate([b"contenido archivo 1", b"contenido archivo 2"]):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f"_test{i}.txt") as tmp_file:
+                tmp_file.write(content)
+                tmp_file.flush()
+                test_files.append(tmp_file.name)
+                test_pares.append((tmp_file.name, f"test_file_{i}.txt"))
+        
+        # Crear archivo de hashes
+        with tempfile.NamedTemporaryFile(delete=False, suffix="_hashes.txt") as hash_file:
+            hash_file_path = hash_file.name
+        
+        # Ejecutar función
+        escribe_hashes_txt(hash_file_path, test_pares)
+        
+        # Verificar contenido del archivo de hashes
+        with open(hash_file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Verificaciones
+        assert "SHA256" in content, "Debe contener prefijo SHA256"
+        assert "test_file_0.txt" in content, "Debe contener nombre relativo del primer archivo"
+        assert "test_file_1.txt" in content, "Debe contener nombre relativo del segundo archivo"
+        
+        lines = content.strip().split('\n')
+        assert len(lines) == 2, f"Debe tener 2 líneas, encontrado {len(lines)}"
+        
+        # Verificar formato de líneas
+        for line in lines:
+            parts = line.split()
+            assert len(parts) == 3, f"Cada línea debe tener 3 partes: SHA256 <hash> <file>"
+            assert parts[0] == "SHA256", f"Primera parte debe ser 'SHA256'"
+            assert len(parts[1]) == 64, f"Hash debe tener 64 caracteres"
+            assert parts[2].startswith("test_file_"), f"Archivo debe empezar con 'test_file_'"
+        
+        print(f"✅ PASS: Archivo de hashes generado correctamente")
+        return True
+        
+    finally:
+        # Limpiar archivos temporales
+        for tmp_file in test_files:
+            try:
+                os.unlink(tmp_file)
+            except:
+                pass
+        try:
+            os.unlink(hash_file_path)
+        except:
+            pass
+
+
 def main():
     """Ejecutar todos los tests"""
     print("🏗️  TESTS UNITARIOS - tz_core.utils")
     print("=" * 40)
     
     tests_passed = 0
-    total_tests = 2
+    total_tests = 3
     
     # Test 1
     if test_sha256_de_archivo():
@@ -90,6 +150,10 @@ def main():
     
     # Test 2
     if test_sha256_archivo_vacio():
+        tests_passed += 1
+    
+    # Test 3 - NUEVO
+    if test_escribe_hashes_txt():
         tests_passed += 1
     
     print("\n" + "=" * 40)

@@ -27,6 +27,26 @@ def sha256_de_archivo(path: str) -> str:
     return h.hexdigest()
 
 
+def escribe_hashes_txt(dest_path: str, pares: List[Tuple[str, str]]) -> None:
+    """
+    Escribe archivo HASHES.txt con formato: SHA256 <hex> <ruta_relativa>
+    
+    Args:
+        dest_path: Ruta donde escribir el archivo HASHES.txt
+        pares: Lista de tuplas (ruta_absoluta, ruta_relativa)
+    """
+    lines = []
+    for abs_p, rel_p in pares:
+        try:
+            hexa = sha256_de_archivo(abs_p)
+            lines.append(f"SHA256  {hexa}  {rel_p}")
+        except Exception as e:
+            lines.append(f"# ERROR hashing {rel_p}: {e}")
+    
+    with open(dest_path, "w", encoding="utf-8") as fw:
+        fw.write("\n".join(lines) + "\n")
+
+
 def placeholder_function():
     """
     Placeholder para utilidades que se extraerán del script principal
