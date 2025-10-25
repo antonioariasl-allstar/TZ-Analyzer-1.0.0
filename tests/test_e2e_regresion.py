@@ -5,13 +5,13 @@ KMZ + HTML con el dataset de ejemplo y compara contra golden normalizado.
 Modo de uso inicial para crear golden:
   python -m tests.update_golden
 Luego:
-  pytest -q tests/test_e2e_regresion.py
+  python tests/test_e2e_regresion.py
 """
 from __future__ import annotations
 import os
 import tempfile
 import pandas as pd
-import pytest
+# import pytest  # Comentado para no depender de pytest
 
 from script_principal_bitacoras_refactory import (
     generar_kml,

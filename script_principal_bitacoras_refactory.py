@@ -911,14 +911,13 @@ def _dedupe_columns(df):
         df = df.drop(columns=same[1:])
 
     return df
+# === IMPORTS MODULARES (gradual refactoring) ===
+from tz_core.utils import sha256_de_archivo
+
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 def _sha256_de_archivo(path: str) -> str:
-    import hashlib
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    """Wrapper para compatibilidad - usar sha256_de_archivo de tz_core.utils"""
+    return sha256_de_archivo(path)
 
 
 def _escribe_hashes_txt(dest_path: str, pares: list[tuple[str, str]]):
