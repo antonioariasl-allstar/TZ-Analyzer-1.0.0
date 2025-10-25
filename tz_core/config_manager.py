@@ -193,5 +193,85 @@ def cfg_build_rename_map(CONFIG: dict) -> dict:
 
 # TODO: Extraer del script principal:
 # - _solicitar_color_tema()
-# - _atomic_write_json()
+# - _atomic_write_json() 
 # - cfg_add_user_synonym()
+
+
+def solicitar_color_tema(CONFIG, input_mock=None):
+    """
+    🚨 FUNCIÓN INTERACTIVA CRÍTICA: Interfaz para elegir color de tema visual del informe/KML.
+    
+    FUNCIONALIDAD:
+    - Muestra paleta de 60 colores configurables (diferenciación de bitácoras)
+    - Permite selección por número, HEX manual o usar predeterminado
+    - Actualiza CONFIG["style"]["theme_hex"] con la elección
+    - Aplicación global: el color elegido se aplica a todo el KML/KMZ
+    
+    SISTEMA DE PALETA:
+    - Si existe paleta en config.json → muestra menú numerado
+    - Soporte para HEX manual: #RRGGBB, RRGGBB, #RGB, RGB
+    - Validación robusta con fallback a color predeterminado
+    
+    Args:
+        CONFIG (dict): Diccionario de configuración global
+        input_mock (callable, optional): Mock para testing (reemplaza input())
+        
+    Returns:
+        dict: CONFIG actualizado con el color elegido
+        
+    NOTA TÉCNICA: La función usa input() - requiere mocking para tests automatizados.
+    """
+    import re
+    
+    # Función de input configurable para testing
+    input_func = input_mock if input_mock else input
+    
+    style = CONFIG.get("style", {}) if isinstance(CONFIG, dict) else {}
+    default_hex = style.get("theme_hex", "#ff00ff")
+    palette = style.get("palette") or []   # lista de [nombre, "#hex"]
+
+    # Construir el prompt
+    print("")  # pequeña separación visual
+    if palette:
+        print("Colores sugeridos (visibles en Google Earth):")
+        for i, item in enumerate(palette, start=1):
+            try:
+                nombre, hexv = item[0], item[1]
+            except Exception:
+                # por si el ítem no tiene la forma esperada
+                continue
+            print(f"  [{i}] {nombre}  {hexv}")
+        print(f"  [0] Usar el predeterminado ({default_hex})")
+
+        resp = input_func("Elegí número o pegá un HEX (Enter = predeterminado): ").strip()
+    else:
+        # Sin paleta configurada, conservamos el comportamiento clásico
+        resp = input_func(f"Ingresá color tema en hex (Enter = {default_hex}): ").strip()
+
+    # Normalizar elección
+    if resp == "":
+        elegido = default_hex
+    else:
+        # ¿opción numérica?
+        if resp.isdigit():
+            idx = int(resp)
+            if idx == 0 and palette:
+                elegido = default_hex
+            elif 1 <= idx <= len(palette):
+                elegido = str(palette[idx - 1][1]).strip()
+            else:
+                print("Opción fuera de rango; usaré el color predeterminado.")
+                elegido = default_hex
+        else:
+            # ¿HEX manual?
+            if re.fullmatch(r"#?[0-9a-fA-F]{6}", resp):
+                elegido = resp if resp.startswith("#") else f"#{resp}"
+            else:
+                print("Formato de color no válido; usaré el color predeterminado.")
+                elegido = default_hex
+
+    # Actualizar CONFIG y confirmar
+    style["theme_hex"] = elegido
+    CONFIG["style"] = style
+    print(f"Color tema: {elegido}")
+    return CONFIG

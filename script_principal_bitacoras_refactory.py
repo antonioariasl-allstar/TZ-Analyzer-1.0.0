@@ -1082,76 +1082,13 @@ def get_config():
 
 def _solicitar_color_tema(CONFIG):
     """
-    Interfaz para elegir el color de tema visual del informe/KML.
-    Si existe una paleta en config.json, muestra menú numerado.
-    Permite elegir por número, HEX manual o usar el predeterminado.
-    Actualiza CONFIG["style"]["theme_hex"] con la elección.
-
-    Args:
-        CONFIG (dict): Diccionario de configuración global.
-    Returns:
-        dict: CONFIG actualizado con el color elegido.
+    🚨 WRAPPER DE COMPATIBILIDAD - usar solicitar_color_tema de tz_core.config_manager
+    
+    MINA DESACTIVADA: Función interactiva extraída al módulo config_manager.
+    Preserva funcionalidad de paleta de 60 colores para diferenciación de bitácoras.
     """
-    style = CONFIG.get("style", {}) if isinstance(CONFIG, dict) else {}
-    default_hex = style.get("theme_hex", "#ff00ff")
-    palette = style.get("palette") or []   # lista de [nombre, "#hex"]
-
-    # Construir el prompt
-    print("")  # pequeña separación visual
-    if palette:
-        print("Colores sugeridos (visibles en Google Earth):")
-        for i, item in enumerate(palette, start=1):
-            try:
-                nombre, hexv = item[0], item[1]
-            except Exception:
-                # por si el ítem no tiene la forma esperada
-                continue
-            print(f"  [{i}] {nombre}  {hexv}")
-        print(f"  [0] Usar el predeterminado ({default_hex})")
-
-        resp = input("Elegí número o pegá un HEX (Enter = predeterminado): ").strip()
-    else:
-        # Sin paleta configurada, conservamos el comportamiento clásico
-        resp = input(f"Ingresá color tema en hex (Enter = {default_hex}): ").strip()
-
-    # Normalizar elección
-    if resp == "":
-        elegido = default_hex
-    else:
-        # ¿opción numérica?
-        if resp.isdigit():
-            idx = int(resp)
-            if idx == 0 and palette:
-                elegido = default_hex
-            elif 1 <= idx <= len(palette):
-                elegido = str(palette[idx - 1][1]).strip()
-            else:
-                print("Opción fuera de rango; usaré el color predeterminado.")
-                elegido = default_hex
-        else:
-            # ¿HEX manual?
-            if re.fullmatch(r"#?[0-9a-fA-F]{6}", resp):
-                elegido = resp if resp.startswith("#") else f"#{resp}"
-            else:
-                print("Formato de color no válido; usaré el color predeterminado.")
-                elegido = default_hex
-
-    # Actualizar CONFIG y confirmar
-    style["theme_hex"] = elegido
-    CONFIG["style"] = style
-    print(f"Color tema: {elegido}")
-    return CONFIG
-
-
-    # Acepta #RRGGBB, RRGGBB, #RGB o RGB
-    if re.fullmatch(r'#?[0-9a-fA-F]{6}', resp) or re.fullmatch(r'#?[0-9a-fA-F]{3}', resp):
-        if not resp.startswith("#"):
-            resp = "#" + resp
-        style["theme_hex"] = resp
-        print(f"Color tema seleccionado: {resp}")
-    else:
-        print(f"Valor inválido. Se usará {pred}.")
-    return CONFIG
+    from tz_core.config_manager import solicitar_color_tema
+    return solicitar_color_tema(CONFIG)
 
 # =========================
 # Geometría / KML helpers

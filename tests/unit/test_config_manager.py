@@ -18,7 +18,8 @@ from tz_core.config_manager import (
     DEFAULT_CONFIG,
     _normalize_key_for_synonyms,
     cfg_build_rename_map,
-    log
+    log,
+    solicitar_color_tema
 )
 import tz_core.config_manager
 
@@ -176,13 +177,111 @@ def test_log_function():
         return False
 
 
+def test_solicitar_color_tema_default():
+    """Test solicitar_color_tema con entrada vacía (default)"""
+    print("🧪 Testing solicitar_color_tema con default...")
+    
+    # Config de prueba
+    test_config = {
+        "style": {
+            "theme_hex": "#ff0000",
+            "palette": [
+                ["Rojo", "#ff0000"],
+                ["Verde", "#00ff00"],
+                ["Azul", "#0000ff"]
+            ]
+        }
+    }
+    
+    # Mock de input que retorna string vacío (default)
+    def mock_input(prompt):
+        return ""
+    
+    result_config = solicitar_color_tema(test_config.copy(), input_mock=mock_input)
+    
+    assert result_config["style"]["theme_hex"] == "#ff0000", "Debe mantener color default"
+    print("✅ PASS: Default color preservado correctamente")
+    return True
+
+
+def test_solicitar_color_tema_palette_selection():
+    """Test solicitar_color_tema con selección de paleta"""
+    print("🧪 Testing solicitar_color_tema con selección numérica...")
+    
+    # Config de prueba
+    test_config = {
+        "style": {
+            "theme_hex": "#ff0000",
+            "palette": [
+                ["Rojo", "#ff0000"],
+                ["Verde", "#00ff00"],
+                ["Azul", "#0000ff"]
+            ]
+        }
+    }
+    
+    # Mock de input que selecciona opción 2 (Verde)
+    def mock_input(prompt):
+        return "2"
+    
+    result_config = solicitar_color_tema(test_config.copy(), input_mock=mock_input)
+    
+    assert result_config["style"]["theme_hex"] == "#00ff00", "Debe seleccionar verde (#00ff00)"
+    print("✅ PASS: Selección de paleta funciona correctamente")
+    return True
+
+
+def test_solicitar_color_tema_hex_manual():
+    """Test solicitar_color_tema con HEX manual"""
+    print("🧪 Testing solicitar_color_tema con HEX manual...")
+    
+    # Config de prueba sin paleta
+    test_config = {
+        "style": {
+            "theme_hex": "#ff0000"
+        }
+    }
+    
+    # Mock de input que introduce HEX manual
+    def mock_input(prompt):
+        return "#123456"
+    
+    result_config = solicitar_color_tema(test_config.copy(), input_mock=mock_input)
+    
+    assert result_config["style"]["theme_hex"] == "#123456", "Debe usar HEX manual"
+    print("✅ PASS: HEX manual funciona correctamente")
+    return True
+
+
+def test_solicitar_color_tema_invalid_input():
+    """Test solicitar_color_tema con entrada inválida"""
+    print("🧪 Testing solicitar_color_tema con entrada inválida...")
+    
+    # Config de prueba
+    test_config = {
+        "style": {
+            "theme_hex": "#ff0000"
+        }
+    }
+    
+    # Mock de input que introduce valor inválido
+    def mock_input(prompt):
+        return "xyz123"
+    
+    result_config = solicitar_color_tema(test_config.copy(), input_mock=mock_input)
+    
+    assert result_config["style"]["theme_hex"] == "#ff0000", "Debe usar default por entrada inválida"
+    print("✅ PASS: Validación de entrada inválida funciona")
+    return True
+
+
 def main():
     """Ejecutar todos los tests"""
     print("🏗️  TESTS UNITARIOS - tz_core.config_manager")
     print("=" * 50)
     
     tests_passed = 0
-    total_tests = 6
+    total_tests = 10
     
     # Test 1: Estructura DEFAULT_CONFIG
     if test_default_config_structure():
@@ -206,6 +305,22 @@ def main():
     
     # Test 6: Función log
     if test_log_function():
+        tests_passed += 1
+    
+    # Test 7: Solicitar color tema - default
+    if test_solicitar_color_tema_default():
+        tests_passed += 1
+    
+    # Test 8: Solicitar color tema - selección paleta
+    if test_solicitar_color_tema_palette_selection():
+        tests_passed += 1
+    
+    # Test 9: Solicitar color tema - HEX manual
+    if test_solicitar_color_tema_hex_manual():
+        tests_passed += 1
+    
+    # Test 10: Solicitar color tema - entrada inválida
+    if test_solicitar_color_tema_invalid_input():
         tests_passed += 1
     
     print("\n" + "=" * 50)
