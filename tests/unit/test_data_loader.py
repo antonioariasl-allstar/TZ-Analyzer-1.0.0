@@ -1,13 +1,16 @@
 """
-Tests unitarios para tz_core.data_loader - FASE 5.1
+Tests unitarios para tz_core.data_loader - FASES 5.1 y 5.2
 
 Cobertura de funciones extraídas:
 - obtener_hojas_visibles()
 - listar_todas_hojas()
+- seleccionar_hoja_visible() (interactiva con input())
+- seleccionar_hoja() (interactiva con input())
 
 🚨 MINAS DETECTADAS:
 - Dependencia opcional openpyxl
 - Manejo de archivos Excel reales vs mocks
+- Funciones interactivas que requieren mocking de input()
 """
 
 import pytest
@@ -15,7 +18,12 @@ import tempfile
 import os
 import pandas as pd
 from unittest.mock import patch, MagicMock
-from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas
+from tz_core.data_loader import (
+    obtener_hojas_visibles, 
+    listar_todas_hojas,
+    seleccionar_hoja_visible,
+    seleccionar_hoja
+)
 
 
 class TestObtenerHojasVisibles:
@@ -135,3 +143,201 @@ class TestIntegracionArchivosReales:
         assert "Datos" in resultado
         assert "Resumen" in resultado
         assert len(resultado) == 2
+
+
+class TestSeleccionarHojaVisible:
+    """Tests para función seleccionar_hoja_visible (interactiva)"""
+    
+    @patch('tz_core.data_loader.obtener_hojas_visibles')
+    def test_no_openpyxl_disponible(self, mock_obtener_hojas):
+        """Test cuando openpyxl no está disponible"""
+        mock_obtener_hojas.return_value = (None, "NO_OPENPYXL")
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja_visible("test.xlsx")
+            
+            assert resultado is None
+            mock_print.assert_called_with("Aviso: 'openpyxl' no disponible; se usará la primera hoja por defecto.")
+    
+    @patch('tz_core.data_loader.obtener_hojas_visibles')
+    def test_error_carga_archivo(self, mock_obtener_hojas):
+        """Test cuando hay error al cargar el archivo"""
+        mock_obtener_hojas.return_value = (None, "LOAD_FAIL")
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja_visible("test.xlsx")
+            
+            assert resultado is None
+            mock_print.assert_called_with("Aviso: no se pudo inspeccionar hojas; se usará la primera hoja por defecto.")
+    
+    @patch('tz_core.data_loader.obtener_hojas_visibles')
+    def test_sin_hojas_visibles(self, mock_obtener_hojas):
+        """Test cuando no hay hojas visibles"""
+        mock_obtener_hojas.return_value = ([], None)
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja_visible("test.xlsx")
+            
+            assert resultado is None
+            mock_print.assert_called_with("No hay hojas visibles; se usará la primera hoja por defecto.")
+    
+    @patch('tz_core.data_loader.obtener_hojas_visibles')
+    def test_una_sola_hoja_visible(self, mock_obtener_hojas):
+        """Test cuando hay una sola hoja visible"""
+        mock_obtener_hojas.return_value = (["Datos"], None)
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja_visible("test.xlsx")
+            
+            assert resultado == "Datos"
+            mock_print.assert_called_with("Hoja visible detectada: Datos")
+    
+    @patch('tz_core.data_loader.obtener_hojas_visibles')
+    @patch('builtins.input')
+    def test_seleccion_interactiva_primera_opcion(self, mock_input, mock_obtener_hojas):
+        """Test selección interactiva - primera opción (Enter)"""
+        mock_obtener_hojas.return_value = (["Datos", "Resumen", "Config"], None)
+        mock_input.return_value = ""  # Enter = primera opción
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja_visible("test.xlsx")
+            
+            assert resultado == "Datos"
+            # Verificar que se mostraron las opciones
+            calls = mock_print.call_args_list
+            assert any("Hojas visibles detectadas:" in str(call) for call in calls)
+            assert any("[1] Datos" in str(call) for call in calls)
+            assert any("Hoja seleccionada: Datos" in str(call) for call in calls)
+    
+    @patch('tz_core.data_loader.obtener_hojas_visibles')
+    @patch('builtins.input')
+    def test_seleccion_interactiva_segunda_opcion(self, mock_input, mock_obtener_hojas):
+        """Test selección interactiva - segunda opción"""
+        mock_obtener_hojas.return_value = (["Datos", "Resumen"], None)
+        mock_input.return_value = "2"
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja_visible("test.xlsx")
+            
+            assert resultado == "Resumen"
+            assert any("Hoja seleccionada: Resumen" in str(call) for call in mock_print.call_args_list)
+    
+    @patch('tz_core.data_loader.obtener_hojas_visibles')
+    @patch('builtins.input')
+    def test_seleccion_interactiva_input_invalido_luego_valido(self, mock_input, mock_obtener_hojas):
+        """Test selección interactiva - input inválido luego válido"""
+        mock_obtener_hojas.return_value = (["Datos", "Resumen"], None)
+        mock_input.side_effect = ["abc", "0", "3", "1"]  # Varios inválidos, luego válido
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja_visible("test.xlsx")
+            
+            assert resultado == "Datos"
+            # Debe haber mostrado mensajes de error
+            calls = mock_print.call_args_list
+            error_messages = [call for call in calls if "Ingresá un número válido" in str(call)]
+            assert len(error_messages) == 3  # 3 intentos fallidos
+
+
+class TestSeleccionarHoja:
+    """Tests para función seleccionar_hoja (estrategia doble fallback)"""
+    
+    @patch('tz_core.data_loader.seleccionar_hoja_visible')
+    def test_exitoso_con_hojas_visibles(self, mock_seleccionar_visible):
+        """Test exitoso usando hojas visibles"""
+        mock_seleccionar_visible.return_value = "Datos"
+        
+        resultado = seleccionar_hoja("test.xlsx")
+        
+        assert resultado == "Datos"
+        mock_seleccionar_visible.assert_called_once_with("test.xlsx")
+    
+    @patch('tz_core.data_loader.seleccionar_hoja_visible')
+    @patch('tz_core.data_loader.listar_todas_hojas')
+    def test_fallback_a_todas_las_hojas_sin_hojas(self, mock_listar_todas, mock_seleccionar_visible):
+        """Test fallback cuando no hay hojas disponibles"""
+        mock_seleccionar_visible.return_value = None
+        mock_listar_todas.return_value = None
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja("test.xlsx")
+            
+            assert resultado is None
+            mock_print.assert_called_with("No se pudo listar hojas; se usará la primera hoja por defecto.")
+    
+    @patch('tz_core.data_loader.seleccionar_hoja_visible')
+    @patch('tz_core.data_loader.listar_todas_hojas')
+    def test_fallback_una_sola_hoja_todas(self, mock_listar_todas, mock_seleccionar_visible):
+        """Test fallback con una sola hoja en listado completo"""
+        mock_seleccionar_visible.return_value = None
+        mock_listar_todas.return_value = ["Datos"]
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja("test.xlsx")
+            
+            assert resultado == "Datos"
+            mock_print.assert_called_with("Hoja detectada (todas): Datos")
+    
+    @patch('tz_core.data_loader.seleccionar_hoja_visible')
+    @patch('tz_core.data_loader.listar_todas_hojas')
+    @patch('builtins.input')
+    def test_fallback_seleccion_interactiva_enter(self, mock_input, mock_listar_todas, mock_seleccionar_visible):
+        """Test fallback con selección interactiva - Enter (primera hoja)"""
+        mock_seleccionar_visible.return_value = None
+        mock_listar_todas.return_value = ["Datos", "Resumen"]
+        mock_input.return_value = ""  # Enter
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja("test.xlsx")
+            
+            assert resultado == "Datos"
+            calls = mock_print.call_args_list
+            assert any("Hojas detectadas (todas):" in str(call) for call in calls)
+            assert any("Hoja seleccionada: Datos" in str(call) for call in calls)
+    
+    @patch('tz_core.data_loader.seleccionar_hoja_visible')
+    @patch('tz_core.data_loader.listar_todas_hojas')
+    @patch('builtins.input')
+    def test_fallback_seleccion_interactiva_numero(self, mock_input, mock_listar_todas, mock_seleccionar_visible):
+        """Test fallback con selección interactiva - número específico"""
+        mock_seleccionar_visible.return_value = None
+        mock_listar_todas.return_value = ["Datos", "Resumen", "Config"]
+        mock_input.return_value = "3"
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja("test.xlsx")
+            
+            assert resultado == "Config"
+            assert any("Hoja seleccionada: Config" in str(call) for call in mock_print.call_args_list)
+    
+    @patch('tz_core.data_loader.seleccionar_hoja_visible')
+    @patch('tz_core.data_loader.listar_todas_hojas')
+    @patch('builtins.input')
+    def test_fallback_inputs_invalidos_luego_valido(self, mock_input, mock_listar_todas, mock_seleccionar_visible):
+        """Test fallback con inputs inválidos luego válido"""
+        mock_seleccionar_visible.return_value = None
+        mock_listar_todas.return_value = ["Datos", "Resumen"]
+        mock_input.side_effect = ["abc", "0", "3", "2"]  # Inválidos, luego válido
+        
+        with patch('builtins.print') as mock_print:
+            resultado = seleccionar_hoja("test.xlsx")
+            
+            assert resultado == "Resumen"
+            # Debe haber mostrado mensajes de error
+            calls = mock_print.call_args_list
+            error_messages = [call for call in calls if "Número inválido" in str(call)]
+            assert len(error_messages) == 3
+    
+    @patch('tz_core.data_loader.seleccionar_hoja_visible')
+    def test_excepcion_en_seleccionar_visible(self, mock_seleccionar_visible):
+        """Test manejo de excepción en seleccionar_hoja_visible"""
+        mock_seleccionar_visible.side_effect = Exception("Error simulado")
+        
+        with patch('tz_core.data_loader.listar_todas_hojas') as mock_listar_todas:
+            mock_listar_todas.return_value = ["Datos"]
+            
+            with patch('builtins.print') as mock_print:
+                resultado = seleccionar_hoja("test.xlsx")
+                
+                assert resultado == "Datos"
+                mock_print.assert_called_with("Hoja detectada (todas): Datos")

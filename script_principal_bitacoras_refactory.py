@@ -5893,7 +5893,7 @@ section{{margin-top:22px}}
 
 # --- Anti-hojas: ignorar ocultas y elegir visible ---
 # 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader
-from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas
+from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja
 
 def _obtener_hojas_visibles(ruta_excel):
     """Wrapper de compatibilidad para tz_core.data_loader.obtener_hojas_visibles"""
@@ -5904,72 +5904,16 @@ def _listar_todas_hojas(ruta_excel):
     return listar_todas_hojas(ruta_excel)
 
 def _seleccionar_hoja_visible(ruta_excel):
-    visibles, err = _obtener_hojas_visibles(ruta_excel)
-    if err == "NO_OPENPYXL":
-        print("Aviso: 'openpyxl' no disponible; se usará la primera hoja por defecto.")
-        return None
-    if err == "LOAD_FAIL":
-        print("Aviso: no se pudo inspeccionar hojas; se usará la primera hoja por defecto.")
-        return None
-    if not visibles:
-        print("No hay hojas visibles; se usará la primera hoja por defecto.")
-        return None
-    if len(visibles) == 1:
-        print(f"Hoja visible detectada: {visibles[0]}")
-        return visibles[0]
-
-    print("Hojas visibles detectadas:")
-    for i, name in enumerate(visibles, 1):
-        print(f"  [{i}] {name}")
-    while True:
-        resp = input("Elegí el número de la hoja a procesar (Enter = 1): ").strip()
-        idx = 1 if resp == "" else int(resp) if resp.isdigit() else None
-        if idx and 1 <= idx <= len(visibles):
-            elegido = visibles[idx - 1]
-            print(f"Hoja seleccionada: {elegido}")
-            return elegido
-        print("Ingresá un número válido (1..N).")
-# --- Fallback: listar TODAS las hojas con pandas y seleccionar una ---
-# 🔄 WRAPPER: Función extraída a tz_core.data_loader (wrapper ya definido arriba)
+    """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja_visible"""
+    return seleccionar_hoja_visible(ruta_excel)
 
 def _seleccionar_hoja(ruta_excel):
-    """
-    Intenta primero elegir entre hojas VISIBLES (openpyxl).
-    Si no es posible, lista TODAS las hojas (pandas) y deja elegir.
-    Si todo falla, devuelve None y se usará la primera por defecto.
-    """
-    # 1) Intento con hojas visibles
-    try:
-        elegido = _seleccionar_hoja_visible(ruta_excel)
-        if elegido is not None:
-            return elegido
-    except Exception:
-        pass
+    """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja"""
+    return seleccionar_hoja(ruta_excel)
 
-    # 2) Fallback: todas las hojas
-    hojas = _listar_todas_hojas(ruta_excel)
-    if not hojas:
-        print("No se pudo listar hojas; se usará la primera hoja por defecto.")
-        return None
+# --- Fallback: listar TODAS las hojas con pandas y seleccionar una ---
+# 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader (wrappers ya definidos arriba)
 
-    if len(hojas) == 1:
-        print(f"Hoja detectada (todas): {hojas[0]}")
-        return hojas[0]
-
-    print("Hojas detectadas (todas):")
-    for i, h in enumerate(hojas, 1):
-        print(f"  [{i}] {h}")
-    while True:
-        resp = input("Elegí el número de la hoja a procesar (Enter = 1): ").strip()
-        if resp == "":
-            elegido = hojas[0]
-            break
-        if resp.isdigit() and 1 <= int(resp) <= len(hojas):
-            elegido = hojas[int(resp) - 1]
-            break
-        print("Número inválido. Probá de nuevo.")
-    print(f"Hoja seleccionada: {elegido}")
-    return elegido
 # --- Normalizadores robustos y pre-flight de esenciales ---
 
 ESENCIALES_IN = ["lat", "long", "azimut", "fecha", "hora", "tel"]
