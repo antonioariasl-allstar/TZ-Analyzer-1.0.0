@@ -148,10 +148,15 @@ limpiar sinónimos legacy obsoletos. Probar con datos reales primero.
 - **Documentación:** Ver `docs/FILE_PROCESSOR_ESTADO_ACTUAL.md`
 
 ### 🟠 **PRÓXIMA OPERACIÓN CRÍTICA:**
-**FASE 7: COLUMN PROCESSOR** �
-- **Arteria objetivo:** Mapeo manual, renombrado, coalescencia, sinónimos
-- **Riesgo:** ALTO - Conexión con wizard diferido pero funciones independientes
-- **Estrategia:** Extracción cuidadosa evitando wizard QC
+**FASE 7: COLUMN PROCESSOR** 🚨🔴⚡
+- **Estado:** 🟡 DIFERIDA - Análisis forense completado
+- **Complejidad:** 🚨 EXTREMA (9/10) - 650+ líneas monolíticas
+- **Target:** main() líneas 6550-7200+ (Schema + Mapeo + Wizard + Sinónimos)
+- **Riesgo:** CATASTRÓFICO - Sistema cardiovascular del negocio
+- **Decisión:** Diferimiento inteligente para v2.0 (13-19 semanas estimadas)
+- **Documentación:** `docs/COLUMN_PROCESSOR_ANALISIS_FORENSE.md`
+- **Probabilidad falla futura:** 60% en 6-12 meses si no se aborda
+- **Plan contingencia:** Definido en análisis forense
 
 ---
 
