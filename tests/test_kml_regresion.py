@@ -1,8 +1,12 @@
 import os
+import sys
 import zipfile
 import tempfile
 import pandas as pd
 from datetime import datetime
+
+# Agregar path padre para imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Importar la función de generación real desde el script principal
 # La función generar_kml está definida en script_principal_bitacoras_refactory.py

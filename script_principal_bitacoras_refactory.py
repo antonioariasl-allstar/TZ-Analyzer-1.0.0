@@ -913,6 +913,7 @@ def _dedupe_columns(df):
     return df
 # === IMPORTS MODULARES (gradual refactoring) ===
 from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
+from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 def _sha256_de_archivo(path: str) -> str:
@@ -961,62 +962,18 @@ def _copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> str | None:
         return None
 
 
-DEFAULT_CONFIG = {
-    "kml": {
-        "azimuth_km": 1.5,
-        "cone": {"half_degrees": 35, "fill_color": "7fffffff"},
-        "line": {"color": "ffff00ff", "width": 5},
-        "description": [
-            # Bloque 2: Tel + identidad (agregamos Alias; cambiamos etiqueta de Usuario)
-            [["Tel","tel"], ["IMEI","imei"], ["Alias","alias"], ["Nombre de Usuario","nombre_usuario"], ["Abonado","abonado"]],
-            # Bloque 3: datos de antena/posiciones
-            [["Antena","antena"], ["Detalle","detalle"], ["Lat","lat"], ["Long","long"], ["Azimut","azimut"], ["Celda","celda"], ["LAC","lac"]],
-            # Bloque 4: interacción + duración (SIN líneas separadas de Tel/Nombre Contacto)
-            [["Interacción","interaccion"], ["Duración","duracion"]]
-        ]
-    }
-}
+# Alias para compatibilidad - usar DEFAULT_CONFIG de tz_core.config_manager
+DEFAULT_CONFIG = DEFAULT_CONFIG_MODULAR
 
 # === SECCIÓN: CONFIGURACIÓN Y SINÓNIMOS (carga CONFIG, construye RENAME_MAP) ===
 def cargar_config():
     """
-    Carga la configuración global desde config.json.
-    Si el archivo no existe o falla, retorna DEFAULT_CONFIG y garantiza claves mínimas.
-    Compatible con PyInstaller (detecta sys.frozen y usa sys._MEIPASS).
-
-    Returns:
-        dict: Diccionario de configuración global.
+    Wrapper para compatibilidad - usar cargar_config de tz_core.config_manager
+    
+    NOTA: Preserva comportamiento exacto incluyendo DEFAULT_CONFIG y merge logic.
+    El sistema de sinónimos legacy se mantiene intacto para evitar breaking changes.
     """
-    # Detecta base_path según modo de ejecución (normal vs PyInstaller)
-    if getattr(sys, 'frozen', False):
-        base = sys._MEIPASS
-    else:
-        base = os.path.dirname(os.path.abspath(__file__))
-    ruta_cfg = os.path.join(base, "config.json")
-    try:
-        with open(ruta_cfg, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        # merge superficial con defaults
-        cfg = DEFAULT_CONFIG.copy()
-        cfg.update(data or {})
-        # merge de sección kml
-        if "kml" in data:
-            cfg["kml"].update(data["kml"])
-        # Blindaje: asegurar que 'Alias' aparezca en el bloque 2 de la descripción
-        try:
-            desc = cfg["kml"]["description"]
-            if isinstance(desc, list) and len(desc) >= 2:
-                bloque2 = desc[1]  # Tel/IMEI/…
-                if isinstance(bloque2, list):
-                    etiquetas = [etq for etq, _ in bloque2 if isinstance(etq, str)]
-                    if "Alias" not in etiquetas:
-                        # Insertar después de IMEI (posición 2)
-                        bloque2.insert(2, ["Alias", "alias"])
-        except Exception:
-            pass
-        return cfg
-    except Exception:
-        return DEFAULT_CONFIG
+    return cargar_config_modular()
 
 # === SINONIMOS: MERGE + PERSISTENCIA (inicio) ==============================
 import tempfile

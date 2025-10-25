@@ -24,6 +24,23 @@ con parámetro fallback.
   UBICACION: "Café & Restaurante José María"
   ```
 
+### 🧠 **MEMORIA INNECESARIA: Sistema de Sinónimos**
+**Fecha:** 24 oct 2025  
+**Estado:** ⚠️ Candidato a desactivación
+
+**CONTEXTO:** El sistema actual mantiene dos tipos de sinónimos:
+- `synonyms`: Legacy del mapeo automático (686 líneas en config.json)
+- `synonyms_user`: Memoria que crece automáticamente con cada mapeo
+
+**PROBLEMA:** La memoria automática era útil para mapeo automático, pero 
+actualmente el mapeo es 100% manual, haciendo innecesaria la recopilación.
+
+**IMPACTO:** Los sinónimos legacy ocupan espacio y pueden confundir, pero 
+el sistema sigue funcionando correctamente.
+
+**ACCIÓN FUTURA:** Considerar desactivar `synonyms_user` automático y 
+limpiar sinónimos legacy obsoletos. Probar con datos reales primero.
+
 ### 📝 **HISTÓRICO DE EXTRACCIÓN - Fase 3:**
 1. ✅ `sha256_de_archivo` (Commit: 3e8b629)
 2. ✅ `escribe_hashes_txt` (Commit: 96584bf)  
