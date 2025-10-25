@@ -1,9 +1,34 @@
 # TODO – TZ Analysis
-Rama: copilot/pase-3  
-Pase: 3 (migración a Python 3.12.8)  
-Fecha: 2025-10-21  
+Rama: refactor/modular-architecture  
+Fase: Refactorización Modular (Campo Minado)  
+Fecha: 2025-10-24  
 
 > **📋 Handoff para casa:** Ver archivo `HANDOFF_CASA.txt` en la raíz del repo con instrucciones paso a paso para continuar el trabajo en casa.
+
+## 🎯 NOTAS TÉCNICAS CRÍTICAS - REFACTORING
+
+### 🚨 **MINA DESACTIVADA: Funciones de Saneamiento** 
+**Fecha:** 24 oct 2025  
+**Estado:** ✅ Extraída y unificada con cero breaking changes
+
+**CONTEXTO:** Se detectó que `_sanear_nombre_archivo` y `_sanear_nombre_archivo_local` 
+eran casi idénticas pero con fallbacks diferentes. Se unificaron en `sanear_nombre_archivo()` 
+con parámetro fallback.
+
+**TESTING PENDIENTE:**
+- Golden Baseline actual usa datos "limpios" (sin caracteres problemáticos)
+- Las funciones de saneamiento probablemente no se ejercitan en pruebas actuales
+- **ACCIÓN FUTURA:** Crear test con datos problemáticos:
+  ```
+  TIPO_LLAMADA: "Llamada@Entrañte#"
+  UBICACION: "Café & Restaurante José María"
+  ```
+
+### 📝 **HISTÓRICO DE EXTRACCIÓN - Fase 3:**
+1. ✅ `sha256_de_archivo` (Commit: 3e8b629)
+2. ✅ `escribe_hashes_txt` (Commit: 96584bf)  
+3. ✅ `compactar_ruta` (Commit: ae4423d)
+4. ✅ `sanear_nombre_archivo` (Commit: PENDIENTE) - **MINA DESACTIVADA**
 
 ## ✅ Migración a Python 3.12.8 (completada)
 **Fecha:** 21 de octubre de 2025  

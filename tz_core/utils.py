@@ -6,6 +6,7 @@ Funciones puras sin dependencias cruzadas
 import hashlib
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import List, Tuple
 
@@ -90,6 +91,60 @@ def compactar_ruta(txt: str, maxlen: int = 64) -> str:
     suffix = base[-suf_len:].lstrip("_- ")
 
     return f"{prefix}{sep}{h}{sep}{suffix}"
+
+
+def sanear_nombre_archivo(s: str, fallback: str = "archivo_limpio") -> str:
+    """
+    Limpia un nombre de archivo removiendo caracteres problemáticos.
+    
+    CRÍTICO: Esta función unifica dos funciones similares del monolito:
+    - _sanear_nombre_archivo() (fallback: "antenas_manual") 
+    - _sanear_nombre_archivo_local() (fallback: variable nombre_base)
+    
+    BREAKING CHANGE PREVENTION: Los wrappers mantienen fallbacks exactos
+    para preservar comportamiento idéntico en casos límite (vacío, None, etc.)
+    
+    Proceso de limpieza:
+    1. Normaliza unicode y remueve acentos (NFD -> ASCII)
+    2. Permite solo: letras, números, guión, guión_bajo, punto, espacios
+    3. Convierte espacios múltiples a guión_bajo único
+    4. Limpia bordes problemáticos (puntos/guiones al inicio/final)
+    5. Aplica fallback si resultado está vacío
+    
+    Args:
+        s: Nombre de archivo a limpiar
+        fallback: Valor por defecto si el resultado está vacío
+                 IMPORTANTE: Cada wrapper debe usar su fallback específico
+        
+    Returns:
+        Nombre de archivo limpio y seguro
+        
+    Examples:
+        >>> sanear_nombre_archivo("Reporte José María 2024.xlsx")
+        'Reporte_Jose_Maria_2024.xlsx'
+        >>> sanear_nombre_archivo("", "default")
+        'default'
+        >>> sanear_nombre_archivo("...")  # Se limpia a vacío -> fallback
+        'archivo_limpio'
+    """
+    # PASO 1: Aplicar fallback inicial si entrada es None/vacía
+    s = s or fallback
+    
+    # PASO 2: Normalizar unicode y remover acentos
+    s = unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode("ascii")
+    
+    # PASO 3: Permitir solo caracteres seguros
+    # \w = letras+números+_, \s = espacios, .- = punto y guión
+    s = re.sub(r"[^\w\s.-]", "_", s)
+    
+    # PASO 4: Normalizar espacios a guión_bajo
+    s = re.sub(r"\s+", "_", s)
+    
+    # PASO 5: Limpiar bordes problemáticos
+    s = s.strip("._")
+    
+    # PASO 6: Fallback final si se limpió todo
+    return s or fallback
 
 
 def placeholder_function():

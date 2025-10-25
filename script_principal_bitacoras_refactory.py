@@ -912,7 +912,7 @@ def _dedupe_columns(df):
 
     return df
 # === IMPORTS MODULARES (gradual refactoring) ===
-from tz_core.utils import sha256_de_archivo, compactar_ruta
+from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 def _sha256_de_archivo(path: str) -> str:
@@ -6286,14 +6286,15 @@ def _modo_manual():
         return df
         
     def _sanear_nombre_archivo(s):
-        s = s or "antenas_manual"
-        # quitar acentos y normalizar
-        s = unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode("ascii")
-        # permitir solo letras, numeros, guion, guion_bajo, punto y espacios
-        s = re.sub(r"[^\w\s.-]", "_", s)
-        # espacios -> guion_bajo, limpiar bordes
-        s = re.sub(r"\s+", "_", s).strip("._")
-        return s or "antenas_manual"
+        """
+        Wrapper para compatibilidad - usar sanear_nombre_archivo de tz_core.utils
+        
+        CRÍTICO: Preserva fallback original "antenas_manual" para mantener
+        comportamiento idéntico en casos límite (None, "", "...", "___")
+        
+        Función original extraída con cero breaking changes garantizado.
+        """
+        return sanear_nombre_archivo(s, "antenas_manual")
 
     def _nombre_auto_desde_items(items):
         # toma el primer tel y el primer alias no vacios
@@ -7825,15 +7826,19 @@ def main():
 
     # --- Nombre sugerido para salida (Excel): TEL + ALIAS + RANGO ISO + EXCEL + TIMESTAMP ---
     def _sanear_nombre_archivo_local(s: str) -> str:
-        base = nombre_base
-        s = s or base
-        # quitar acentos y normalizar
-        s = unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode("ascii")
-        # permitir solo letras, numeros, guion, guion_bajo, punto y espacios
-        s = re.sub(r"[^\w\s.-]", "_", s)
-        # espacios -> guion_bajo, limpiar bordes y vacíos
-        s = re.sub(r"\s+", "_", s).strip("._")
-        return s or base
+        """
+        Wrapper para compatibilidad - usar sanear_nombre_archivo de tz_core.utils
+        
+        CRÍTICO: Preserva fallback dinámico (nombre_base) para mantener
+        comportamiento idéntico en generación de nombres Excel.
+        
+        CONTEXTO: Esta función se usa en:
+        - Línea 7899: generación automática de nombres Excel  
+        - Línea 8098: validación entrada usuario para nombres Excel
+        
+        El fallback nombre_base es crucial para nombres consistentes.
+        """
+        return sanear_nombre_archivo(s, nombre_base)
 
     def _first_nonempty(colname):
         if not colname or colname not in df.columns:

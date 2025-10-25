@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Importar módulo a testear
-from tz_core.utils import sha256_de_archivo, escribe_hashes_txt, compactar_ruta
+from tz_core.utils import sha256_de_archivo, escribe_hashes_txt, compactar_ruta, sanear_nombre_archivo
 
 
 def test_sha256_de_archivo():
@@ -172,13 +172,78 @@ def test_compactar_ruta():
     return True
 
 
+def test_sanear_nombre_archivo():
+    """
+    Test de limpieza de nombres de archivo
+    
+    CRÍTICO: Incluye casos límite que diferenciaban las dos funciones originales
+    para asegurar que la unificación no introduzca breaking changes.
+    """
+    print("🧪 Testing sanear_nombre_archivo...")
+    
+    # Test 1: Caso normal - debe funcionar igual en ambas funciones originales
+    texto_acentos = "Reporte José María 2024.xlsx"
+    resultado = sanear_nombre_archivo(texto_acentos)
+    esperado = "Reporte_Jose_Maria_2024.xlsx"
+    assert resultado == esperado, f"Expected '{esperado}', got '{resultado}'"
+    print(f"✅ PASS: Acentos removidos: {resultado}")
+    
+    # Test 2: Caracteres problemáticos
+    texto_especiales = "Archivo@#$%con/\\caracteres*raros?.txt"
+    resultado = sanear_nombre_archivo(texto_especiales)
+    assert "_" in resultado, "Debe contener guiones bajos"
+    assert "@" not in resultado, "No debe contener @"
+    assert "#" not in resultado, "No debe contener #"
+    print(f"✅ PASS: Caracteres especiales limpiados: {resultado}")
+    
+    # Test 3: Espacios múltiples
+    texto_espacios = "archivo   con    muchos     espacios.txt"
+    resultado = sanear_nombre_archivo(texto_espacios)
+    esperado = "archivo_con_muchos_espacios.txt"
+    assert resultado == esperado, f"Expected '{esperado}', got '{resultado}'"
+    print(f"✅ PASS: Espacios normalizados: {resultado}")
+    
+    # Test 4: CRÍTICO - String vacío (caso límite diferenciador)
+    resultado = sanear_nombre_archivo("", "mi_fallback")
+    assert resultado == "mi_fallback", f"Expected 'mi_fallback', got '{resultado}'"
+    print(f"✅ PASS: String vacío -> fallback: {resultado}")
+    
+    # Test 5: CRÍTICO - None (caso límite diferenciador)  
+    resultado = sanear_nombre_archivo(None, "fallback_none")
+    assert resultado == "fallback_none", f"Expected 'fallback_none', got '{resultado}'"
+    print(f"✅ PASS: None -> fallback: {resultado}")
+    
+    # Test 6: CRÍTICO - Solo puntos (se limpia a vacío -> fallback)
+    resultado = sanear_nombre_archivo("...", "fallback_dots")
+    assert resultado == "fallback_dots", f"Expected 'fallback_dots', got '{resultado}'"
+    print(f"✅ PASS: Solo puntos -> fallback: {resultado}")
+    
+    # Test 7: CRÍTICO - Solo guiones bajos (se limpia a vacío -> fallback)
+    resultado = sanear_nombre_archivo("___", "fallback_underscores")
+    assert resultado == "fallback_underscores", f"Expected 'fallback_underscores', got '{resultado}'"
+    print(f"✅ PASS: Solo guiones -> fallback: {resultado}")
+    
+    # Test 8: Fallback por defecto
+    resultado = sanear_nombre_archivo("")
+    assert resultado == "archivo_limpio", f"Expected 'archivo_limpio', got '{resultado}'"
+    print(f"✅ PASS: Fallback por defecto: {resultado}")
+    
+    # Test 9: Verificar que preserve compatibilidad exacta con _sanear_nombre_archivo
+    # Simular comportamiento original con fallback "antenas_manual"
+    resultado = sanear_nombre_archivo("", "antenas_manual")
+    assert resultado == "antenas_manual", "Debe preservar fallback antenas_manual"
+    print(f"✅ PASS: Compatibilidad _sanear_nombre_archivo: {resultado}")
+    
+    return True
+
+
 def main():
     """Ejecutar todos los tests"""
     print("🏗️  TESTS UNITARIOS - tz_core.utils")
     print("=" * 40)
     
     tests_passed = 0
-    total_tests = 4
+    total_tests = 5
     
     # Test 1
     if test_sha256_de_archivo():
@@ -192,8 +257,12 @@ def main():
     if test_escribe_hashes_txt():
         tests_passed += 1
     
-    # Test 4 - NUEVO
+    # Test 4
     if test_compactar_ruta():
+        tests_passed += 1
+    
+    # Test 5 - NUEVO
+    if test_sanear_nombre_archivo():
         tests_passed += 1
     
     print("\n" + "=" * 40)
