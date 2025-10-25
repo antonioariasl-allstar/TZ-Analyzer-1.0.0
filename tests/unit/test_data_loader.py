@@ -1,16 +1,18 @@
 """
-Tests unitarios para tz_core.data_loader - FASES 5.1 y 5.2
+Tests unitarios para tz_core.data_loader - FASES 5.1, 5.2 y 5.3a
 
 Cobertura de funciones extraídas:
 - obtener_hojas_visibles()
 - listar_todas_hojas()
 - seleccionar_hoja_visible() (interactiva con input())
 - seleccionar_hoja() (interactiva con input())
+- cargar_excel_con_normalizacion() (sistema cardiovascular dual)
 
 🚨 MINAS DETECTADAS:
 - Dependencia opcional openpyxl
 - Manejo de archivos Excel reales vs mocks
 - Funciones interactivas que requieren mocking de input()
+- Sistema dual de columnas (df.attrs + normalizadas)
 """
 
 import pytest
@@ -341,3 +343,112 @@ class TestSeleccionarHoja:
                 
                 assert resultado == "Datos"
                 mock_print.assert_called_with("Hoja detectada (todas): Datos")
+
+
+class TestCargarExcelConNormalizacion:
+    """
+    Tests para función cargar_excel_con_normalizacion - FASE 5.3a
+    
+    🚨 ARQUITECTURA CRÍTICA - SISTEMA CARDIOVASCULAR DUAL 🚨
+    
+    Estos tests validan el comportamiento del sistema dual de columnas
+    descubierto durante la refactorización:
+    
+    - df.attrs["orig_cols"]: Columnas exactas del archivo (para UI)  
+    - df.columns: Columnas normalizadas (para algoritmo)
+    
+    ⚠️ ADVERTENCIA: Estos tests documentan comportamiento intencional,
+    NO un bug. Cualquier "optimización" que elimine la dualidad
+    ROMPERÁ la funcionalidad del sistema.
+    
+    Los tests verifican:
+    1. Preservación de nombres originales en attrs
+    2. Normalización correcta de headers
+    3. Consistencia entre ambos sistemas
+    4. Integridad de datos tras el proceso
+    """
+    
+    def test_carga_exitosa_con_sistema_dual(self):
+        """Test carga exitosa preservando sistema cardiovascular dual"""
+        # Crear archivo Excel temporal de prueba
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            df_test = pd.DataFrame({
+                'Columna 1  ': [1, 2, 3],
+                '  Columna 2': [4, 5, 6],
+                'Columna 3': [7, 8, 9]
+            })
+            df_test.to_excel(tmp.name, index=False)
+            tmp_path = tmp.name
+        
+        try:
+            from tz_core.data_loader import cargar_excel_con_normalizacion
+            df_resultado, hoja_usada = cargar_excel_con_normalizacion(tmp_path)
+            
+            # Verificar sistema dual cardiovascular
+            assert "orig_cols" in df_resultado.attrs
+            assert df_resultado.attrs["orig_cols"] == ['Columna 1  ', '  Columna 2', 'Columna 3']
+            
+            # Verificar normalización de headers
+            assert list(df_resultado.columns) == ['Columna 1', 'Columna 2', 'Columna 3']
+            
+            # Verificar datos preservados
+            assert len(df_resultado) == 3
+            assert df_resultado.iloc[0, 0] == 1
+            
+            # Verificar hoja usada
+            assert hoja_usada == "primera_hoja"
+            
+        finally:
+            os.unlink(tmp_path)
+    
+    def test_carga_con_hoja_especifica(self):
+        """Test carga con hoja específica"""
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            with pd.ExcelWriter(tmp.name) as writer:
+                pd.DataFrame({'Col1': [1, 2]}).to_excel(writer, sheet_name='Hoja1', index=False)
+                pd.DataFrame({'Col2': [3, 4]}).to_excel(writer, sheet_name='Hoja2', index=False)
+            tmp_path = tmp.name
+        
+        try:
+            from tz_core.data_loader import cargar_excel_con_normalizacion
+            df_resultado, hoja_usada = cargar_excel_con_normalizacion(tmp_path, 'Hoja2')
+            
+            assert hoja_usada == 'Hoja2'
+            assert 'Col2' in df_resultado.columns
+            assert df_resultado.attrs["orig_cols"] == ['Col2']
+            
+        finally:
+            os.unlink(tmp_path)
+    
+    def test_error_archivo_inexistente(self):
+        """Test error con archivo inexistente"""
+        from tz_core.data_loader import cargar_excel_con_normalizacion
+        
+        with pytest.raises(ValueError, match="Error cargando Excel"):
+            cargar_excel_con_normalizacion("archivo_inexistente.xlsx")
+    
+    def test_preservacion_tipos_originales(self):
+        """Test preservación de tipos de datos originales"""
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            df_test = pd.DataFrame({
+                'Enteros': [1, 2, 3],
+                'Flotantes': [1.1, 2.2, 3.3],
+                'Texto': ['A', 'B', 'C']
+            })
+            df_test.to_excel(tmp.name, index=False)
+            tmp_path = tmp.name
+        
+        try:
+            from tz_core.data_loader import cargar_excel_con_normalizacion
+            df_resultado, _ = cargar_excel_con_normalizacion(tmp_path)
+            
+            # Verificar tipos preservados
+            assert df_resultado['Enteros'].dtype == 'int64'
+            assert df_resultado['Flotantes'].dtype == 'float64'
+            assert df_resultado['Texto'].dtype == 'object'
+            
+            # Verificar sistema dual intacto
+            assert df_resultado.attrs["orig_cols"] == ['Enteros', 'Flotantes', 'Texto']
+            
+        finally:
+            os.unlink(tmp_path)

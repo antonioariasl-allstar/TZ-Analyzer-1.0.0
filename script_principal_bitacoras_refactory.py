@@ -5911,6 +5911,26 @@ def _seleccionar_hoja(ruta_excel):
     """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja"""
     return seleccionar_hoja(ruta_excel)
 
+def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
+    """
+    Wrapper de compatibilidad para tz_core.data_loader.cargar_excel_con_normalizacion
+    
+    🚨 FASE 5.3a - SISTEMA CARDIOVASCULAR DUAL EXTRAÍDO 🚨
+    
+    Esta función implementa el sistema dual de columnas descubierto durante 
+    la refactorización campo minado:
+    
+    1. df.attrs["orig_cols"] - Columnas originales del archivo (para UI)
+    2. df.columns normalizadas - Columnas procesadas (para algoritmo)
+    
+    CRÍTICO: Ambas versiones son necesarias y NO deben ser "optimizadas".
+    La UI muestra nombres reales, el algoritmo usa nombres limpiados.
+    
+    Preserva comportamiento exacto de líneas originales 6543-6557.
+    """
+    from tz_core.data_loader import cargar_excel_con_normalizacion
+    return cargar_excel_con_normalizacion(ruta_excel, hoja_elegida)
+
 # --- Fallback: listar TODAS las hojas con pandas y seleccionar una ---
 # 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader (wrappers ya definidos arriba)
 
@@ -6538,19 +6558,16 @@ def main():
     # Selección de hoja visible (si hay varias)
     hoja = _seleccionar_hoja_visible(archivo_entrada)
 
-    # Carga del Excel (con o sin hoja seleccionada)
+    # Carga del Excel con sistema cardiovascular dual (FASE 5.3a modular)
     try:
-        df = pd.read_excel(archivo_entrada, sheet_name=hoja) if hoja else pd.read_excel(archivo_entrada)
-        # Guardar columnas originales para el menú QC (antes de cualquier rename/coalesce)
-        df.attrs["orig_cols"] = list(map(str, df.columns))
+        df, hoja_usada = _cargar_excel_con_normalizacion(archivo_entrada, hoja)
     except Exception as e:
         print(f"Error al leer el Excel: {e}")
         return
 
-    # Normalización de encabezados
+    # Normalización adicional de encabezados (heredada del sistema cardiovascular)
     df.columns = (
         df.columns.astype(str)
-          .str.strip()
           .str.normalize('NFD').str.encode('ascii', 'ignore').str.decode('ascii')
           .str.lower()
           .str.replace(r'[\s\-\/\.]+', '_', regex=True)   # espacios, guiones, diagonales y puntos -> _

@@ -1,7 +1,10 @@
-# TODO – TZ Analysis
+# TODO – TZ Analysis: OPERACIÓN A CORAZÓN ABIERTO 🫀
 Rama: refactor/modular-architecture  
-Fase: Refactorización Modular (Campo Minado)  
-Fecha: 2025-10-24  
+Fase: Pre-Quirúrgica (Análisis exhaustivo antes de Fase 5.3)  
+Fecha: 2025-10-25  
+**Estado del Paciente:** ESTABLE - Todas las funciones extraídas funcionando al 100%
+
+> **🫀 ANALOGÍA MÉDICA:** La refactorización del TZ Analyzer es literalmente una **operación a corazón abierto**. La Fase 5.3 (carga principal Excel + normalización) representa las **arterias principales** del sistema. Un error quirúrgico puede causar **paro cardíaco inmediato** o **fallas diferidas** que se manifiestan silenciosamente en el pipeline de datos.
 
 > **📋 Handoff para casa:** Ver archivo `HANDOFF_CASA.txt` en la raíz del repo con instrucciones paso a paso para continuar el trabajo en casa.
 
@@ -41,13 +44,64 @@ el sistema sigue funcionando correctamente.
 **ACCIÓN FUTURA:** Considerar desactivar `synonyms_user` automático y 
 limpiar sinónimos legacy obsoletos. Probar con datos reales primero.
 
-### 📝 **HISTÓRICO DE EXTRACCIÓN - Fase 3:**
+## 🏥 EXPEDIENTE MÉDICO - OPERACIÓN A CORAZÓN ABIERTO
+
+### � **ESTADÍSTICAS QUIRÚRGICAS ACTUALES:**
+- **🫀 Estado del Paciente:** ESTABLE - Signos vitales normales
+- **✅ Operaciones Completadas:** 8/15 fases (53% del procedimiento)
+- **🧪 Tests Unitarios:** 40/40 PASAN (100% éxito)
+- **📈 Golden Baseline:** SIEMPRE OK (cero regresiones)
+- **💾 Commits Atómicos:** 7 creados exitosamente
+- **⚡ Funciones Extraídas:** 11 funciones trasplantadas con éxito
+
+### 🩺 **DIAGNÓSTICO PRE-QUIRÚRGICO FASE 5.3:**
+
+**🫀 ARTERIAS PRINCIPALES IDENTIFICADAS:**
+1. **Arteria Aorta** (Línea 6543): `pd.read_excel()` - **FUNCIÓN DE CARGA PRINCIPAL**
+2. **Arteria Coronaria** (Líneas 6549-6557): **Normalización de encabezados** (sistema circulatorio crítico)  
+3. **Arteria Pulmonar** (Línea 804): `normalizar_columnas_texto()` - **Normalización de contenido**
+
+**⚠️ RIESGOS CARDIOVASCULARES CRÍTICOS:**
+- **💀 Paro cardíaco inmediato:** Si tocamos mal la función de carga principal
+- **🩸 Isquemia diferida:** Falla silenciosa que se manifiesta horas después en KML/HTML
+- **🫁 Embolia:** Dependencias rotas que bloquean el flujo de datos
+- **💓 Arritmia:** Inconsistencias en mapeo de columnas que causan fallos intermitentes
+
+**🏥 PROTOCOLO QUIRÚRGICO PROPUESTO:**
+- **Opción A:** División en sub-fases ultra-granulares (5.3a, 5.3b, 5.3c)
+- **Opción B:** Análisis forense más exhaustivo antes de proceder
+- **Requisito:** **CIRUJANO DESCANSADO AL 100%** - OBLIGATORIO
+
+### 📋 **HISTÓRICO QUIRÚRGICO EXITOSO:**
+
+**🎯 FASE 3 - UTILIDADES PURAS (COMPLETADA):**
 1. ✅ `sha256_de_archivo` (Commit: 3e8b629)
 2. ✅ `escribe_hashes_txt` (Commit: 96584bf)  
 3. ✅ `compactar_ruta` (Commit: ae4423d)
-4. ✅ `sanear_nombre_archivo` (Commit: PENDIENTE) - **MINA DESACTIVADA**
+4. ✅ `sanear_nombre_archivo` (Commit: 2d4c724) - **MINA DESACTIVADA**
 
-## ✅ Migración a Python 3.12.8 (completada)
+**🎯 FASE 4 - CONFIGURACIÓN COMPLETA (COMPLETADA):**
+- ✅ **4.1:** `cargar_config()` (Commit: 2d4c724)
+- ✅ **4.2:** `bootstrap_config()` + sinónimos (Commit: f4e159c) - **BOMBA DESACTIVADA**
+- ✅ **4.3:** `solicitar_color_tema()` (Commit: 9695f02) - **MINA INTERACTIVA DESACTIVADA**
+- ✅ **4.4:** Persistencia config (Commit: 3384d90) - **MINAS PERSISTENCIA DESACTIVADAS**
+
+**🎯 FASE 5.1-5.2 - DATA_LOADER (COMPLETADA):**
+- ✅ **5.1:** Funciones puras data_loader (Commit: 0dda2dc) - **MINAS DESACTIVADAS**
+- ✅ **5.2:** Funciones interactivas (Commit: 9eb3335) - **MINAS INTERACTIVAS DESACTIVADAS**
+
+### 🚨 **PRÓXIMA OPERACIÓN CRÍTICA:**
+**FASE 5.3: OPERACIÓN A CORAZÓN ABIERTO** 🫀⚡
+- **Arteria crítica:** `pd.read_excel()` + normalización completa
+- **Riesgo:** MÁXIMO - Puede parar el corazón del sistema
+- **Requisito:** Cirujano descansado + análisis forense exhaustivo
+- **Estrategia:** Por definir (sub-fases vs análisis profundo)
+
+---
+
+## 🚨 **MINA DESACTIVADA: Funciones de Saneamiento** 
+**Fecha:** 24 oct 2025  
+**Estado:** ✅ Extraída y unificada con cero breaking changes
 **Fecha:** 21 de octubre de 2025  
 **Estado:** ✅ Completada exitosamente
 

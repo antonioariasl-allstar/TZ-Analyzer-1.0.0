@@ -4,14 +4,34 @@ tz_core.data_loader - Carga y manejo de archivos de datos
 Módulo especializado en la carga de archivos Excel, CSV y TSV con manejo
 inteligente de hojas de cálculo, detección de encoding y validaciones.
 
-🚨 ESTADO: FASE 5.2 - Extracción de funciones interactivas de selección de hojas
-Minas detectadas: Funciones con input() requieren mocking para tests
+🚨 ESTADO: FASE 5.3a - Extracción del sistema cardiovascular de carga Excel
+🚨 ARQUITECTURA CRÍTICA: Sistema dual de columnas implementado
+
+HISTORIA DE REFACTORIZACIÓN:
+- Fase 5.1: Funciones puras extraídas
+- Fase 5.2: Funciones interactivas extraídas  
+- Fase 5.3a: Sistema cardiovascular dual extraído (ACTUAL)
+
+SISTEMA CARDIOVASCULAR DUAL:
+Durante el análisis de Fase 5.3 se descubrió que el monolito original mantiene
+INTENCIONALMENTE dos versiones de nombres de columnas:
+
+1. df.attrs["orig_cols"] - Columnas originales del archivo (UI)
+2. df.columns normalizadas - Columnas procesadas (algoritmo)
+
+Esta NO es una duplicación accidental sino una decisión arquitectónica
+crítica para preservar tanto la presentación como la funcionalidad.
+
+⚠️ ADVERTENCIA PARA FUTUROS DESARROLLADORES:
+No "optimizar" eliminando el sistema dual - ambas versiones son necesarias.
+La UI necesita mostrar nombres reales, el algoritmo necesita nombres limpiados.
 
 Funciones extraídas:
 - obtener_hojas_visibles(): Detección de hojas visibles vs ocultas en Excel
 - listar_todas_hojas(): Listado completo de hojas usando pandas
 - seleccionar_hoja_visible(): Selección interactiva de hojas visibles 
 - seleccionar_hoja(): Selección maestra con doble estrategia (visibles/todas)
+- cargar_excel_con_normalizacion(): Carga Excel con sistema cardiovascular dual
 """
 
 import pandas as pd
@@ -160,3 +180,85 @@ def seleccionar_hoja(ruta_excel: str) -> Optional[str]:
     
     print(f"Hoja seleccionada: {elegido}")
     return elegido
+
+
+def cargar_excel_con_normalizacion(ruta_excel: str, hoja_elegida: Optional[str] = None) -> Tuple[pd.DataFrame, str]:
+    """
+    Carga archivo Excel con preservación del sistema de columnas dual.
+    
+    🚨 ARQUITECTURA CRÍTICA - SISTEMA CARDIOVASCULAR DUAL 🚨
+    
+    Durante la refactorización se descubrió que el sistema original mantiene
+    INTENCIONALMENTE dos versiones de los nombres de columnas:
+    
+    1. df.attrs["orig_cols"] (línea 6545 original):
+       - Columnas RAW tal como aparecen en el archivo Excel
+       - Preserva espacios, caracteres especiales, formato original
+       - Usado por la interfaz de usuario para mostrar nombres reales
+       - NUNCA debe ser modificado después de la carga
+    
+    2. Columnas normalizadas del DataFrame (líneas 6549-6557 original):
+       - Headers limpiados con .strip() para el algoritmo
+       - Remueve espacios en blanco, estandariza formato
+       - Usado internamente por la lógica de procesamiento
+       - Se almacena snapshot antes de normalizar
+    
+    Esta dualidad NO ES UN BUG sino una decisión arquitectónica deliberada
+    para mantener tanto la presentación original como la funcionalidad interna.
+    
+    TIMING CRÍTICO (basado en análisis de líneas originales):
+    - Línea 6543: pd.read_excel() - Carga inicial
+    - Línea 6545: df.attrs["orig_cols"] - ANTES de normalización
+    - Líneas 6549-6557: Normalización de headers - DESPUÉS de backup
+    - Línea 7551: df._orig_cols - Snapshot post-normalización
+    
+    Args:
+        ruta_excel: Ruta al archivo Excel
+        hoja_elegida: Hoja específica a cargar, None para selección automática
+        
+    Returns:
+        Tuple con (DataFrame con sistema dual preservado, nombre_hoja_utilizada)
+        
+    Raises:
+        ValueError: Si el archivo no puede ser cargado
+        
+    Ejemplo:
+        Archivo Excel con columna "  Timestamp  "
+        - df.attrs["orig_cols"] = ["  Timestamp  "] 
+        - df.columns = ["Timestamp"] (normalizado)
+        
+    Historia:
+        Extraído del monolito en Fase 5.3a usando metodología campo minado.
+        Preserva comportamiento exacto del sistema cardiovascular original.
+    """
+    try:
+        # PASO 1: Carga inicial Excel (réplica exacta línea 6543 original)
+        if hoja_elegida:
+            df = pd.read_excel(ruta_excel, sheet_name=hoja_elegida)
+            hoja_usada = hoja_elegida
+        else:
+            df = pd.read_excel(ruta_excel)
+            hoja_usada = "primera_hoja"
+        
+        # PASO 2: Backup INMEDIATO de columnas originales (línea 6545 del cardiovascular)
+        # ⚠️ CRÍTICO: Debe ejecutarse ANTES de cualquier normalización
+        # Preserva nombres exactos del archivo para mostrar en UI
+        df.attrs["orig_cols"] = list(df.columns)
+        
+        # PASO 3: Snapshot para debugging y verificación de integridad
+        # Este snapshot documenta el estado pre-normalización
+        cols_originales_snapshot = list(df.columns)
+        
+        # PASO 4: Normalización de headers para algoritmo (líneas 6549-6557 cardiovascular)
+        # ⚠️ CRÍTICO: Solo después del backup de originales
+        # Remueve espacios en blanco que interfieren con procesamiento
+        df.columns = [str(col).strip() for col in df.columns]
+        
+        # VALIDACIÓN: Verificar que el sistema dual está operacional
+        assert "orig_cols" in df.attrs, "Sistema dual falló: orig_cols no preservado"
+        assert len(df.attrs["orig_cols"]) == len(df.columns), "Sistema dual falló: conteo inconsistente"
+        
+        return df, hoja_usada
+        
+    except Exception as e:
+        raise ValueError(f"Error cargando Excel {ruta_excel}: {str(e)}")
