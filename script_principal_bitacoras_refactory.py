@@ -318,8 +318,19 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
 
 def bootstrap_config() -> None:
     """
-    Inicializa configuración y rename map, y muestra banner.
-    Evita ejecutar esto en import; llamarlo solo desde el entrypoint.
+    🚨 FUNCIÓN ULTRA-CRÍTICA REFACTORIZADA: Inicializa configuración global y rename map.
+    
+    RESPONSABILIDADES:
+    1. Muestra banner de la aplicación
+    2. Inicializa variables globales CONFIG y RENAME_MAP
+    3. Carga configuración desde archivo (tz_core.config_manager)
+    4. Construye mapa de sinónimos de columnas (tz_core.config_manager)
+    
+    REFACTORIZACIÓN:
+    - Banner: mantenido local (display)
+    - CONFIG loading: usa cargar_config_modular() ✅ 
+    - RENAME_MAP building: usa cfg_build_rename_map_modular() ✅
+    - Variables globales: mantenidas locales por compatibilidad
     """
     # Banner (antes estaba al nivel superior)
     print("""
@@ -328,9 +339,13 @@ def bootstrap_config() -> None:
     Bitacoras -> KML/KMZ + Informe HTML
 ===============================================
 """)
-    # Configuración y mapa de sinónimos (antes estaban al nivel superior)
+    
+    # Configuración y mapa de sinónimos usando funciones modulares
     global CONFIG, RENAME_MAP
-    CONFIG = get_config()  # Usa la función centralizada
+    CONFIG = get_config()  # Usa la función centralizada (ya modular)
+    
+    # Importar cfg_build_rename_map desde el módulo
+    from tz_core.config_manager import cfg_build_rename_map
     RENAME_MAP = cfg_build_rename_map(CONFIG)
 
 # === SECCIÓN: WIZARD DE MAPEO DE COLUMNAS (detección, mapeo manual, QC) ===
@@ -979,36 +994,21 @@ def cargar_config():
 import tempfile
 
 def _normalize_key_for_synonyms(s: str) -> str:
-    s = "" if s is None else str(s)
-    s = unicodedata.normalize('NFKD', s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    s = re.sub(r'\s+', ' ', s).strip().lower()
-    return s
+    """
+    Wrapper para compatibilidad - usar _normalize_key_for_synonyms de tz_core.config_manager
+    """
+    from tz_core.config_manager import _normalize_key_for_synonyms as _normalize_modular
+    return _normalize_modular(s)
 
 def cfg_build_rename_map(CONFIG: dict) -> dict:
-    """Construye el mapa de sinónimos de columnas a partir de CONFIG; normaliza y registra conteos."""
-    rename_map = {}
-    schema = (CONFIG or {}).get('schema', {})
-    fields = schema.get('fields', {}) if isinstance(schema, dict) else {}
-    for canonico, spec in (fields or {}).items():
-        sinos = set()
-        if isinstance(spec, dict):
-            for raw in spec.get('synonyms', []) or []:
-                sinos.add(_normalize_key_for_synonyms(raw))
-            sinos.add(_normalize_key_for_synonyms(canonico))
-        rename_map[canonico] = sinos
-    user_syn = (CONFIG or {}).get('synonyms_user', {}) or {}
-    for raw, mapped in user_syn.items():
-        if raw.startswith('_'):
-            continue
-        c_norm = _normalize_key_for_synonyms(mapped)
-        r_norm = _normalize_key_for_synonyms(raw)
-        if c_norm not in rename_map:
-            rename_map[c_norm] = set()
-        rename_map[c_norm].add(r_norm)
-    try: log(f"[synonyms] Construido rename_map: {sum(len(v) for v in rename_map.values())} entradas totales.")
-    except Exception: pass
-    return rename_map
+    """
+    Wrapper para compatibilidad - usar cfg_build_rename_map de tz_core.config_manager
+    
+    MINA DESACTIVADA: Sistema de sinónimos extraído al módulo config_manager.
+    Preserva comportamiento exacto del mapeo de columnas legacy y dinámico.
+    """
+    from tz_core.config_manager import cfg_build_rename_map as cfg_build_modular
+    return cfg_build_modular(CONFIG)
 
 def _atomic_write_json(path: str, data: dict):
     import json, os

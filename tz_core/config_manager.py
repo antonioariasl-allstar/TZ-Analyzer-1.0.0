@@ -100,10 +100,98 @@ def cargar_config() -> Dict[str, Any]:
         """Agregar sinónimo definido por usuario"""
         pass
 
+
+# === FUNCIONES DE BOOTSTRAP Y SINÓNIMOS ===
+
+def log(msg: str):
+    """
+    Función de logging simple y visible en consola.
+    
+    NOTA: Esta es una función auxiliar extraída para las funciones de configuración.
+    En el futuro podría moverse a un módulo de logging dedicado.
+    """
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    s = f"[{ts}] {msg}"
+    print(s)
+    # Nota: LOGS list no se mantiene en el módulo para evitar dependencias
+
+
+def _normalize_key_for_synonyms(s: str) -> str:
+    """
+    Normaliza una cadena para comparación de sinónimos.
+    
+    Aplica:
+    - Normalización Unicode NFKD
+    - Eliminación de acentos/diacríticos
+    - Conversión a minúsculas
+    - Normalización de espacios en blanco
+    
+    Args:
+        s: Cadena a normalizar
+        
+    Returns:
+        str: Cadena normalizada para comparación
+    """
+    import unicodedata
+    import re
+    
+    s = "" if s is None else str(s)
+    s = unicodedata.normalize('NFKD', s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    s = re.sub(r'\s+', ' ', s).strip().lower()
+    return s
+
+
+def cfg_build_rename_map(CONFIG: dict) -> dict:
+    """
+    Construye el mapa de sinónimos de columnas a partir de CONFIG.
+    
+    SISTEMA HÍBRIDO DE SINÓNIMOS:
+    1. 'schema.fields.*.synonyms': Sinónimos legacy del mapeo automático
+    2. 'synonyms_user': Memoria dinámica de mapeos manuales
+    
+    NOTA TÉCNICA: El sistema actual usa mapeo 100% manual, por lo que
+    la memoria automática (synonyms_user) podría ser obsoleta.
+    
+    Args:
+        CONFIG: Diccionario de configuración global
+        
+    Returns:
+        dict: Mapa de sinónimos {columna_canonica: {set_de_variantes}}
+    """
+    rename_map = {}
+    schema = (CONFIG or {}).get('schema', {})
+    fields = schema.get('fields', {}) if isinstance(schema, dict) else {}
+    
+    # Procesar sinónimos legacy del schema
+    for canonico, spec in (fields or {}).items():
+        sinos = set()
+        if isinstance(spec, dict):
+            for raw in spec.get('synonyms', []) or []:
+                sinos.add(_normalize_key_for_synonyms(raw))
+            sinos.add(_normalize_key_for_synonyms(canonico))
+        rename_map[canonico] = sinos
+    
+    # Procesar sinónimos de memoria dinámica
+    user_syn = (CONFIG or {}).get('synonyms_user', {}) or {}
+    for raw, mapped in user_syn.items():
+        if raw.startswith('_'):
+            continue
+        c_norm = _normalize_key_for_synonyms(mapped)
+        r_norm = _normalize_key_for_synonyms(raw)
+        if c_norm not in rename_map:
+            rename_map[c_norm] = set()
+        rename_map[c_norm].add(r_norm)
+    
+    try: 
+        log(f"[synonyms] Construido rename_map: {sum(len(v) for v in rename_map.values())} entradas totales.")
+    except Exception: 
+        pass
+    return rename_map
+
+
 # TODO: Extraer del script principal:
-# - bootstrap_config()
-# - cargar_config()
-# - cfg_build_rename_map()
-# - cfg_add_user_synonym()
-# - _normalize_key_for_synonyms()
+# - _solicitar_color_tema()
 # - _atomic_write_json()
+# - cfg_add_user_synonym()
