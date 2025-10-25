@@ -1011,44 +1011,24 @@ def cfg_build_rename_map(CONFIG: dict) -> dict:
     return cfg_build_modular(CONFIG)
 
 def _atomic_write_json(path: str, data: dict):
-    import json, os
-    from datetime import datetime
-    base_dir = os.path.dirname(os.path.abspath(path))
-    os.makedirs(base_dir, exist_ok=True)
-    try:
-        if os.path.exists(path):
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup = f"{path}.backup.{ts}.json"
-            with open(path, "r", encoding="utf-8") as fr, open(backup, "w", encoding="utf-8") as fw:
-                fw.write(fr.read())
-    except Exception:
-        pass
-    fd, tmp_path = tempfile.mkstemp(prefix="cfg_", suffix=".json", dir=base_dir)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp_path, path)
+    """
+    🚨 WRAPPER DE COMPATIBILIDAD - usar atomic_write_json de tz_core.config_manager
+    
+    MINA DESACTIVADA: Función de escritura atómica extraída al módulo config_manager.
+    Preserva backup automático y escritura segura de archivos JSON.
+    """
+    from tz_core.config_manager import atomic_write_json
+    return atomic_write_json(path, data)
 
 def cfg_add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cfg: str = None) -> dict:
-    if not isinstance(CONFIG, dict):
-        return CONFIG
-    canonico = (canonico or "").strip()
-    encabezado_crudo = (encabezado_crudo or "").strip()
-    if not canonico or not encabezado_crudo:
-        return CONFIG
-    if "synonyms_user" not in CONFIG or not isinstance(CONFIG["synonyms_user"], dict):
-        CONFIG["synonyms_user"] = {}
-    if encabezado_crudo not in CONFIG["synonyms_user"]:
-        CONFIG["synonyms_user"][encabezado_crudo] = canonico
-        try:
-            base = os.path.dirname(os.path.abspath(__file__))
-            ruta_cfg = ruta_cfg or os.path.join(base, "config.json")
-            _atomic_write_json(ruta_cfg, CONFIG)
-            try: log(f"[INFO][synonyms] Añadido '{encabezado_crudo}' → '{canonico}' (persistido en config.json).")
-            except Exception: pass
-        except Exception as e:
-            try: log(f"[WARN][synonyms] No se pudo guardar config.json: {e}")
-            except Exception: pass
-    return CONFIG
+    """
+    🚨 WRAPPER DE COMPATIBILIDAD - usar add_user_synonym de tz_core.config_manager
+    
+    MINA DESACTIVADA: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.
+    Preserva persistencia automática en config.json y memoria de mapeo manual.
+    """
+    from tz_core.config_manager import add_user_synonym
+    return add_user_synonym(CONFIG, canonico, encabezado_crudo, ruta_cfg)
 # === SINONIMOS: MERGE + PERSISTENCIA (fin) =================================
 
 # CONFIG inicializado al nivel de módulo (se carga una sola vez)

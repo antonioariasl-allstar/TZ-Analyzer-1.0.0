@@ -19,7 +19,9 @@ from tz_core.config_manager import (
     _normalize_key_for_synonyms,
     cfg_build_rename_map,
     log,
-    solicitar_color_tema
+    solicitar_color_tema,
+    atomic_write_json,
+    add_user_synonym
 )
 import tz_core.config_manager
 
@@ -275,13 +277,137 @@ def test_solicitar_color_tema_invalid_input():
     return True
 
 
+def test_atomic_write_json():
+    """Test escritura atómica de JSON con backup"""
+    print("🧪 Testing atomic_write_json...")
+    
+    import tempfile
+    import os
+    import json
+    
+    # Crear directorio temporal para test
+    with tempfile.TemporaryDirectory() as temp_dir:
+        test_file = os.path.join(temp_dir, "test_config.json")
+        
+        # Test data
+        test_data = {
+            "test": "data",
+            "number": 123,
+            "array": [1, 2, 3]
+        }
+        
+        # Escribir archivo
+        atomic_write_json(test_file, test_data)
+        
+        # Verificar que existe
+        assert os.path.exists(test_file), "Archivo debe existir después de escritura"
+        
+        # Verificar contenido
+        with open(test_file, "r", encoding="utf-8") as f:
+            loaded_data = json.load(f)
+        
+        assert loaded_data == test_data, "Datos cargados deben coincidir con los escritos"
+        
+        # Test backup al sobrescribir
+        new_data = {"updated": "content"}
+        atomic_write_json(test_file, new_data)
+        
+        # Debe existir archivo de backup
+        backup_files = [f for f in os.listdir(temp_dir) if f.startswith("test_config.json.backup")]
+        assert len(backup_files) > 0, "Debe crear archivo de backup"
+        
+        # Verificar nuevo contenido
+        with open(test_file, "r", encoding="utf-8") as f:
+            updated_data = json.load(f)
+        
+        assert updated_data == new_data, "Archivo debe estar actualizado"
+    
+    print("✅ PASS: atomic_write_json funciona correctamente")
+    return True
+
+
+def test_add_user_synonym():
+    """Test agregado de sinónimos dinámicos con persistencia"""
+    print("🧪 Testing add_user_synonym...")
+    
+    import tempfile
+    import os
+    
+    # Config de prueba
+    test_config = {
+        "synonyms_user": {
+            "campo_existente": "lat"
+        }
+    }
+    
+    # Crear archivo temporal para persistencia
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_config_file = os.path.join(temp_dir, "config.json")
+        
+        # Test: Agregar nuevo sinónimo
+        result_config = add_user_synonym(
+            test_config.copy(), 
+            "tel", 
+            "numero_telefono", 
+            temp_config_file
+        )
+        
+        # Verificar que se agregó al CONFIG
+        assert "numero_telefono" in result_config["synonyms_user"], "Debe agregar nuevo sinónimo"
+        assert result_config["synonyms_user"]["numero_telefono"] == "tel", "Debe mapear correctamente"
+        
+        # Verificar que se persistió en archivo
+        assert os.path.exists(temp_config_file), "Debe crear archivo de configuración"
+        
+        # Cargar y verificar persistencia
+        import json
+        with open(temp_config_file, "r", encoding="utf-8") as f:
+            persisted_config = json.load(f)
+        
+        assert "numero_telefono" in persisted_config["synonyms_user"], "Debe persistir en JSON"
+        
+        # Test: No duplicar sinónimo existente
+        original_size = len(result_config["synonyms_user"])
+        result_config2 = add_user_synonym(
+            result_config, 
+            "tel", 
+            "numero_telefono",  # Mismo sinónimo
+            temp_config_file
+        )
+        
+        assert len(result_config2["synonyms_user"]) == original_size, "No debe duplicar sinónimos"
+    
+    print("✅ PASS: add_user_synonym funciona correctamente")
+    return True
+
+
+def test_add_user_synonym_invalid_inputs():
+    """Test add_user_synonym con entradas inválidas"""
+    print("🧪 Testing add_user_synonym con entradas inválidas...")
+    
+    # Test: CONFIG inválido
+    result1 = add_user_synonym(None, "canonico", "crudo")
+    assert result1 is None, "Debe retornar CONFIG original si es inválido"
+    
+    # Test: Parámetros vacíos
+    test_config = {"synonyms_user": {}}
+    result2 = add_user_synonym(test_config, "", "crudo")
+    assert len(result2["synonyms_user"]) == 0, "No debe agregar sinónimo con canonico vacío"
+    
+    result3 = add_user_synonym(test_config, "canonico", "")
+    assert len(result3["synonyms_user"]) == 0, "No debe agregar sinónimo con crudo vacío"
+    
+    print("✅ PASS: Validación de entradas inválidas funciona")
+    return True
+
+
 def main():
     """Ejecutar todos los tests"""
     print("🏗️  TESTS UNITARIOS - tz_core.config_manager")
     print("=" * 50)
     
     tests_passed = 0
-    total_tests = 10
+    total_tests = 13
     
     # Test 1: Estructura DEFAULT_CONFIG
     if test_default_config_structure():
@@ -321,6 +447,18 @@ def main():
     
     # Test 10: Solicitar color tema - entrada inválida
     if test_solicitar_color_tema_invalid_input():
+        tests_passed += 1
+    
+    # Test 11: Escritura atómica JSON
+    if test_atomic_write_json():
+        tests_passed += 1
+    
+    # Test 12: Agregar sinónimo usuario
+    if test_add_user_synonym():
+        tests_passed += 1
+    
+    # Test 13: Sinónimo usuario - entradas inválidas
+    if test_add_user_synonym_invalid_inputs():
         tests_passed += 1
     
     print("\n" + "=" * 50)

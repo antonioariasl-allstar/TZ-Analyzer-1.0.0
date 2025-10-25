@@ -192,9 +192,123 @@ def cfg_build_rename_map(CONFIG: dict) -> dict:
 
 
 # TODO: Extraer del script principal:
-# - _solicitar_color_tema()
-# - _atomic_write_json() 
 # - cfg_add_user_synonym()
+
+
+def atomic_write_json(path: str, data: dict):
+    """
+    🚨 FUNCIÓN ULTRA-CRÍTICA: Escritura atómica de archivos JSON con backup automático.
+    
+    OPERACIONES PELIGROSAS:
+    - Creación de directorios (makedirs)
+    - Backup automático con timestamp
+    - Escritura atómica usando tempfile + os.replace
+    - Manejo de errores silencioso
+    
+    PROTOCOLO DE SEGURIDAD:
+    1. Crea directorio base si no existe
+    2. Backup del archivo existente (.backup.timestamp.json)
+    3. Escritura a archivo temporal
+    4. Reemplazo atómico del archivo original
+    
+    Args:
+        path (str): Ruta absoluta del archivo JSON a escribir
+        data (dict): Datos a serializar en JSON
+        
+    Raises:
+        Exception: Errores de filesystem, permisos, serialización JSON
+        
+    NOTA CRÍTICA: Esta función puede fallar silenciosamente en caso de errores
+    de backup. La escritura principal siempre se intenta.
+    """
+    import json
+    import os
+    import tempfile
+    from datetime import datetime
+    
+    # Asegurar que el directorio base existe
+    base_dir = os.path.dirname(os.path.abspath(path))
+    os.makedirs(base_dir, exist_ok=True)
+    
+    # Crear backup del archivo existente (fallar silenciosamente)
+    try:
+        if os.path.exists(path):
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup = f"{path}.backup.{ts}.json"
+            with open(path, "r", encoding="utf-8") as fr, open(backup, "w", encoding="utf-8") as fw:
+                fw.write(fr.read())
+    except Exception:
+        # Fallar silenciosamente en backup - la escritura principal continúa
+        pass
+    
+    # Escritura atómica usando tempfile
+    fd, tmp_path = tempfile.mkstemp(prefix="cfg_", suffix=".json", dir=base_dir)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, path)
+
+
+def add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cfg: str = None) -> dict:
+    """
+    🚨 FUNCIÓN CRÍTICA: Agrega sinónimo dinámico y persiste automáticamente en config.json.
+    
+    OPERACIONES PELIGROSAS:
+    - Mutación del diccionario CONFIG en vivo
+    - Escritura automática a disco usando atomic_write_json()
+    - Detección automática de ruta de config.json
+    - Logging con manejo de errores
+    
+    SISTEMA DE SINÓNIMOS DINÁMICOS:
+    - Agrega a CONFIG["synonyms_user"] la relación encabezado_crudo -> canonico
+    - Persiste inmediatamente el CONFIG completo en config.json
+    - Usado por el wizard de mapeo manual de columnas
+    
+    Args:
+        CONFIG (dict): Diccionario de configuración global (se modifica in-place)
+        canonico (str): Nombre de columna canónica de destino
+        encabezado_crudo (str): Encabezado original del archivo de datos
+        ruta_cfg (str, optional): Ruta específica de config.json (auto-detecta si None)
+        
+    Returns:
+        dict: CONFIG modificado con el nuevo sinónimo
+        
+    NOTA TÉCNICA: Esta función implementa la "memoria" del sistema de mapeo manual.
+    Cada vez que el usuario mapea una columna manualmente, se guarda para futuros archivos.
+    """
+    # Validaciones básicas
+    if not isinstance(CONFIG, dict):
+        return CONFIG
+    canonico = (canonico or "").strip()
+    encabezado_crudo = (encabezado_crudo or "").strip()
+    if not canonico or not encabezado_crudo:
+        return CONFIG
+    
+    # Inicializar synonyms_user si no existe
+    if "synonyms_user" not in CONFIG or not isinstance(CONFIG["synonyms_user"], dict):
+        CONFIG["synonyms_user"] = {}
+    
+    # Agregar sinónimo si no existe ya
+    if encabezado_crudo not in CONFIG["synonyms_user"]:
+        CONFIG["synonyms_user"][encabezado_crudo] = canonico
+        
+        # Persistir automáticamente en config.json
+        try:
+            import os
+            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Subir 2 niveles desde tz_core/
+            ruta_cfg = ruta_cfg or os.path.join(base, "config.json")
+            atomic_write_json(ruta_cfg, CONFIG)
+            
+            try: 
+                log(f"[INFO][synonyms] Añadido '{encabezado_crudo}' → '{canonico}' (persistido en config.json).")
+            except Exception: 
+                pass
+        except Exception as e:
+            try: 
+                log(f"[WARN][synonyms] No se pudo guardar config.json: {e}")
+            except Exception: 
+                pass
+    
+    return CONFIG
 
 
 def solicitar_color_tema(CONFIG, input_mock=None):
