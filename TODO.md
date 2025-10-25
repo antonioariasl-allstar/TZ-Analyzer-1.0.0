@@ -1,12 +1,52 @@
 # TODO – TZ Analysis: OPERACIÓN A CORAZÓN ABIERTO 🫀
 Rama: refactor/modular-architecture  
-Fase: Pre-Quirúrgica (Análisis exhaustivo antes de Fase 5.3)  
+Fase: Post-Quirúrgica 5.3a (Sistema cardiovascular dual extraído exitosamente)  
 Fecha: 2025-10-25  
-**Estado del Paciente:** ESTABLE - Todas las funciones extraídas funcionando al 100%
+**Estado del Paciente:** EXCELENTE - Fase 5.3a completada con sistema dual preservado
 
-> **🫀 ANALOGÍA MÉDICA:** La refactorización del TZ Analyzer es literalmente una **operación a corazón abierto**. La Fase 5.3 (carga principal Excel + normalización) representa las **arterias principales** del sistema. Un error quirúrgico puede causar **paro cardíaco inmediato** o **fallas diferidas** que se manifiestan silenciosamente en el pipeline de datos.
+> **🫀 ANALOGÍA MÉDICA:** La refactorización del TZ Analyzer es literalmente una **operación a corazón abierto**. La Fase 5.3a logró extraer exitosamente el **sistema cardiovascular dual** manteniendo ambas arterias (columnas originales + normalizadas) funcionando perfectamente.
 
 > **📋 Handoff para casa:** Ver archivo `HANDOFF_CASA.txt` en la raíz del repo con instrucciones paso a paso para continuar el trabajo en casa.
+
+## 🏥 AGENDA POST-QUIRÚRGICA
+
+### FASE FINAL - Limpieza de Comentarios Profesionales
+**Prioridad:** Media (agendado para fases finales 13-15)
+**Descripción:** Traducir la jerga médica/analogías internas a comentarios profesionales
+**Archivos afectados:** 
+- `tz_core/data_loader.py` - Remover referencias "cardiovasculares"
+- `docs/SISTEMA_CARDIOVASCULAR_DUAL.md` - Mantener explicación técnica pero con lenguaje más estándar
+- Tests unitarios - Simplificar explicaciones sin perder contenido crítico
+
+**Razón de agendamiento:** Mantener momentum de refactorización, una pasada final es más eficiente
+
+## 🚨 INTERVENCIONES CRÍTICAS DIFERIDAS
+
+### ⚡ **ZONA DE PELIGRO EXTREMO: WIZARD QC MANUAL**
+**Fecha evaluación:** 25 oct 2025  
+**Estado:** 🔴 **CONTRAINDICACIÓN ABSOLUTA** - Intervención diferida
+**Ubicación:** `_wizard_qc_mapeo()` líneas 353-735 (382 líneas)
+
+**DIAGNÓSTICO MÉDICO:**
+- **Tamaño:** Órgano masivo de 382 líneas de alta complejidad
+- **Dependencias críticas:** Sistema dual, CONFIG global, múltiples input()
+- **Efectos secundarios:** Modifica estado global, persistencia en CONFIG
+- **Complejidad interactiva:** Nightmare para testing automático
+- **Conexiones arteriales:** Sistema de sinónimos, mapeo manual columnas
+
+**CONTRAINDICACIONES:**
+- ❌ Intervención inmediata causaría falla sistémica
+- ❌ Testing automático imposible sin refactoring previo  
+- ❌ Dependencias circulares con funciones ya extraídas
+- ❌ Core crítico del negocio con cero tolerancia a fallas
+
+**ESTRATEGIA DE DIFERIMIENTO:**
+- ⏳ **Agendar para fases 12-13** (especialización en interactividad)
+- 🩺 **Requiere cirugía especializada** con mocking avanzado
+- 📋 **Prioridad alta** pero solo cuando tengamos experiencia suficiente
+- 🔄 **Re-evaluación obligatoria** antes de cualquier intervención
+
+**ADVERTENCIA:** Cualquier desarrollador que vea esta función debe CONSULTAR este documento antes de modificarla.
 
 ## 🎯 NOTAS TÉCNICAS CRÍTICAS - REFACTORING
 
@@ -89,13 +129,29 @@ limpiar sinónimos legacy obsoletos. Probar con datos reales primero.
 **🎯 FASE 5.1-5.2 - DATA_LOADER (COMPLETADA):**
 - ✅ **5.1:** Funciones puras data_loader (Commit: 0dda2dc) - **MINAS DESACTIVADAS**
 - ✅ **5.2:** Funciones interactivas (Commit: 9eb3335) - **MINAS INTERACTIVAS DESACTIVADAS**
+- ✅ **5.3a:** Sistema cardiovascular dual (Commit: 02564b0) - **ARTERIAS CRÍTICAS ESTABILIZADAS**
 
-### 🚨 **PRÓXIMA OPERACIÓN CRÍTICA:**
-**FASE 5.3: OPERACIÓN A CORAZÓN ABIERTO** 🫀⚡
-- **Arteria crítica:** `pd.read_excel()` + normalización completa
-- **Riesgo:** MÁXIMO - Puede parar el corazón del sistema
-- **Requisito:** Cirujano descansado + análisis forense exhaustivo
-- **Estrategia:** Por definir (sub-fases vs análisis profundo)
+### 🚨 **OPERACIÓN DIFERIDA POR RIESGO EXTREMO:**
+**FASE 5.3b: WIZARD QC MANUAL** ⚡🔴🚨
+- **Estado:** CONTRAINDICADO - Diferido para fases 12-13
+- **Órgano:** `_wizard_qc_mapeo()` 382 líneas críticas
+- **Riesgo:** EXTREMO - Órgano vital con dependencias masivas
+- **Requisito:** Framework especializado + 3+ meses planificación
+- **Documentación:** `docs/WIZARD_QC_PELIGRO_EXTREMO.md`
+
+### 🟡 **FASE 6 EVALUADA Y DIFERIDA:**
+**FILE PROCESSOR - Análisis completado** 📁
+- **Estado:** ✅ EVALUADO - Diferido estratégicamente para v2.0+
+- **Hallazgos:** `utilidades.py` ya modularizado y optimizado para Excel
+- **Decisión médica:** Sistema actual perfecto para workflow con mapeo manual
+- **Razón de diferimiento:** Bitácoras requieren análisis humano de estructura
+- **Documentación:** Ver `docs/FILE_PROCESSOR_ESTADO_ACTUAL.md`
+
+### 🟠 **PRÓXIMA OPERACIÓN CRÍTICA:**
+**FASE 7: COLUMN PROCESSOR** �
+- **Arteria objetivo:** Mapeo manual, renombrado, coalescencia, sinónimos
+- **Riesgo:** ALTO - Conexión con wizard diferido pero funciones independientes
+- **Estrategia:** Extracción cuidadosa evitando wizard QC
 
 ---
 

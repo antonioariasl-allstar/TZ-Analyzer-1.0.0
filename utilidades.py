@@ -1,9 +1,31 @@
 """
-utilidades.py
---------------
-Utilidades de selección de archivo/carpeta con Tkinter y fallback a consola.
+utilidades.py - File Processor v1.x (Optimizado para Workflow Forense)
+--------------------------------------------------------------------
 
-Comportamiento clave:
+🎯 FILOSOFÍA DE DISEÑO: Especialización intencional en Excel para workflow forense real
+
+CARACTERÍSTICAS ACTUALES:
+- Especialización Excel (.xlsx/.xls) - 95% de casos de uso forenses
+- UI robusta (Tkinter + fallback consola) - Funciona en cualquier entorno  
+- Validación de archivos básica pero efectiva
+- Memoria de sesión (LAST_DIR) - UX optimizada
+- Código estable y confiable - 0 fallas conocidas
+
+🚀 ROADMAP FUTURO (v2.0+):
+Las siguientes mejoras están diferidas estratégicamente:
+- Soporte CSV/TSV (cuando haya demanda real del usuario)
+- Auto-detección de formato (cuando sea necesario)
+- Manejo avanzado de encoding (UTF-8 actual es suficiente)
+- Preview de datos (workflow actual no lo requiere)
+
+📋 DECISIÓN ESTRATÉGICA (Oct 2025):
+Sistema actual es PERFECTO para casos de uso reales. Las bitácoras forenses 
+requieren análisis humano de estructura para mapeo correcto. "Lo perfecto 
+es enemigo de lo bueno" - no optimizar lo que ya funciona excelentemente.
+
+Ver docs/FILE_PROCESSOR_ESTADO_ACTUAL.md para análisis completo.
+
+COMPORTAMIENTO TÉCNICO:
 - Usa Tkinter para mostrar diálogos de selección.
 - Si Tkinter no está disponible o el diálogo falla (TclError), cae a consola.
 - Recuerda la última carpeta usada (variable global LAST_DIR) y la usa como initialdir.

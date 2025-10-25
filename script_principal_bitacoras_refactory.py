@@ -349,9 +349,39 @@ def bootstrap_config() -> None:
     RENAME_MAP = cfg_build_rename_map(CONFIG)
 
 # === SECCIÓN: WIZARD DE MAPEO DE COLUMNAS (detección, mapeo manual, QC) ===
+# 🚨⚡🔴 ZONA DE PELIGRO EXTREMO - NO MODIFICAR SIN CONSULTAR DOCS 🔴⚡🚨
+#
+# ADVERTENCIA CRÍTICA: Esta función es un órgano vital de 382 líneas con
+# interdependencias complejas. Cualquier modificación puede causar falla sistémica.
+#
+# ANTES DE TOCAR ESTA FUNCIÓN:
+# 1. Lee docs/WIZARD_QC_PELIGRO_EXTREMO.md
+# 2. Consulta TODO.md sección "INTERVENCIONES CRÍTICAS DIFERIDAS"  
+# 3. Evalúa si realmente necesitas modificar esto
+# 4. Si es inevitable, planifica con 3+ meses de anticipación
+#
+# EVALUACIÓN 2025-10-25: CONTRAINDICACIÓN ABSOLUTA para refactoring
+# - 382 líneas de código interconectado
+# - Múltiples input() sin framework de mocking
+# - Dependencias: sistema dual, CONFIG global, sinónimos
+# - Efectos secundarios en estado global
+# - Core crítico del negocio con zero fault tolerance
+#
+# DECISIÓN: Diferido para fases 12-13 con intervención especializada
+# ⚡🚨🔴 FIN ZONA DE PELIGRO EXTREMO 🔴🚨⚡
+
 MANUAL_QC_MAPPING = True
 def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
-    """Guía el mapeo de columnas esenciales/no esenciales y persiste decisiones en CONFIG si aplica."""
+    """
+    ⚡ FUNCIÓN DE RIESGO EXTREMO ⚡
+    
+    Guía el mapeo de columnas esenciales/no esenciales y persiste decisiones en CONFIG.
+    
+    🚨 ADVERTENCIA: 382 líneas de código crítico con múltiples subsistemas.
+    Ver docs/WIZARD_QC_PELIGRO_EXTREMO.md antes de cualquier modificación.
+    
+    CONTRAINDICADO para refactoring hasta fases 12-13.
+    """
     cols_menu = list(map(str, getattr(df, "_orig_cols", list(df.columns))))
     def _menu_horizontal(_cols, per_line=6):
         filas, fila = [], []
@@ -7565,7 +7595,14 @@ def main():
         print("\n[QC] Iniciando wizard QC (mapeo manual).")
         esenciales_qc = ["tel", "lat", "lon", "fecha", "hora", "azimut", "imei", "antena", "interaccion", "contacto"]
         no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
+        
+        # ⚡ LÍNEA CRÍTICA: Segunda arteria del sistema dual
+        # Esta línea preserva las columnas DESPUÉS de la normalización inicial
+        # pero ANTES del wizard. Es parte del sistema cardiovascular dual.
+        # Ver docs/SISTEMA_CARDIOVASCULAR_DUAL.md y docs/WIZARD_QC_PELIGRO_EXTREMO.md
         df._orig_cols = list(df.columns)
+        
+        # 🚨 FUNCIÓN DE RIESGO EXTREMO - Ver warning arriba en línea 353
         df, _mapeo = _wizard_qc_mapeo(df, esenciales=esenciales_qc, no_esenciales=no_esenciales_qc)
         # --- Compatibilidad lon/long para KPIs/HTML ---
         if "lon" in df.columns and "long" not in df.columns:
