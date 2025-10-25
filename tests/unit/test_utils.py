@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Importar módulo a testear
-from tz_core.utils import sha256_de_archivo, escribe_hashes_txt
+from tz_core.utils import sha256_de_archivo, escribe_hashes_txt, compactar_ruta
 
 
 def test_sha256_de_archivo():
@@ -136,13 +136,49 @@ def test_escribe_hashes_txt():
             pass
 
 
+def test_compactar_ruta():
+    """Test de compactación de rutas largas"""
+    print("🧪 Testing compactar_ruta...")
+    
+    # Test 1: Texto corto - debe retornarse sin cambios
+    texto_corto = "archivo_normal.txt"
+    resultado = compactar_ruta(texto_corto, 64)
+    assert resultado == texto_corto, f"Texto corto debe mantenerse: {resultado}"
+    print("✅ PASS: Texto corto mantenido sin cambios")
+    
+    # Test 2: Texto largo - debe compactarse
+    texto_largo = "este_es_un_archivo_muy_muy_muy_largo_que_necesita_ser_compactado_definitivamente.txt"
+    resultado = compactar_ruta(texto_largo, 40)
+    
+    # Verificaciones del resultado compactado
+    assert len(resultado) <= 40, f"Resultado debe ser <= 40 chars, got {len(resultado)}"
+    assert "__" in resultado, "Debe contener separadores __"
+    assert resultado.startswith("este_es_un"), "Debe mantener prefijo"
+    assert resultado.endswith(".txt"), "Debe mantener sufijo"
+    print(f"✅ PASS: Texto largo compactado: {resultado}")
+    
+    # Test 3: Límite muy pequeño - solo hash
+    resultado_pequeño = compactar_ruta(texto_largo, 10)
+    assert len(resultado_pequeño) <= 10, f"Resultado debe ser <= 10 chars"
+    print(f"✅ PASS: Límite pequeño manejado: {resultado_pequeño}")
+    
+    # Test 4: Reemplazo de separadores de sistema
+    texto_con_separadores = "carpeta\\subcarpeta/archivo.txt"
+    resultado = compactar_ruta(texto_con_separadores, 64)
+    assert "\\" not in resultado, "No debe contener \\"
+    assert "/" not in resultado, "No debe contener /"
+    print(f"✅ PASS: Separadores reemplazados: {resultado}")
+    
+    return True
+
+
 def main():
     """Ejecutar todos los tests"""
     print("🏗️  TESTS UNITARIOS - tz_core.utils")
     print("=" * 40)
     
     tests_passed = 0
-    total_tests = 3
+    total_tests = 4
     
     # Test 1
     if test_sha256_de_archivo():
@@ -152,8 +188,12 @@ def main():
     if test_sha256_archivo_vacio():
         tests_passed += 1
     
-    # Test 3 - NUEVO
+    # Test 3
     if test_escribe_hashes_txt():
+        tests_passed += 1
+    
+    # Test 4 - NUEVO
+    if test_compactar_ruta():
         tests_passed += 1
     
     print("\n" + "=" * 40)

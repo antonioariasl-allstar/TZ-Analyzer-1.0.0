@@ -912,7 +912,7 @@ def _dedupe_columns(df):
 
     return df
 # === IMPORTS MODULARES (gradual refactoring) ===
-from tz_core.utils import sha256_de_archivo
+from tz_core.utils import sha256_de_archivo, compactar_ruta
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 def _sha256_de_archivo(path: str) -> str:
@@ -8535,38 +8535,8 @@ def _solicitar_overrides_topn(config):
     return ovr if ovr else None
 
 def _compactar_ruta(txt: str, maxlen: int = 64) -> str:
-    """
-    Devuelve un nombre corto y seguro para usar como carpeta.
-    Mantiene inicio y final del nombre y pone un hash al centro,
-    asegurando que la longitud final sea <= maxlen.
-    """
-    import hashlib, os
-
-    base = str(txt).strip().replace(os.sep, "_")
-    if len(base) <= maxlen:
-        return base
-
-    hash_len = 8            # tamaño del hash
-    sep = "__"              # separador
-    fixed = hash_len + 2*len(sep)  # espacio ocupado por "__" + hash + "__"
-
-    # Si el maxlen es demasiado corto, devolvemos solo el hash truncado.
-    if maxlen <= fixed + 2:
-        return hashlib.sha1(base.encode("utf-8")).hexdigest()[:min(hash_len, maxlen)]
-
-    remain = maxlen - fixed
-    # repartimos 60/40 entre prefijo y sufijo con mínimos razonables
-    pref_len = max(10, int(remain * 0.6))
-    suf_len = remain - pref_len
-    if suf_len < 8:
-        suf_len = 8
-        pref_len = remain - suf_len
-
-    h = hashlib.sha1(base.encode("utf-8")).hexdigest()[:hash_len]
-    prefix = base[:pref_len].rstrip("_- ")
-    suffix = base[-suf_len:].lstrip("_- ")
-
-    return f"{prefix}{sep}{h}{sep}{suffix}"
+    """Wrapper para compatibilidad - usar compactar_ruta de tz_core.utils"""
+    return compactar_ruta(txt, maxlen)
 
 if __name__ == "__main__":
     bootstrap_config()

@@ -47,6 +47,51 @@ def escribe_hashes_txt(dest_path: str, pares: List[Tuple[str, str]]) -> None:
         fw.write("\n".join(lines) + "\n")
 
 
+def compactar_ruta(txt: str, maxlen: int = 64) -> str:
+    """
+    Devuelve un nombre corto y seguro para usar como carpeta.
+    Mantiene inicio y final del nombre y pone un hash al centro,
+    asegurando que la longitud final sea <= maxlen.
+    
+    Args:
+        txt: Texto original a compactar
+        maxlen: Longitud máxima del resultado (default: 64)
+        
+    Returns:
+        Cadena compactada que respeta maxlen
+        
+    Examples:
+        >>> compactar_ruta("archivo_muy_largo_que_necesita_ser_compactado.txt", 30)
+        'archivo__a1b2c3d4__do.txt'
+    """
+    # Reemplazar tanto \ como / por _
+    base = str(txt).strip().replace("\\", "_").replace("/", "_")
+    if len(base) <= maxlen:
+        return base
+
+    hash_len = 8            # tamaño del hash
+    sep = "__"              # separador
+    fixed = hash_len + 2*len(sep)  # espacio ocupado por "__" + hash + "__"
+
+    # Si el maxlen es demasiado corto, devolvemos solo el hash truncado.
+    if maxlen <= fixed + 2:
+        return hashlib.sha1(base.encode("utf-8")).hexdigest()[:min(hash_len, maxlen)]
+
+    remain = maxlen - fixed
+    # repartimos 60/40 entre prefijo y sufijo con mínimos razonables
+    pref_len = max(10, int(remain * 0.6))
+    suf_len = remain - pref_len
+    if suf_len < 8:
+        suf_len = 8
+        pref_len = remain - suf_len
+
+    h = hashlib.sha1(base.encode("utf-8")).hexdigest()[:hash_len]
+    prefix = base[:pref_len].rstrip("_- ")
+    suffix = base[-suf_len:].lstrip("_- ")
+
+    return f"{prefix}{sep}{h}{sep}{suffix}"
+
+
 def placeholder_function():
     """
     Placeholder para utilidades que se extraerán del script principal
