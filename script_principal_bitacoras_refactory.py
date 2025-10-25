@@ -5892,21 +5892,16 @@ section{{margin-top:22px}}
 
 
 # --- Anti-hojas: ignorar ocultas y elegir visible ---
-try:
-    import openpyxl  # para detectar hojas ocultas/visibles
-except Exception:
-    openpyxl = None
+# 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader
+from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas
 
 def _obtener_hojas_visibles(ruta_excel):
-    if openpyxl is None:
-        return None, "NO_OPENPYXL"
-    try:
-        wb = openpyxl.load_workbook(ruta_excel, read_only=True, data_only=True)
-        visibles = [ws.title for ws in wb.worksheets if getattr(ws, "sheet_state", "visible") == "visible"]
-        wb.close()
-        return visibles, None
-    except Exception:
-        return None, "LOAD_FAIL"
+    """Wrapper de compatibilidad para tz_core.data_loader.obtener_hojas_visibles"""
+    return obtener_hojas_visibles(ruta_excel)
+
+def _listar_todas_hojas(ruta_excel):
+    """Wrapper de compatibilidad para tz_core.data_loader.listar_todas_hojas"""
+    return listar_todas_hojas(ruta_excel)
 
 def _seleccionar_hoja_visible(ruta_excel):
     visibles, err = _obtener_hojas_visibles(ruta_excel)
@@ -5935,12 +5930,7 @@ def _seleccionar_hoja_visible(ruta_excel):
             return elegido
         print("Ingresá un número válido (1..N).")
 # --- Fallback: listar TODAS las hojas con pandas y seleccionar una ---
-def _listar_todas_hojas(ruta_excel):
-    try:
-        xls = pd.ExcelFile(ruta_excel)
-        return list(xls.sheet_names)
-    except Exception:
-        return None
+# 🔄 WRAPPER: Función extraída a tz_core.data_loader (wrapper ya definido arriba)
 
 def _seleccionar_hoja(ruta_excel):
     """
