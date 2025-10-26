@@ -58,7 +58,7 @@ def generar_informe_html(self, ...):
 
 ## ✅ GARANTÍAS A LARGO PLAZO
 
-### Robustez Operacional
+### Robustez Funcional
 - **99.9% Uptime**: Sistema crítico forense nunca falla
 - **Compatibilidad Total**: Todas las funcionalidades preservadas
 - **Performance Idéntico**: Zero overhead en operaciones críticas

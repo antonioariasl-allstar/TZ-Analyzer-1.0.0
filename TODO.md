@@ -37,7 +37,7 @@ La **Arquitectura Híbrida Permanente** ha sido oficialmente adoptada como la so
 - [x] **Fase 6:** Validation Engine (`tz_core/validation_engine.py`) - DONE
 - [x] **Fase 7:** Core Processor (`tz_core/core_processor.py`) - DONE
 - [x] **Fase 8A:** HTML Generator - Preparación y esqueleto - DONE
-- [x] **Fase 8B:** ✅ HTML Generator - Extracción quirúrgica EXITOSA
+- [x] **Fase 8B:** ✅ HTML Generator - Extracción modular EXITOSA
   - **Completado:** `generar_informe_html()` extraída (2591 líneas)
   - **Framework:** `tz_core/html_generator.py` operativo
   - **Validación:** End-to-end exitosa, Zero regresiones
@@ -70,14 +70,14 @@ La **Arquitectura Híbrida Permanente** ha sido oficialmente adoptada como la so
 
 ---
 
-## 🏥 LEGACY: ANALOGÍA MÉDICA POST-QUIRÚRGICA
+## 📝 LEGACY: CLEANUP PROFESIONAL PENDIENTE
 
 ### FASE FINAL - Limpieza de Comentarios Profesionales
 **Prioridad:** Media (agendado para fases finales 13-15)
-**Descripción:** Traducir la jerga médica/analogías internas a comentarios profesionales
+**Descripción:** Traducir la terminología técnica/analogías internas a comentarios profesionales estándar
 **Archivos afectados:** 
-- `tz_core/data_loader.py` - Remover referencias "cardiovasculares"
-- `docs/SISTEMA_CARDIOVASCULAR_DUAL.md` - Mantener explicación técnica pero con lenguaje más estándar
+- `tz_core/data_loader.py` - Remover referencias "duales"
+- `docs/SISTEMA_DUAL_COLUMNAS.md` - Mantener explicación técnica pero con lenguaje más estándar
 - Tests unitarios - Simplificar explicaciones sin perder contenido crítico
 
 **Razón de agendamiento:** Mantener momentum de refactorización, una pasada final es más eficiente
@@ -89,12 +89,12 @@ La **Arquitectura Híbrida Permanente** ha sido oficialmente adoptada como la so
 **Estado:** 🔴 **CONTRAINDICACIÓN ABSOLUTA** - Intervención diferida
 **Ubicación:** `_wizard_qc_mapeo()` líneas 353-735 (382 líneas)
 
-**DIAGNÓSTICO MÉDICO:**
+**ANÁLISIS TÉCNICO:**
 - **Tamaño:** Órgano masivo de 382 líneas de alta complejidad
 - **Dependencias críticas:** Sistema dual, CONFIG global, múltiples input()
 - **Efectos secundarios:** Modifica estado global, persistencia en CONFIG
 - **Complejidad interactiva:** Nightmare para testing automático
-- **Conexiones arteriales:** Sistema de sinónimos, mapeo manual columnas
+- **Dependencias críticas:** Sistema de sinónimos, mapeo manual columnas
 
 **CONTRAINDICACIONES:**
 - ❌ Intervención inmediata causaría falla sistémica
@@ -146,30 +146,30 @@ el sistema sigue funcionando correctamente.
 **ACCIÓN FUTURA:** Considerar desactivar `synonyms_user` automático y 
 limpiar sinónimos legacy obsoletos. Probar con datos reales primero.
 
-## 🏥 EXPEDIENTE MÉDICO - OPERACIÓN A CORAZÓN ABIERTO
+## 📊 HISTORIAL TÉCNICO - REFACTORIZACIÓN AVANZADA
 
-### � **ESTADÍSTICAS QUIRÚRGICAS ACTUALES:**
-- **🫀 Estado del Paciente:** ESTABLE - Signos vitales normales
-- **✅ Operaciones Completadas:** 8/15 fases (53% del procedimiento)
+### 📈 **ESTADÍSTICAS DE DESARROLLO ACTUALES:**
+- **⚡ Estado del Sistema:** ESTABLE - Funcionamiento normal
+- **✅ Fases Completadas:** 8/15 fases (53% del proceso)
 - **🧪 Tests Unitarios:** 40/40 PASAN (100% éxito)
 - **📈 Golden Baseline:** SIEMPRE OK (cero regresiones)
 - **💾 Commits Atómicos:** 7 creados exitosamente
-- **⚡ Funciones Extraídas:** 11 funciones trasplantadas con éxito
+- **⚡ Funciones Extraídas:** 11 funciones refactorizadas con éxito
 
-### 🩺 **DIAGNÓSTICO PRE-QUIRÚRGICO FASE 5.3:**
+### 🔍 **ANÁLISIS TÉCNICO PRE-REFACTORING FASE 5.3:**
 
-**🫀 ARTERIAS PRINCIPALES IDENTIFICADAS:**
-1. **Arteria Aorta** (Línea 6543): `pd.read_excel()` - **FUNCIÓN DE CARGA PRINCIPAL**
-2. **Arteria Coronaria** (Líneas 6549-6557): **Normalización de encabezados** (sistema circulatorio crítico)  
-3. **Arteria Pulmonar** (Línea 804): `normalizar_columnas_texto()` - **Normalización de contenido**
+**🎯 COMPONENTES PRINCIPALES IDENTIFICADOS:**
+1. **Función Central** (Línea 6543): `pd.read_excel()` - **FUNCIÓN DE CARGA PRINCIPAL**
+2. **Normalizador de Headers** (Líneas 6549-6557): **Normalización de encabezados** (sistema de procesamiento crítico)  
+3. **Procesador de Contenido** (Línea 804): `normalizar_columnas_texto()` - **Normalización de contenido**
 
-**⚠️ RIESGOS CARDIOVASCULARES CRÍTICOS:**
-- **💀 Paro cardíaco inmediato:** Si tocamos mal la función de carga principal
-- **🩸 Isquemia diferida:** Falla silenciosa que se manifiesta horas después en KML/HTML
-- **🫁 Embolia:** Dependencias rotas que bloquean el flujo de datos
-- **💓 Arritmia:** Inconsistencias en mapeo de columnas que causan fallos intermitentes
+**⚠️ RIESGOS TÉCNICOS CRÍTICOS:**
+- **� Fallo inmediato:** Si tocamos mal la función de carga principal
+- **⏰ Falla diferida:** Error silencioso que se manifiesta horas después en KML/HTML
+- **🔗 Dependencias rotas:** Enlaces rotos que bloquean el flujo de datos
+- **⚡ Inconsistencias:** Errores en mapeo de columnas que causan fallos intermitentes
 
-**🏥 PROTOCOLO QUIRÚRGICO PROPUESTO:**
+**🛠️ PROTOCOLO DE DESARROLLO PROPUESTO:**
 - **Opción A:** División en sub-fases ultra-granulares (5.3a, 5.3b, 5.3c)
 - **Opción B:** Análisis forense más exhaustivo antes de proceder
 - **Requisito:** **CIRUJANO DESCANSADO AL 100%** - OBLIGATORIO

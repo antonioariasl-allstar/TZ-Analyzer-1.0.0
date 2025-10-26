@@ -10,7 +10,7 @@
 
 ## Resumen Ejecutivo
 
-Durante la evaluación extendida de Fase 5.3b se descubrió que el wizard QC manual es un **órgano vital masivo** que requiere intervención quirúrgica especializada, no refactorización convencional.
+Durante la evaluación extendida de Fase 5.3b se descubrió que el wizard QC manual es un **componente crítico masivo** que requiere intervención especializada avanzada, no refactorización convencional.
 
 ## ⚡ Evaluación de Riesgo
 
@@ -38,11 +38,11 @@ sel = input(f"→ Elegí columna para **{canonico}** (número, menú arriba): ")
 3. **Sinónimos dinámicos**: Actualiza sistema de mapeo
 4. **Validación columnas**: Evita duplicados en asignaciones
 
-## 🏥 Análisis Médico
+## 🔬 Análisis Técnico
 
 ### ¿Por qué es tan peligroso?
 
-1. **Órgano vital único**: Sin esta función, el mapeo manual colapsa
+1. **Componente crítico único**: Sin esta función, el mapeo manual colapsa
 2. **Interdependencias complejas**: Conectado a 4+ sistemas críticos
 3. **Testing imposible**: Múltiples input() sin estrategia de mocking
 4. **Zero fault tolerance**: Cualquier error rompe workflow completo

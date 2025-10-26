@@ -3,13 +3,13 @@
 **Fecha:** 25 octubre 2025  
 **Evaluador:** Sistema de análisis campo minado  
 **Target:** main() líneas 6550-7200+ (~650 líneas)  
-**Clasificación:** 🚨 ULTRA-CRÍTICO - Corazón del negocio
+**Clasificación:** 🚨 ULTRA-CRÍTICO - Núcleo del negocio
 
 ---
 
 ## 🎯 **RESUMEN EJECUTIVO**
 
-El Column Processor es el **núcleo cardiovascular** del TZ Analyzer. Gestiona:
+El Column Processor es el **núcleo central** del TZ Analyzer. Gestiona:
 - Mapeo automático/manual de columnas de bitácoras forenses
 - Validación de schema y tipos de datos
 - Sistema de sinónimos (legacy + dinámico)
@@ -215,7 +215,7 @@ Veredicto: 🔴 NO RECOMENDADO
 - Bypass automático a modo manual
 - Documentación de workarounds
 
-**NIVEL 2 - Intervención quirúrgica:**
+**NIVEL 2 - Intervención avanzada:**
 - Extracción de emergencia del subsistema fallido
 - Creación de shim de compatibilidad temporal
 - Validación intensiva con subset de datos
