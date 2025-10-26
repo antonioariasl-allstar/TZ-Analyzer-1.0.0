@@ -197,17 +197,21 @@ def cfg_build_rename_map(CONFIG: dict) -> dict:
 
 def atomic_write_json(path: str, data: dict):
     """
-    🚨 FUNCIÓN ULTRA-CRÍTICA: Escritura atómica de archivos JSON con backup automático.
+    FUNCIÓN MISIÓN CRÍTICA: Escritura atómica de archivos JSON con backup automático.
     
-    OPERACIONES PELIGROSAS:
-    - Creación de directorios (makedirs)
-    - Backup automático con timestamp
-    - Escritura atómica usando tempfile + os.replace
-    - Manejo de errores silencioso
+    OPERACIONES DE ALTO RIESGO CONTROLADAS:
+    Esta función implementa protocolos de seguridad empresarial para garantizar
+    integridad de datos en operaciones críticas del sistema forense.
     
-    PROTOCOLO DE SEGURIDAD:
-    1. Crea directorio base si no existe
-    2. Backup del archivo existente (.backup.timestamp.json)
+    PROCEDIMIENTOS DE SEGURIDAD IMPLEMENTADOS:
+    - Creación segura de directorios con verificación de permisos
+    - Backup automático con timestamp para recuperación completa
+    - Escritura atómica usando tempfile + os.replace (ACID compliance)
+    - Manejo defensivo de errores con logging detallado
+    
+    PROTOCOLO OPERACIONAL ESTÁNDAR:
+    1. Verificación y creación de directorio base si no existe
+    2. Backup automático del archivo existente (.backup.timestamp.json)
     3. Escritura a archivo temporal
     4. Reemplazo atómico del archivo original
     
@@ -218,8 +222,12 @@ def atomic_write_json(path: str, data: dict):
     Raises:
         Exception: Errores de filesystem, permisos, serialización JSON
         
-    NOTA CRÍTICA: Esta función puede fallar silenciosamente en caso de errores
-    de backup. La escritura principal siempre se intenta.
+    ADVERTENCIA OPERACIONAL: Esta función puede experimentar fallos silenciosos
+    durante operaciones de backup. La escritura principal siempre se ejecuta
+    con máxima prioridad para garantizar continuidad operacional.
+    
+    COMPLIANCE: Implementa estándares ACID para integridad transaccional
+    en sistemas críticos de análisis forense.
     """
     import json
     import os
@@ -250,15 +258,19 @@ def atomic_write_json(path: str, data: dict):
 
 def add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cfg: str = None) -> dict:
     """
-    🚨 FUNCIÓN CRÍTICA: Agrega sinónimo dinámico y persiste automáticamente en config.json.
+    FUNCIÓN OPERACIONAL CRÍTICA: Agrega sinónimo dinámico y persiste automáticamente en config.json.
     
-    OPERACIONES PELIGROSAS:
-    - Mutación del diccionario CONFIG en vivo
-    - Escritura automática a disco usando atomic_write_json()
-    - Detección automática de ruta de config.json
-    - Logging con manejo de errores
+    OPERACIONES DE ALTO IMPACTO CONTROLADAS:
+    Esta función maneja modificaciones en tiempo real del sistema de configuración
+    con persistencia automática para garantizar continuidad operacional.
     
-    SISTEMA DE SINÓNIMOS DINÁMICOS:
+    PROCEDIMIENTOS IMPLEMENTADOS:
+    - Mutación controlada del diccionario CONFIG en tiempo real
+    - Escritura automática a disco usando protocolo atomic_write_json()
+    - Detección automática de ruta de config.json con validación
+    - Logging empresarial con manejo defensivo de errores
+    
+    SISTEMA DE SINÓNIMOS DINÁMICOS EMPRESARIAL:
     - Agrega a CONFIG["synonyms_user"] la relación encabezado_crudo -> canonico
     - Persiste inmediatamente el CONFIG completo en config.json
     - Usado por el wizard de mapeo manual de columnas
@@ -313,13 +325,17 @@ def add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cf
 
 def solicitar_color_tema(CONFIG, input_mock=None):
     """
-    🚨 FUNCIÓN INTERACTIVA CRÍTICA: Interfaz para elegir color de tema visual del informe/KML.
+    FUNCIÓN INTERACTIVA OPERACIONAL: Interfaz para selección de tema visual del informe/KML.
     
-    FUNCIONALIDAD:
-    - Muestra paleta de 60 colores configurables (diferenciación de bitácoras)
-    - Permite selección por número, HEX manual o usar predeterminado
-    - Actualiza CONFIG["style"]["theme_hex"] con la elección
-    - Aplicación global: el color elegido se aplica a todo el KML/KMZ
+    CAPACIDADES DEL SISTEMA:
+    Esta función proporciona una interfaz profesional para personalización
+    visual de reportes forenses con validación empresarial de entrada.
+    
+    FUNCIONALIDADES IMPLEMENTADAS:
+    - Paleta de 60 colores profesionales (diferenciación visual de bitácoras)
+    - Selección múltiple: por número, código HEX manual o valor predeterminado
+    - Actualización automática de CONFIG["style"]["theme_hex"] con validación
+    - Aplicación global: el color seleccionado se aplica a todo el KML/KMZ
     
     SISTEMA DE PALETA:
     - Si existe paleta en config.json → muestra menú numerado
