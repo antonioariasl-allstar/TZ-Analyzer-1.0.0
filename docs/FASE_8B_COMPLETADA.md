@@ -59,8 +59,8 @@ return _original(df, archivo_kml, carpeta_salida, nombre_salida, hoja, nombre_bi
 
 ### Tests Automatizados
 ```bash
-python tests/test_kml_regresion.py
-# Resultado: KMZ regresión básica: OK
+python tests/test_e2e_regresion.py
+# Resultado: Tests E2E y validación de estructura KMZ: OK
 ```
 
 ### Validación End-to-End

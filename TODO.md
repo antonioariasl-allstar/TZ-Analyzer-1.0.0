@@ -231,7 +231,7 @@ limpiar sinónimos legacy obsoletos. Probar con datos reales primero.
 ### Cambios realizados:
 - ✅ Entorno virtual `.venv312` creado con Python 3.12.8
 - ✅ Todas las dependencias instaladas (incluido `simplekml` que faltaba)
-- ✅ Test de regresión `test_kml_regresion.py` ejecutado exitosamente
+- ✅ Suite de tests consolidada y optimizada en `test_e2e_regresion.py`
 - ✅ README.md actualizado con la versión de Python requerida
 - ✅ `requirements.txt` actualizado con `simplekml==1.3.6`
 - ✅ `.gitignore` protegiendo correctamente el entorno virtual

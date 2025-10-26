@@ -32,7 +32,7 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
   - `utilidades.py` → Selección de archivos/carpetas (Tkinter + fallback consola).
   - `validaciones.py` → Normalización defensiva de fecha/hora/coordenadas/azimut.
   - `kml_generador.py` → Generador de puntos libres (modo manual).
-  - `tests/test_kml_regresion.py` → Test de estructura KMZ.
+  - `tests/test_e2e_regresion.py` → Tests E2E y validación de estructura KMZ.
 
 ---
 
@@ -51,7 +51,8 @@ TZ-Analyzer/
 ├── TODO.md                                # Tareas y observaciones
 ├── .gitignore                             # Archivos excluidos del repo
 └── tests/
-    └── test_kml_regresion.py              # Prueba de estructura KMZ
+    └── test_e2e_regresion.py              # Tests E2E y validación KMZ
+    └── unit/                              # Tests unitarios por componente
 ```
 
 ---
@@ -154,10 +155,14 @@ Versión **1.0.0** — Fase de consolidación técnica.
 Para ejecutar las pruebas de regresión:
 
 ```bash
-python tests/test_kml_regresion.py
+# Tests E2E completos con validación golden
+python tests/test_e2e_regresion.py
+
+# Tests unitarios por componente
+python -m pytest tests/unit/
 ```
 
-El test valida la estructura del KMZ generado (carpetas, azimuts, conos, placemarks).
+Los tests validan estructura KMZ, generación HTML y integridad del pipeline completo.
 
 ---
 
