@@ -6,7 +6,7 @@ Cobertura de funciones extraídas:
 - listar_todas_hojas()
 - seleccionar_hoja_visible() (interactiva con input())
 - seleccionar_hoja() (interactiva con input())
-- cargar_excel_con_normalizacion() (sistema cardiovascular dual)
+- cargar_excel_con_normalizacion() (sistema dual de columnas)
 
 🚨 MINAS DETECTADAS:
 - Dependencia opcional openpyxl
@@ -349,7 +349,7 @@ class TestCargarExcelConNormalizacion:
     """
     Tests para función cargar_excel_con_normalizacion - FASE 5.3a
     
-    🚨 ARQUITECTURA CRÍTICA - SISTEMA CARDIOVASCULAR DUAL 🚨
+    🚨 ARQUITECTURA CRÍTICA - SISTEMA DUAL DE COLUMNAS 🚨
     
     Estos tests validan el comportamiento del sistema dual de columnas
     descubierto durante la refactorización:
@@ -369,7 +369,7 @@ class TestCargarExcelConNormalizacion:
     """
     
     def test_carga_exitosa_con_sistema_dual(self):
-        """Test carga exitosa preservando sistema cardiovascular dual"""
+        """Test carga exitosa preservando sistema dual de columnas"""
         # Crear archivo Excel temporal de prueba
         with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
             df_test = pd.DataFrame({
@@ -384,7 +384,7 @@ class TestCargarExcelConNormalizacion:
             from tz_core.data_loader import cargar_excel_con_normalizacion
             df_resultado, hoja_usada = cargar_excel_con_normalizacion(tmp_path)
             
-            # Verificar sistema dual cardiovascular
+            # Verificar sistema dual de columnas
             assert "orig_cols" in df_resultado.attrs
             assert df_resultado.attrs["orig_cols"] == ['Columna 1  ', '  Columna 2', 'Columna 3']
             

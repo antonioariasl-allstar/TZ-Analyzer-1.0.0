@@ -61,7 +61,7 @@ class HTMLReportGenerator:
     - ADR-002: Redirección inteligente como característica permanente
     - ADR-003: Framework modular + monolito coexistiendo por robustez
     
-    GARANTÍAS OPERACIONALES:
+    GARANTÍAS FUNCIONALES:
     - Zero breaking changes en funcionalidad forense crítica
     - Compatibilidad total con procesos existentes
     - Evolución controlada sin interrupciones de servicio

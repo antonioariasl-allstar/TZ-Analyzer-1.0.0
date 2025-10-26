@@ -199,7 +199,7 @@ def atomic_write_json(path: str, data: dict):
     """
     FUNCIÓN MISIÓN CRÍTICA: Escritura atómica de archivos JSON con backup automático.
     
-    OPERACIONES DE ALTO RIESGO CONTROLADAS:
+    CARACTERÍSTICAS DE ALTA SEGURIDAD:
     Esta función implementa protocolos de seguridad empresarial para garantizar
     integridad de datos en operaciones críticas del sistema forense.
     
@@ -209,7 +209,7 @@ def atomic_write_json(path: str, data: dict):
     - Escritura atómica usando tempfile + os.replace (ACID compliance)
     - Manejo defensivo de errores con logging detallado
     
-    PROTOCOLO OPERACIONAL ESTÁNDAR:
+    PROTOCOLO DE ESCRITURA ESTÁNDAR:
     1. Verificación y creación de directorio base si no existe
     2. Backup automático del archivo existente (.backup.timestamp.json)
     3. Escritura a archivo temporal
@@ -222,9 +222,9 @@ def atomic_write_json(path: str, data: dict):
     Raises:
         Exception: Errores de filesystem, permisos, serialización JSON
         
-    ADVERTENCIA OPERACIONAL: Esta función puede experimentar fallos silenciosos
+    ADVERTENCIA TÉCNICA: Esta función puede experimentar fallos silenciosos
     durante operaciones de backup. La escritura principal siempre se ejecuta
-    con máxima prioridad para garantizar continuidad operacional.
+    con máxima prioridad para garantizar continuidad funcional.
     
     COMPLIANCE: Implementa estándares ACID para integridad transaccional
     en sistemas críticos de análisis forense.
@@ -258,11 +258,11 @@ def atomic_write_json(path: str, data: dict):
 
 def add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cfg: str = None) -> dict:
     """
-    FUNCIÓN OPERACIONAL CRÍTICA: Agrega sinónimo dinámico y persiste automáticamente en config.json.
+    FUNCIÓN CRÍTICA DEL SISTEMA: Agrega sinónimo dinámico y persiste automáticamente en config.json.
     
-    OPERACIONES DE ALTO IMPACTO CONTROLADAS:
+    CARACTERÍSTICAS DE ALTO IMPACTO:
     Esta función maneja modificaciones en tiempo real del sistema de configuración
-    con persistencia automática para garantizar continuidad operacional.
+    con persistencia automática para garantizar continuidad funcional.
     
     PROCEDIMIENTOS IMPLEMENTADOS:
     - Mutación controlada del diccionario CONFIG en tiempo real
@@ -325,7 +325,7 @@ def add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cf
 
 def solicitar_color_tema(CONFIG, input_mock=None):
     """
-    FUNCIÓN INTERACTIVA OPERACIONAL: Interfaz para selección de tema visual del informe/KML.
+    FUNCIÓN INTERACTIVA: Interfaz para selección de tema visual del informe/KML.
     
     CAPACIDADES DEL SISTEMA:
     Esta función proporciona una interfaz profesional para personalización

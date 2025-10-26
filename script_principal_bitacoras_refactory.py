@@ -5945,7 +5945,7 @@ def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
     """
     Wrapper de compatibilidad para tz_core.data_loader.cargar_excel_con_normalizacion
     
-    🚨 FASE 5.3a - SISTEMA CARDIOVASCULAR DUAL EXTRAÍDO 🚨
+    🚨 FASE 5.3a - SISTEMA DUAL DE COLUMNAS EXTRAÍDO 🚨
     
     Esta función implementa el sistema dual de columnas descubierto durante 
     la refactorización campo minado:
@@ -6588,14 +6588,14 @@ def main():
     # Selección de hoja visible (si hay varias)
     hoja = _seleccionar_hoja_visible(archivo_entrada)
 
-    # Carga del Excel con sistema cardiovascular dual (FASE 5.3a modular)
+    # Carga del Excel con sistema dual de columnas (FASE 5.3a modular)
     try:
         df, hoja_usada = _cargar_excel_con_normalizacion(archivo_entrada, hoja)
     except Exception as e:
         print(f"Error al leer el Excel: {e}")
         return
 
-    # Normalización adicional de encabezados (heredada del sistema cardiovascular)
+    # Normalización adicional de encabezados (heredada del sistema dual)
     df.columns = (
         df.columns.astype(str)
           .str.normalize('NFD').str.encode('ascii', 'ignore').str.decode('ascii')
@@ -7596,10 +7596,10 @@ def main():
         esenciales_qc = ["tel", "lat", "lon", "fecha", "hora", "azimut", "imei", "antena", "interaccion", "contacto"]
         no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
         
-        # ⚡ LÍNEA CRÍTICA: Segunda arteria del sistema dual
+        # ⚡ LÍNEA CRÍTICA: Segunda componente del sistema dual
         # Esta línea preserva las columnas DESPUÉS de la normalización inicial
-        # pero ANTES del wizard. Es parte del sistema cardiovascular dual.
-        # Ver docs/SISTEMA_CARDIOVASCULAR_DUAL.md y docs/WIZARD_QC_PELIGRO_EXTREMO.md
+        # pero ANTES del wizard. Es parte del sistema dual de columnas.
+        # Ver docs/SISTEMA_DUAL_COLUMNAS.md y docs/WIZARD_QC_PELIGRO_EXTREMO.md
         df._orig_cols = list(df.columns)
         
         # 🚨 FUNCIÓN DE RIESGO EXTREMO - Ver warning arriba en línea 353
