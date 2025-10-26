@@ -40,13 +40,11 @@ Este documento elimina **TODA CONFUSIÓN** sobre qué archivos usar, cuáles son
 | **`tz_core/utils.py`** | 🟢 **ACTIVO** | Utilidades puras (hash, strings) |
 | **`tz_core/html_generator.py`** | 🟢 **HÍBRIDO** | Redirección inteligente HTML |
 
-### 🏗️ ESQUELETOS PREPARADOS
-| Archivo | Estado | Propósito |
-|---------|--------|-----------|
-| **`tz_core/kml_generator.py`** | 🟡 **ESQUELETO** | Preparado para migración KML |
-| **`tz_core/data_validator.py`** | 🟡 **ESQUELETO** | Preparado para migración validaciones |
-| **`tz_core/data_processor.py`** | 🟡 **ESQUELETO** | Preparado para procesamiento |
-| **`tz_core/ui_helpers.py`** | 🟡 **ESQUELETO** | Preparado para helpers UI |
+### 🗑️ ESQUELETOS ELIMINADOS (26 Oct 2025)
+- ~~`tz_core/kml_generator.py`~~ → Funcionalidad en `kml_generador.py`
+- ~~`tz_core/data_validator.py`~~ → Funcionalidad en `validaciones.py`
+- ~~`tz_core/data_processor.py`~~ → Esqueleto sin uso
+- ~~`tz_core/ui_helpers.py`~~ → Funcionalidad en `utilidades.py`
 
 ---
 
@@ -71,21 +69,22 @@ Este documento elimina **TODA CONFUSIÓN** sobre qué archivos usar, cuáles son
 - ✅ **SÍ PUEDES** agregar funcionalidades
 - ✅ **TESTING REQUERIDO** después de cambios
 
-#### **2. ESQUELETOS** 🟡
-- ❌ **NO MODIFICAR** sin planificación arquitectónica
-- ❌ **NO USAR** en producción
-- 🔄 **COORDINAR** migración con arquitectura híbrida
+#### **2. ESQUELETOS ELIMINADOS** �️
+- ✅ **YA NO EXISTEN** esqueletos confusos
+- ✅ **FUNCIONALIDAD** permanece en archivos raíz activos
+- ✅ **CLARIDAD TOTAL** - Solo archivos útiles
 
-#### **3. IMPORTS CRÍTICOS**
+#### **3. IMPORTS ACTUALIZADOS**
 ```python
-# ✅ CORRECTO - Usar archivos activos
+# ✅ CORRECTO - Usar archivos activos únicamente
 from utilidades import seleccionar_archivo
 from validaciones import validar_datos
 from tz_core.utils import sha256_de_archivo
+from tz_core.config_manager import cargar_config
 
-# ❌ INCORRECTO - Esqueletos vacíos
-from tz_core.data_validator import DataValidator  # ESQUELETO
-from tz_core.kml_generator import KMLGenerator    # ESQUELETO
+# 🗑️ ELIMINADOS - Esqueletos ya no existen
+# from tz_core.data_validator import DataValidator  # REMOVIDO
+# from tz_core.kml_generator import KMLGenerator    # REMOVIDO
 ```
 
 ---
@@ -104,13 +103,12 @@ from tz_core.kml_generator import KMLGenerator    # ESQUELETO
 | **Configuración** | `tz_core/config_manager.py` |
 | **Testing automation** | `run_baseline_correct.py` |
 
-### **¿Archivo duplicado o complementario?**
-
+| **¿Archivo duplicado o complementario?** |
 | Par de Archivos | Relación |
 |-----------------|----------|
 | `utilidades.py` vs `tz_core/utils.py` | 🤝 **COMPLEMENTARIOS** (UI vs Core) |
-| `validaciones.py` vs `tz_core/data_validator.py` | 🔄 **ACTIVO vs ESQUELETO** |
-| `kml_generador.py` vs `tz_core/kml_generator.py` | 🔄 **ACTIVO vs ESQUELETO** |
+| `validaciones.py` vs ~~`tz_core/data_validator.py`~~ | ✅ **ACTIVO** (esqueleto eliminado) |
+| `kml_generador.py` vs ~~`tz_core/kml_generator.py`~~ | ✅ **ACTIVO** (esqueleto eliminado) |
 | `run.py` vs `run_baseline_correct.py` | 🤝 **COMPLEMENTARIOS** (Main vs Testing) |
 
 ---
