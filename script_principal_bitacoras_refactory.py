@@ -7994,8 +7994,11 @@ def main():
     # HTML opcional (solo si lo activás en config.json con html.generar_en_modo_manual = true)
     if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
         try:
-            _copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
-            informe_html = generar_informe_html(
+            # 🚨 MODULARIZADO: Usar framework HTML independiente
+            from tz_core.html_generator import HTMLReportGenerator
+            html_gen = HTMLReportGenerator()
+            html_gen._copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
+            informe_html = html_gen.generar_informe_html(
                 df, archivo_kml, carpeta_salida, nombre_salida, hoja
             )
 
@@ -8158,8 +8161,11 @@ def main():
 
         # 4) Generar el HTML
         print("[DEBUG] Llamando a generar_informe_html(...)")
-        _copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
-        informe_html = generar_informe_html(
+        # 🚨 MODULARIZADO: Usar framework HTML independiente
+        from tz_core.html_generator import HTMLReportGenerator
+        html_gen = HTMLReportGenerator()
+        html_gen._copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
+        informe_html = html_gen.generar_informe_html(
             df, archivo_kml, carpeta_salida, nombre_salida, hoja,
             os.path.basename(archivo_entrada)
         )
