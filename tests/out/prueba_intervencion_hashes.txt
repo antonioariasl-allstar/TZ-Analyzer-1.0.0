@@ -1,7 +1,0 @@
-Hashes generados: 2025-10-25 12:42:21
-
-[HTML] prueba_intervencion_informe.html
-  Ruta: tests/out\prueba_intervencion_informe.html
-  Tamaño: 1634754 bytes
-  MD5: bb68aab53b5e9f5281270ba0b8821de9
-  SHA256: 6ac079bb77435b06b680fd87df833c3f81967f3a059c1be7b63477477c5e67c8

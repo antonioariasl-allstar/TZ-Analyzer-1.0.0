@@ -1,7 +1,0 @@
-Hashes generados: 2025-10-25 12:38:33
-
-[HTML] baseline_test_informe.html
-  Ruta: tests/out\baseline_test_informe.html
-  Tamaño: 1634761 bytes
-  MD5: 0cf103d790a5237ea46dc856f91b048b
-  SHA256: f3cc4a07c0379b0f09044644e8b521c1de773a2ded35d73efe59ed1ad4e80995

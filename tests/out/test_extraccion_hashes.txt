@@ -1,7 +1,0 @@
-Hashes generados: 2025-10-25 13:46:38
-
-[HTML] test_extraccion_informe.html
-  Ruta: tests/out\test_extraccion_informe.html
-  Tamaño: 1634746 bytes
-  MD5: 6c00898a8945dd55b8284427a153855e
-  SHA256: f0bd38e2d75c1db0bb4d6a736f68bfa59a672b78f75d3ed851696c3ec3c66b2c
