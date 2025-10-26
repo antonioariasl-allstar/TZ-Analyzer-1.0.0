@@ -1,6 +1,21 @@
 """
-utilidades.py - File Processor v1.x (Optimizado para Workflow Forense)
---------------------------------------------------------------------
+utilidades.py - UI HELPERS ESPECIALIZADOS EN INTERFAZ FORENSE
+=============================================================
+
+✅ ESTADO: CÓDIGO UI ACTIVO - ESPECIALIZADO EN INTERFAZ DE USUARIO
+🎯 PROPÓSITO: Diálogos Tkinter y selección de archivos para workflow forense
+📍 DIFERENCIACIÓN: NO confundir con tz_core/utils.py (funciones puras)
+
+RESPONSABILIDADES ESPECÍFICAS:
+- seleccionar_archivo(): Diálogos Tkinter para Excel + fallback consola
+- seleccionar_carpeta(): Selección de directorios con memoria de sesión  
+- _console_prompt(): Interfaz consola robusta para entornos sin GUI
+- LAST_DIR: Memoria de sesión para UX optimizada
+
+ARQUITECTURA HÍBRIDA:
+- Este archivo maneja INTERFAZ DE USUARIO (UI layer)
+- tz_core/utils.py maneja UTILIDADES PURAS (core functions)
+- Son complementarios, NO duplicados
 
 🎯 FILOSOFÍA DE DISEÑO: Especialización intencional en Excel para workflow forense real
 

@@ -1,7 +1,24 @@
 """
-tz_core.data_validator - Validación y limpieza de datos
+tz_core.data_validator - Validación y limpieza de datos (ESQUELETO)
+====================================================================
+
+🚨 ESTADO: ESQUELETO PREPARADO - NO USAR EN PRODUCCIÓN
+🔄 PROPÓSITO: Preparación para migración futura del sistema de validación
+📍 CÓDIGO ACTIVO: Usar ../validaciones.py (archivo raíz con 16 funciones)
+
+CONTEXTO DE ARQUITECTURA HÍBRIDA:
+- Este archivo contiene solo esqueleto para futura modularización
+- El código funcional está en validaciones.py (nivel raíz)
+- Migración pendiente para futuras optimizaciones
+
+MIGRACIÓN FUTURA:
+1. Migrar funcionalidad de ../validaciones.py a esta clase
+2. Actualizar imports en script_principal
+3. Deprecar archivo raíz gradualmente
+
+⚠️  NO MODIFICAR SIN COORDINAR CON ARQUITECTURA HÍBRIDA
+
 Validación de esquemas y normalización de datos
-"""
 
 class DataValidator:
     """

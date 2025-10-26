@@ -1,6 +1,22 @@
 """
-tz_core.kml_generator - Generación de archivos KML/KMZ
-Creación de mapas para Google Earth
+tz_core.kml_generator - Generación de archivos KML/KMZ (ESQUELETO)
+====================================================================
+
+🚨 ESTADO: ESQUELETO PREPARADO - NO USAR EN PRODUCCIÓN
+🔄 PROPÓSITO: Preparación para migración futura del KML generator
+📍 CÓDIGO ACTIVO: Usar ../kml_generador.py (archivo raíz)
+
+CONTEXTO DE ARQUITECTURA HÍBRIDA:
+- Este archivo contiene el esqueleto para la futura modularización
+- El código funcional está en kml_generador.py (nivel raíz)
+- Migración pendiente para futuras optimizaciones
+
+MIGRACIÓN FUTURA:
+1. Migrar funcionalidad de ../kml_generador.py a esta clase
+2. Actualizar imports en script_principal
+3. Deprecar archivo raíz gradualmente
+
+⚠️  NO MODIFICAR SIN COORDINAR CON ARQUITECTURA HÍBRIDA
 """
 
 class KMLGenerator:
