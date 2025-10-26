@@ -318,8 +318,19 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
 
 def bootstrap_config() -> None:
     """
-    Inicializa configuración y rename map, y muestra banner.
-    Evita ejecutar esto en import; llamarlo solo desde el entrypoint.
+    🚨 FUNCIÓN ULTRA-CRÍTICA REFACTORIZADA: Inicializa configuración global y rename map.
+    
+    RESPONSABILIDADES:
+    1. Muestra banner de la aplicación
+    2. Inicializa variables globales CONFIG y RENAME_MAP
+    3. Carga configuración desde archivo (tz_core.config_manager)
+    4. Construye mapa de sinónimos de columnas (tz_core.config_manager)
+    
+    REFACTORIZACIÓN:
+    - Banner: mantenido local (display)
+    - CONFIG loading: usa cargar_config_modular() ✅ 
+    - RENAME_MAP building: usa cfg_build_rename_map_modular() ✅
+    - Variables globales: mantenidas locales por compatibilidad
     """
     # Banner (antes estaba al nivel superior)
     print("""
@@ -328,15 +339,49 @@ def bootstrap_config() -> None:
     Bitacoras -> KML/KMZ + Informe HTML
 ===============================================
 """)
-    # Configuración y mapa de sinónimos (antes estaban al nivel superior)
+    
+    # Configuración y mapa de sinónimos usando funciones modulares
     global CONFIG, RENAME_MAP
-    CONFIG = get_config()  # Usa la función centralizada
+    CONFIG = get_config()  # Usa la función centralizada (ya modular)
+    
+    # Importar cfg_build_rename_map desde el módulo
+    from tz_core.config_manager import cfg_build_rename_map
     RENAME_MAP = cfg_build_rename_map(CONFIG)
 
 # === SECCIÓN: WIZARD DE MAPEO DE COLUMNAS (detección, mapeo manual, QC) ===
+# 🚨⚡🔴 ZONA DE PELIGRO EXTREMO - NO MODIFICAR SIN CONSULTAR DOCS 🔴⚡🚨
+#
+# ADVERTENCIA CRÍTICA: Esta función es un órgano vital de 382 líneas con
+# interdependencias complejas. Cualquier modificación puede causar falla sistémica.
+#
+# ANTES DE TOCAR ESTA FUNCIÓN:
+# 1. Lee docs/WIZARD_QC_PELIGRO_EXTREMO.md
+# 2. Consulta TODO.md sección "INTERVENCIONES CRÍTICAS DIFERIDAS"  
+# 3. Evalúa si realmente necesitas modificar esto
+# 4. Si es inevitable, planifica con 3+ meses de anticipación
+#
+# EVALUACIÓN 2025-10-25: CONTRAINDICACIÓN ABSOLUTA para refactoring
+# - 382 líneas de código interconectado
+# - Múltiples input() sin framework de mocking
+# - Dependencias: sistema dual, CONFIG global, sinónimos
+# - Efectos secundarios en estado global
+# - Core crítico del negocio con zero fault tolerance
+#
+# DECISIÓN: Diferido para fases 12-13 con intervención especializada
+# ⚡🚨🔴 FIN ZONA DE PELIGRO EXTREMO 🔴🚨⚡
+
 MANUAL_QC_MAPPING = True
 def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
-    """Guía el mapeo de columnas esenciales/no esenciales y persiste decisiones en CONFIG si aplica."""
+    """
+    ⚡ FUNCIÓN DE RIESGO EXTREMO ⚡
+    
+    Guía el mapeo de columnas esenciales/no esenciales y persiste decisiones en CONFIG.
+    
+    🚨 ADVERTENCIA: 382 líneas de código crítico con múltiples subsistemas.
+    Ver docs/WIZARD_QC_PELIGRO_EXTREMO.md antes de cualquier modificación.
+    
+    CONTRAINDICADO para refactoring hasta fases 12-13.
+    """
     cols_menu = list(map(str, getattr(df, "_orig_cols", list(df.columns))))
     def _menu_horizontal(_cols, per_line=6):
         filas, fila = [], []
@@ -911,14 +956,14 @@ def _dedupe_columns(df):
         df = df.drop(columns=same[1:])
 
     return df
+# === IMPORTS MODULARES (gradual refactoring) ===
+from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
+from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR
+
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 def _sha256_de_archivo(path: str) -> str:
-    import hashlib
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    """Wrapper para compatibilidad - usar sha256_de_archivo de tz_core.utils"""
+    return sha256_de_archivo(path)
 
 
 def _escribe_hashes_txt(dest_path: str, pares: list[tuple[str, str]]):
@@ -962,137 +1007,58 @@ def _copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> str | None:
         return None
 
 
-DEFAULT_CONFIG = {
-    "kml": {
-        "azimuth_km": 1.5,
-        "cone": {"half_degrees": 35, "fill_color": "7fffffff"},
-        "line": {"color": "ffff00ff", "width": 5},
-        "description": [
-            # Bloque 2: Tel + identidad (agregamos Alias; cambiamos etiqueta de Usuario)
-            [["Tel","tel"], ["IMEI","imei"], ["Alias","alias"], ["Nombre de Usuario","nombre_usuario"], ["Abonado","abonado"]],
-            # Bloque 3: datos de antena/posiciones
-            [["Antena","antena"], ["Detalle","detalle"], ["Lat","lat"], ["Long","long"], ["Azimut","azimut"], ["Celda","celda"], ["LAC","lac"]],
-            # Bloque 4: interacción + duración (SIN líneas separadas de Tel/Nombre Contacto)
-            [["Interacción","interaccion"], ["Duración","duracion"]]
-        ]
-    }
-}
+# Alias para compatibilidad - usar DEFAULT_CONFIG de tz_core.config_manager
+DEFAULT_CONFIG = DEFAULT_CONFIG_MODULAR
 
 # === SECCIÓN: CONFIGURACIÓN Y SINÓNIMOS (carga CONFIG, construye RENAME_MAP) ===
 def cargar_config():
     """
-    Carga la configuración global desde config.json.
-    Si el archivo no existe o falla, retorna DEFAULT_CONFIG y garantiza claves mínimas.
-    Compatible con PyInstaller (detecta sys.frozen y usa sys._MEIPASS).
-
-    Returns:
-        dict: Diccionario de configuración global.
+    Wrapper para compatibilidad - usar cargar_config de tz_core.config_manager
+    
+    NOTA: Preserva comportamiento exacto incluyendo DEFAULT_CONFIG y merge logic.
+    El sistema de sinónimos legacy se mantiene intacto para evitar breaking changes.
     """
-    # Detecta base_path según modo de ejecución (normal vs PyInstaller)
-    if getattr(sys, 'frozen', False):
-        base = sys._MEIPASS
-    else:
-        base = os.path.dirname(os.path.abspath(__file__))
-    ruta_cfg = os.path.join(base, "config.json")
-    try:
-        with open(ruta_cfg, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        # merge superficial con defaults
-        cfg = DEFAULT_CONFIG.copy()
-        cfg.update(data or {})
-        # merge de sección kml
-        if "kml" in data:
-            cfg["kml"].update(data["kml"])
-        # Blindaje: asegurar que 'Alias' aparezca en el bloque 2 de la descripción
-        try:
-            desc = cfg["kml"]["description"]
-            if isinstance(desc, list) and len(desc) >= 2:
-                bloque2 = desc[1]  # Tel/IMEI/…
-                if isinstance(bloque2, list):
-                    etiquetas = [etq for etq, _ in bloque2 if isinstance(etq, str)]
-                    if "Alias" not in etiquetas:
-                        # Insertar después de IMEI (posición 2)
-                        bloque2.insert(2, ["Alias", "alias"])
-        except Exception:
-            pass
-        return cfg
-    except Exception:
-        return DEFAULT_CONFIG
+    return cargar_config_modular()
 
 # === SINONIMOS: MERGE + PERSISTENCIA (inicio) ==============================
 import tempfile
 
 def _normalize_key_for_synonyms(s: str) -> str:
-    s = "" if s is None else str(s)
-    s = unicodedata.normalize('NFKD', s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    s = re.sub(r'\s+', ' ', s).strip().lower()
-    return s
+    """
+    Wrapper para compatibilidad - usar _normalize_key_for_synonyms de tz_core.config_manager
+    """
+    from tz_core.config_manager import _normalize_key_for_synonyms as _normalize_modular
+    return _normalize_modular(s)
 
 def cfg_build_rename_map(CONFIG: dict) -> dict:
-    """Construye el mapa de sinónimos de columnas a partir de CONFIG; normaliza y registra conteos."""
-    rename_map = {}
-    schema = (CONFIG or {}).get('schema', {})
-    fields = schema.get('fields', {}) if isinstance(schema, dict) else {}
-    for canonico, spec in (fields or {}).items():
-        sinos = set()
-        if isinstance(spec, dict):
-            for raw in spec.get('synonyms', []) or []:
-                sinos.add(_normalize_key_for_synonyms(raw))
-            sinos.add(_normalize_key_for_synonyms(canonico))
-        rename_map[canonico] = sinos
-    user_syn = (CONFIG or {}).get('synonyms_user', {}) or {}
-    for raw, mapped in user_syn.items():
-        if raw.startswith('_'):
-            continue
-        c_norm = _normalize_key_for_synonyms(mapped)
-        r_norm = _normalize_key_for_synonyms(raw)
-        if c_norm not in rename_map:
-            rename_map[c_norm] = set()
-        rename_map[c_norm].add(r_norm)
-    try: log(f"[synonyms] Construido rename_map: {sum(len(v) for v in rename_map.values())} entradas totales.")
-    except Exception: pass
-    return rename_map
+    """
+    Wrapper para compatibilidad - usar cfg_build_rename_map de tz_core.config_manager
+    
+    MINA DESACTIVADA: Sistema de sinónimos extraído al módulo config_manager.
+    Preserva comportamiento exacto del mapeo de columnas legacy y dinámico.
+    """
+    from tz_core.config_manager import cfg_build_rename_map as cfg_build_modular
+    return cfg_build_modular(CONFIG)
 
 def _atomic_write_json(path: str, data: dict):
-    import json, os
-    from datetime import datetime
-    base_dir = os.path.dirname(os.path.abspath(path))
-    os.makedirs(base_dir, exist_ok=True)
-    try:
-        if os.path.exists(path):
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup = f"{path}.backup.{ts}.json"
-            with open(path, "r", encoding="utf-8") as fr, open(backup, "w", encoding="utf-8") as fw:
-                fw.write(fr.read())
-    except Exception:
-        pass
-    fd, tmp_path = tempfile.mkstemp(prefix="cfg_", suffix=".json", dir=base_dir)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp_path, path)
+    """
+    🚨 WRAPPER DE COMPATIBILIDAD - usar atomic_write_json de tz_core.config_manager
+    
+    MINA DESACTIVADA: Función de escritura atómica extraída al módulo config_manager.
+    Preserva backup automático y escritura segura de archivos JSON.
+    """
+    from tz_core.config_manager import atomic_write_json
+    return atomic_write_json(path, data)
 
 def cfg_add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cfg: str = None) -> dict:
-    if not isinstance(CONFIG, dict):
-        return CONFIG
-    canonico = (canonico or "").strip()
-    encabezado_crudo = (encabezado_crudo or "").strip()
-    if not canonico or not encabezado_crudo:
-        return CONFIG
-    if "synonyms_user" not in CONFIG or not isinstance(CONFIG["synonyms_user"], dict):
-        CONFIG["synonyms_user"] = {}
-    if encabezado_crudo not in CONFIG["synonyms_user"]:
-        CONFIG["synonyms_user"][encabezado_crudo] = canonico
-        try:
-            base = os.path.dirname(os.path.abspath(__file__))
-            ruta_cfg = ruta_cfg or os.path.join(base, "config.json")
-            _atomic_write_json(ruta_cfg, CONFIG)
-            try: log(f"[INFO][synonyms] Añadido '{encabezado_crudo}' → '{canonico}' (persistido en config.json).")
-            except Exception: pass
-        except Exception as e:
-            try: log(f"[WARN][synonyms] No se pudo guardar config.json: {e}")
-            except Exception: pass
-    return CONFIG
+    """
+    🚨 WRAPPER DE COMPATIBILIDAD - usar add_user_synonym de tz_core.config_manager
+    
+    MINA DESACTIVADA: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.
+    Preserva persistencia automática en config.json y memoria de mapeo manual.
+    """
+    from tz_core.config_manager import add_user_synonym
+    return add_user_synonym(CONFIG, canonico, encabezado_crudo, ruta_cfg)
 # === SINONIMOS: MERGE + PERSISTENCIA (fin) =================================
 
 # CONFIG inicializado al nivel de módulo (se carga una sola vez)
@@ -1126,76 +1092,13 @@ def get_config():
 
 def _solicitar_color_tema(CONFIG):
     """
-    Interfaz para elegir el color de tema visual del informe/KML.
-    Si existe una paleta en config.json, muestra menú numerado.
-    Permite elegir por número, HEX manual o usar el predeterminado.
-    Actualiza CONFIG["style"]["theme_hex"] con la elección.
-
-    Args:
-        CONFIG (dict): Diccionario de configuración global.
-    Returns:
-        dict: CONFIG actualizado con el color elegido.
+    🚨 WRAPPER DE COMPATIBILIDAD - usar solicitar_color_tema de tz_core.config_manager
+    
+    MINA DESACTIVADA: Función interactiva extraída al módulo config_manager.
+    Preserva funcionalidad de paleta de 60 colores para diferenciación de bitácoras.
     """
-    style = CONFIG.get("style", {}) if isinstance(CONFIG, dict) else {}
-    default_hex = style.get("theme_hex", "#ff00ff")
-    palette = style.get("palette") or []   # lista de [nombre, "#hex"]
-
-    # Construir el prompt
-    print("")  # pequeña separación visual
-    if palette:
-        print("Colores sugeridos (visibles en Google Earth):")
-        for i, item in enumerate(palette, start=1):
-            try:
-                nombre, hexv = item[0], item[1]
-            except Exception:
-                # por si el ítem no tiene la forma esperada
-                continue
-            print(f"  [{i}] {nombre}  {hexv}")
-        print(f"  [0] Usar el predeterminado ({default_hex})")
-
-        resp = input("Elegí número o pegá un HEX (Enter = predeterminado): ").strip()
-    else:
-        # Sin paleta configurada, conservamos el comportamiento clásico
-        resp = input(f"Ingresá color tema en hex (Enter = {default_hex}): ").strip()
-
-    # Normalizar elección
-    if resp == "":
-        elegido = default_hex
-    else:
-        # ¿opción numérica?
-        if resp.isdigit():
-            idx = int(resp)
-            if idx == 0 and palette:
-                elegido = default_hex
-            elif 1 <= idx <= len(palette):
-                elegido = str(palette[idx - 1][1]).strip()
-            else:
-                print("Opción fuera de rango; usaré el color predeterminado.")
-                elegido = default_hex
-        else:
-            # ¿HEX manual?
-            if re.fullmatch(r"#?[0-9a-fA-F]{6}", resp):
-                elegido = resp if resp.startswith("#") else f"#{resp}"
-            else:
-                print("Formato de color no válido; usaré el color predeterminado.")
-                elegido = default_hex
-
-    # Actualizar CONFIG y confirmar
-    style["theme_hex"] = elegido
-    CONFIG["style"] = style
-    print(f"Color tema: {elegido}")
-    return CONFIG
-
-
-    # Acepta #RRGGBB, RRGGBB, #RGB o RGB
-    if re.fullmatch(r'#?[0-9a-fA-F]{6}', resp) or re.fullmatch(r'#?[0-9a-fA-F]{3}', resp):
-        if not resp.startswith("#"):
-            resp = "#" + resp
-        style["theme_hex"] = resp
-        print(f"Color tema seleccionado: {resp}")
-    else:
-        print(f"Valor inválido. Se usará {pred}.")
-    return CONFIG
+    from tz_core.config_manager import solicitar_color_tema
+    return solicitar_color_tema(CONFIG)
 
 # =========================
 # Geometría / KML helpers
@@ -6019,94 +5922,48 @@ section{{margin-top:22px}}
 
 
 # --- Anti-hojas: ignorar ocultas y elegir visible ---
-try:
-    import openpyxl  # para detectar hojas ocultas/visibles
-except Exception:
-    openpyxl = None
+# 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader
+from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja
 
 def _obtener_hojas_visibles(ruta_excel):
-    if openpyxl is None:
-        return None, "NO_OPENPYXL"
-    try:
-        wb = openpyxl.load_workbook(ruta_excel, read_only=True, data_only=True)
-        visibles = [ws.title for ws in wb.worksheets if getattr(ws, "sheet_state", "visible") == "visible"]
-        wb.close()
-        return visibles, None
-    except Exception:
-        return None, "LOAD_FAIL"
+    """Wrapper de compatibilidad para tz_core.data_loader.obtener_hojas_visibles"""
+    return obtener_hojas_visibles(ruta_excel)
+
+def _listar_todas_hojas(ruta_excel):
+    """Wrapper de compatibilidad para tz_core.data_loader.listar_todas_hojas"""
+    return listar_todas_hojas(ruta_excel)
 
 def _seleccionar_hoja_visible(ruta_excel):
-    visibles, err = _obtener_hojas_visibles(ruta_excel)
-    if err == "NO_OPENPYXL":
-        print("Aviso: 'openpyxl' no disponible; se usará la primera hoja por defecto.")
-        return None
-    if err == "LOAD_FAIL":
-        print("Aviso: no se pudo inspeccionar hojas; se usará la primera hoja por defecto.")
-        return None
-    if not visibles:
-        print("No hay hojas visibles; se usará la primera hoja por defecto.")
-        return None
-    if len(visibles) == 1:
-        print(f"Hoja visible detectada: {visibles[0]}")
-        return visibles[0]
-
-    print("Hojas visibles detectadas:")
-    for i, name in enumerate(visibles, 1):
-        print(f"  [{i}] {name}")
-    while True:
-        resp = input("Elegí el número de la hoja a procesar (Enter = 1): ").strip()
-        idx = 1 if resp == "" else int(resp) if resp.isdigit() else None
-        if idx and 1 <= idx <= len(visibles):
-            elegido = visibles[idx - 1]
-            print(f"Hoja seleccionada: {elegido}")
-            return elegido
-        print("Ingresá un número válido (1..N).")
-# --- Fallback: listar TODAS las hojas con pandas y seleccionar una ---
-def _listar_todas_hojas(ruta_excel):
-    try:
-        xls = pd.ExcelFile(ruta_excel)
-        return list(xls.sheet_names)
-    except Exception:
-        return None
+    """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja_visible"""
+    return seleccionar_hoja_visible(ruta_excel)
 
 def _seleccionar_hoja(ruta_excel):
+    """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja"""
+    return seleccionar_hoja(ruta_excel)
+
+def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
     """
-    Intenta primero elegir entre hojas VISIBLES (openpyxl).
-    Si no es posible, lista TODAS las hojas (pandas) y deja elegir.
-    Si todo falla, devuelve None y se usará la primera por defecto.
+    Wrapper de compatibilidad para tz_core.data_loader.cargar_excel_con_normalizacion
+    
+    🚨 FASE 5.3a - SISTEMA DUAL DE COLUMNAS EXTRAÍDO 🚨
+    
+    Esta función implementa el sistema dual de columnas descubierto durante 
+    la refactorización campo minado:
+    
+    1. df.attrs["orig_cols"] - Columnas originales del archivo (para UI)
+    2. df.columns normalizadas - Columnas procesadas (para algoritmo)
+    
+    CRÍTICO: Ambas versiones son necesarias y NO deben ser "optimizadas".
+    La UI muestra nombres reales, el algoritmo usa nombres limpiados.
+    
+    Preserva comportamiento exacto de líneas originales 6543-6557.
     """
-    # 1) Intento con hojas visibles
-    try:
-        elegido = _seleccionar_hoja_visible(ruta_excel)
-        if elegido is not None:
-            return elegido
-    except Exception:
-        pass
+    from tz_core.data_loader import cargar_excel_con_normalizacion
+    return cargar_excel_con_normalizacion(ruta_excel, hoja_elegida)
 
-    # 2) Fallback: todas las hojas
-    hojas = _listar_todas_hojas(ruta_excel)
-    if not hojas:
-        print("No se pudo listar hojas; se usará la primera hoja por defecto.")
-        return None
+# --- Fallback: listar TODAS las hojas con pandas y seleccionar una ---
+# 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader (wrappers ya definidos arriba)
 
-    if len(hojas) == 1:
-        print(f"Hoja detectada (todas): {hojas[0]}")
-        return hojas[0]
-
-    print("Hojas detectadas (todas):")
-    for i, h in enumerate(hojas, 1):
-        print(f"  [{i}] {h}")
-    while True:
-        resp = input("Elegí el número de la hoja a procesar (Enter = 1): ").strip()
-        if resp == "":
-            elegido = hojas[0]
-            break
-        if resp.isdigit() and 1 <= int(resp) <= len(hojas):
-            elegido = hojas[int(resp) - 1]
-            break
-        print("Número inválido. Probá de nuevo.")
-    print(f"Hoja seleccionada: {elegido}")
-    return elegido
 # --- Normalizadores robustos y pre-flight de esenciales ---
 
 ESENCIALES_IN = ["lat", "long", "azimut", "fecha", "hora", "tel"]
@@ -6287,14 +6144,15 @@ def _modo_manual():
         return df
         
     def _sanear_nombre_archivo(s):
-        s = s or "antenas_manual"
-        # quitar acentos y normalizar
-        s = unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode("ascii")
-        # permitir solo letras, numeros, guion, guion_bajo, punto y espacios
-        s = re.sub(r"[^\w\s.-]", "_", s)
-        # espacios -> guion_bajo, limpiar bordes
-        s = re.sub(r"\s+", "_", s).strip("._")
-        return s or "antenas_manual"
+        """
+        Wrapper para compatibilidad - usar sanear_nombre_archivo de tz_core.utils
+        
+        CRÍTICO: Preserva fallback original "antenas_manual" para mantener
+        comportamiento idéntico en casos límite (None, "", "...", "___")
+        
+        Función original extraída con cero breaking changes garantizado.
+        """
+        return sanear_nombre_archivo(s, "antenas_manual")
 
     def _nombre_auto_desde_items(items):
         # toma el primer tel y el primer alias no vacios
@@ -6730,19 +6588,16 @@ def main():
     # Selección de hoja visible (si hay varias)
     hoja = _seleccionar_hoja_visible(archivo_entrada)
 
-    # Carga del Excel (con o sin hoja seleccionada)
+    # Carga del Excel con sistema dual de columnas (FASE 5.3a modular)
     try:
-        df = pd.read_excel(archivo_entrada, sheet_name=hoja) if hoja else pd.read_excel(archivo_entrada)
-        # Guardar columnas originales para el menú QC (antes de cualquier rename/coalesce)
-        df.attrs["orig_cols"] = list(map(str, df.columns))
+        df, hoja_usada = _cargar_excel_con_normalizacion(archivo_entrada, hoja)
     except Exception as e:
         print(f"Error al leer el Excel: {e}")
         return
 
-    # Normalización de encabezados
+    # Normalización adicional de encabezados (heredada del sistema dual)
     df.columns = (
         df.columns.astype(str)
-          .str.strip()
           .str.normalize('NFD').str.encode('ascii', 'ignore').str.decode('ascii')
           .str.lower()
           .str.replace(r'[\s\-\/\.]+', '_', regex=True)   # espacios, guiones, diagonales y puntos -> _
@@ -7740,7 +7595,14 @@ def main():
         print("\n[QC] Iniciando wizard QC (mapeo manual).")
         esenciales_qc = ["tel", "lat", "lon", "fecha", "hora", "azimut", "imei", "antena", "interaccion", "contacto"]
         no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
+        
+        # ⚡ LÍNEA CRÍTICA: Segunda componente del sistema dual
+        # Esta línea preserva las columnas DESPUÉS de la normalización inicial
+        # pero ANTES del wizard. Es parte del sistema dual de columnas.
+        # Ver docs/SISTEMA_DUAL_COLUMNAS.md y docs/WIZARD_QC_PELIGRO_EXTREMO.md
         df._orig_cols = list(df.columns)
+        
+        # 🚨 FUNCIÓN DE RIESGO EXTREMO - Ver warning arriba en línea 353
         df, _mapeo = _wizard_qc_mapeo(df, esenciales=esenciales_qc, no_esenciales=no_esenciales_qc)
         # --- Compatibilidad lon/long para KPIs/HTML ---
         if "lon" in df.columns and "long" not in df.columns:
@@ -7826,15 +7688,19 @@ def main():
 
     # --- Nombre sugerido para salida (Excel): TEL + ALIAS + RANGO ISO + EXCEL + TIMESTAMP ---
     def _sanear_nombre_archivo_local(s: str) -> str:
-        base = nombre_base
-        s = s or base
-        # quitar acentos y normalizar
-        s = unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode("ascii")
-        # permitir solo letras, numeros, guion, guion_bajo, punto y espacios
-        s = re.sub(r"[^\w\s.-]", "_", s)
-        # espacios -> guion_bajo, limpiar bordes y vacíos
-        s = re.sub(r"\s+", "_", s).strip("._")
-        return s or base
+        """
+        Wrapper para compatibilidad - usar sanear_nombre_archivo de tz_core.utils
+        
+        CRÍTICO: Preserva fallback dinámico (nombre_base) para mantener
+        comportamiento idéntico en generación de nombres Excel.
+        
+        CONTEXTO: Esta función se usa en:
+        - Línea 7899: generación automática de nombres Excel  
+        - Línea 8098: validación entrada usuario para nombres Excel
+        
+        El fallback nombre_base es crucial para nombres consistentes.
+        """
+        return sanear_nombre_archivo(s, nombre_base)
 
     def _first_nonempty(colname):
         if not colname or colname not in df.columns:
@@ -8128,8 +7994,11 @@ def main():
     # HTML opcional (solo si lo activás en config.json con html.generar_en_modo_manual = true)
     if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
         try:
-            _copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
-            informe_html = generar_informe_html(
+            # 🚨 MODULARIZADO: Usar framework HTML independiente
+            from tz_core.html_generator import HTMLReportGenerator
+            html_gen = HTMLReportGenerator()
+            html_gen._copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
+            informe_html = html_gen.generar_informe_html(
                 df, archivo_kml, carpeta_salida, nombre_salida, hoja
             )
 
@@ -8292,8 +8161,11 @@ def main():
 
         # 4) Generar el HTML
         print("[DEBUG] Llamando a generar_informe_html(...)")
-        _copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
-        informe_html = generar_informe_html(
+        # 🚨 MODULARIZADO: Usar framework HTML independiente
+        from tz_core.html_generator import HTMLReportGenerator
+        html_gen = HTMLReportGenerator()
+        html_gen._copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
+        informe_html = html_gen.generar_informe_html(
             df, archivo_kml, carpeta_salida, nombre_salida, hoja,
             os.path.basename(archivo_entrada)
         )
@@ -8536,38 +8408,8 @@ def _solicitar_overrides_topn(config):
     return ovr if ovr else None
 
 def _compactar_ruta(txt: str, maxlen: int = 64) -> str:
-    """
-    Devuelve un nombre corto y seguro para usar como carpeta.
-    Mantiene inicio y final del nombre y pone un hash al centro,
-    asegurando que la longitud final sea <= maxlen.
-    """
-    import hashlib, os
-
-    base = str(txt).strip().replace(os.sep, "_")
-    if len(base) <= maxlen:
-        return base
-
-    hash_len = 8            # tamaño del hash
-    sep = "__"              # separador
-    fixed = hash_len + 2*len(sep)  # espacio ocupado por "__" + hash + "__"
-
-    # Si el maxlen es demasiado corto, devolvemos solo el hash truncado.
-    if maxlen <= fixed + 2:
-        return hashlib.sha1(base.encode("utf-8")).hexdigest()[:min(hash_len, maxlen)]
-
-    remain = maxlen - fixed
-    # repartimos 60/40 entre prefijo y sufijo con mínimos razonables
-    pref_len = max(10, int(remain * 0.6))
-    suf_len = remain - pref_len
-    if suf_len < 8:
-        suf_len = 8
-        pref_len = remain - suf_len
-
-    h = hashlib.sha1(base.encode("utf-8")).hexdigest()[:hash_len]
-    prefix = base[:pref_len].rstrip("_- ")
-    suffix = base[-suf_len:].lstrip("_- ")
-
-    return f"{prefix}{sep}{h}{sep}{suffix}"
+    """Wrapper para compatibilidad - usar compactar_ruta de tz_core.utils"""
+    return compactar_ruta(txt, maxlen)
 
 if __name__ == "__main__":
     bootstrap_config()

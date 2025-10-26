@@ -3,7 +3,7 @@
 # Entornos virtuales
 .venv/
 .venv*/
- .venv312/
+.venv312/
 venv/
 venv*/
 env/
@@ -17,6 +17,13 @@ __pycache__/
 dist/
 build/
 *.spec
+
+# IDEs y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # Herramientas / pruebas
 .pytest_cache/
