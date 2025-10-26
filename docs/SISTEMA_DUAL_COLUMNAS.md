@@ -1,4 +1,4 @@
-# Sistema Cardiovascular Dual - Documentación Crítica
+# Sistema Dual de Columnas - Documentación Crítica
 
 ## 🚨 ADVERTENCIA PARA DESARROLLADORES
 
@@ -16,7 +16,7 @@ Esta dualidad **NO ES UN BUG** sino una decisión arquitectónica crítica.
 ## Historia del Descubrimiento
 
 ### Contexto Inicial
-Durante el análisis de la Fase 5.3 (carga de Excel), se identificó lo que inicialmente parecía ser una operación simple en la línea 6543. Sin embargo, el análisis detallado reveló un sistema cardiovascular complejo.
+Durante el análisis de la Fase 5.3 (carga de Excel), se identificó lo que inicialmente parecía ser una operación simple en la línea 6543. Sin embargo, el análisis detallado reveló un sistema dual complejo.
 
 ### Análisis de Timeline
 Mediante análisis forense del código original se estableció el timing crítico:
@@ -108,7 +108,7 @@ def cargar_excel_con_normalizacion(ruta_excel: str, hoja_elegida: Optional[str] 
 ```
 
 ### Validaciones Críticas
-La función incluye validaciones para asegurar que el sistema dual esté operacional:
+La función incluye validaciones para asegurar que el sistema dual esté funcional:
 - Verifica existencia de `orig_cols`
 - Confirma consistencia de conteos
 - Asegura timing correcto (backup antes de normalización)
@@ -151,7 +151,7 @@ En el script principal se mantiene un wrapper que:
 ```python
 def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
     """
-    Wrapper de compatibilidad que preserva el sistema cardiovascular dual
+    Wrapper de compatibilidad que preserva el sistema dual de columnas
     extraído en Fase 5.3a
     """
     from tz_core.data_loader import cargar_excel_con_normalizacion
@@ -174,7 +174,7 @@ def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
 
 ## Contacto y Mantenimiento
 
-Este documento debe actualizarse si se realizan cambios al sistema cardiovascular dual. 
+Este documento debe actualizarse si se realizan cambios al sistema dual de columnas. 
 
 **Responsabilidad**: Equipo de refactorización TZ Analyzer
 **Fecha de creación**: Fase 5.3a
