@@ -1,8 +1,31 @@
 # 🏗️ CAMBIOS ARQUITECTURALES REALIZADOS - 27 OCT 2025
 
+## 🚀 FASE 2D EN PROGRESO: VALIDADORES Y HELPERS TEMPORALES
+
+### **NUEVOS MÓDULOS AGREGADOS - 2 MÓDULOS ADICIONALES:**
+
+```bash
+tz_core/                        # 🏆 FRAMEWORK MODULAR EXPANDIDO (9 MÓDULOS)
+├── utils.py                   # ✅ Utilidades básicas (sha256, compactar_ruta, sanear_nombre)
+├── config_manager.py          # ✅ Configuración completa + color themes
+├── data_loader.py             # ✅ Carga Excel + normalización headers  
+├── geo_utils.py              # ✅ Funciones geográficas puras (radianes, punto_final, cono)
+├── text_utils.py             # ✅ Normalización texto + mojibake fix
+├── color_utils.py            # ✅ Conversiones HEX ↔ KML (AABBGGRR format) 
+├── html_utils.py             # ✅ Helpers HTML seguros (row_html, fmt_imei, luhn)
+├── validation_utils.py       # 🆕 Validadores puros (tiene_valor, es_num, a_float)
+└── time_utils.py             # 🆕 Helpers temporales (parse HH:MM:SS, rangos, clasificación)
+```
+
+### **DEDUPLICACIÓN SISTEMÁTICA REALIZADA:**
+- ✅ **Funciones duplicadas eliminadas:** 3 funciones (_hhmmss_to_time_or_none, _en_rango x2)
+- ✅ **Constantes consolidadas:** RANGOS_SV unificado desde múltiples ubicaciones
+- ✅ **Renombrado conflictos:** _en_rango_minutos() para evitar colisión de firmas
+- ✅ **Testing robusto:** 33+ tests nuevos (14 validation + 19 time)
+
 ## ✅ FASE 2C COMPLETADA: MODULARIZACIÓN AVANZADA
 
-### **PROGRESO ACTUAL - 7 MÓDULOS tz_core/ FUNCIONALES:**
+### **PROGRESO FASE 2C - 7 MÓDULOS tz_core/ FUNCIONALES:**
 
 ```bash
 tz_core/                    # 🏆 ARQUITECTURA MODULAR ROBUSTA

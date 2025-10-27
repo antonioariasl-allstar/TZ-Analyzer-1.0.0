@@ -67,12 +67,22 @@ tz_core/                    # 🏆 ARQUITECTURA MODULAR ROBUSTA
   - Rangos horarios personalizables.
   - Branding (logo, marca de agua, pie legal).
 - 🧪 **Pruebas de regresión**: Test automatizado que valida la estructura del KMZ (carpetas, azimuts, conos) para blindar cambios futuros.
-- 🧱 **Arquitectura modular y documentada**:
+- 🧱 **Arquitectura modular avanzada**:
   - `script_principal_bitacoras_refactory.py` → Flujo principal y orquestación.
+  - `tz_core/` → Framework modular con 9 módulos especializados:
+    - `utils.py` → SHA256, rutas, sanitización archivos
+    - `config_manager.py` → Gestión configuración avanzada
+    - `data_loader.py` → Carga Excel + normalización 
+    - `geo_utils.py` → Funciones geográficas puras
+    - `text_utils.py` → Normalización texto + mojibake fix
+    - `color_utils.py` → Conversiones color HEX ↔ KML
+    - `html_utils.py` → Helpers HTML seguros
+    - `validation_utils.py` → Validadores datos puros
+    - `time_utils.py` → Helpers temporales + rangos
   - `utilidades.py` → Selección de archivos/carpetas (Tkinter + fallback consola).
   - `validaciones.py` → Normalización defensiva de fecha/hora/coordenadas/azimut.
   - `kml_generador.py` → Generador de puntos libres (modo manual).
-  - `tests/test_e2e_regresion.py` → Tests E2E y validación de estructura KMZ.
+  - `tests/` → Suite de testing con 60+ tests unitarios + E2E.
 
 ---
 
@@ -83,6 +93,16 @@ TZ-Analyzer/
 │
 ├── config.json                            # Configuración global (estilos, branding, sinónimos)
 ├── script_principal_bitacoras_refactory.py  # Flujo principal y orquestación
+├── tz_core/                               # Framework modular (9 módulos especializados)
+│   ├── utils.py                           # SHA256, rutas, sanitización
+│   ├── config_manager.py                  # Gestión configuración avanzada
+│   ├── data_loader.py                     # Carga Excel + normalización
+│   ├── geo_utils.py                       # Funciones geográficas puras
+│   ├── text_utils.py                      # Normalización texto + mojibake
+│   ├── color_utils.py                     # Conversiones HEX ↔ KML
+│   ├── html_utils.py                      # Helpers HTML seguros
+│   ├── validation_utils.py                # Validadores datos puros
+│   └── time_utils.py                      # Helpers temporales + rangos
 ├── utilidades.py                          # Selección de archivos/carpetas
 ├── validaciones.py                        # Normalización y validación
 ├── kml_generador.py                       # Generador de puntos libres
@@ -91,8 +111,8 @@ TZ-Analyzer/
 ├── TODO.md                                # Tareas y observaciones
 ├── .gitignore                             # Archivos excluidos del repo
 └── tests/
+    ├── unit/                              # Tests unitarios (60+ tests)
     └── test_e2e_regresion.py              # Tests E2E y validación KMZ
-    └── unit/                              # Tests unitarios por componente
 ```
 
 ---
