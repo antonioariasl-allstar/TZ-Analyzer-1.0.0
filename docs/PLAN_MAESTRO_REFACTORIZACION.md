@@ -65,14 +65,14 @@ TZ Analyzer 2.0 - MODULAR
 ├── config.json (configuración externa)
 ├── tz_core/ (núcleo modular)
 │   ├── __init__.py
-│   ├── config_manager.py (gestión de configuración)
-│   ├── data_loader.py (carga Excel/TSV/CSV) 
+│   ├── config_manager.py (gestión de configuración) ✅ FUNCIONAL
+│   ├── data_loader.py (carga Excel/TSV/CSV) ✅ FUNCIONAL
 │   ├── data_validator.py (validación/limpieza)
 │   ├── data_processor.py (análisis/agregaciones)
 │   ├── kml_generator.py (generación KML/KMZ)
-│   ├── html_generator.py (reportes HTML)
+│   ├── html_generator.py ❌ NO IMPLEMENTADO (eliminado - era esqueleto vacío)
 │   ├── ui_helpers.py (menús/wizards)
-│   └── utils.py (utilidades comunes)
+│   └── utils.py (utilidades comunes) ✅ FUNCIONAL
 ├── tests/ (suite completa de tests)
 │   ├── golden/ (baseline de regresión)
 │   ├── unit/ (tests por módulo)
@@ -137,20 +137,20 @@ TZ Analyzer 2.0 - MODULAR
 #### **2.1 Crear Estructura tz_core**
 - [ ] Crear directorio `tz_core/`
 - [ ] Crear `tz_core/__init__.py` (vacío por ahora)
-- [ ] Crear módulos placeholder (solo docstring + pass):
-  - [ ] `tz_core/utils.py`
-  - [ ] `tz_core/config_manager.py`
-  - [ ] `tz_core/data_loader.py`
+- [x] Crear módulos placeholder (solo docstring + pass):
+  - [x] `tz_core/utils.py` ✅ FUNCIONAL
+  - [x] `tz_core/config_manager.py` ✅ FUNCIONAL
+  - [x] `tz_core/data_loader.py` ✅ FUNCIONAL
   - [ ] `tz_core/data_validator.py`
   - [ ] `tz_core/data_processor.py`
   - [ ] `tz_core/kml_generator.py`
-  - [ ] `tz_core/html_generator.py`
+  - [x] `tz_core/html_generator.py` ❌ ELIMINADO (intento fallido - era esqueleto sin función)
   - [ ] `tz_core/ui_helpers.py`
 
-#### **2.2 Verificación de Esqueleto**
-- [ ] Importar módulos sin errores: `from tz_core import utils`
-- [ ] Verificar que script principal sigue funcionando
-- [ ] Correr test E2E para verificar no regresión
+#### **2.2 Verificación de Esqueleto - ESTADO REAL (26-OCT-2025)**
+- [x] Importar módulos sin errores: `from tz_core import utils` ✅ FUNCIONA
+- [x] Verificar que script principal sigue funcionando ✅ FUNCIONA  
+- [x] Correr test E2E para verificar no regresión ✅ FUNCIONA
 
 **Gates de Fase 2:**
 - [ ] ✅ **IMPORT PASS:** Todos los módulos se importan sin errores

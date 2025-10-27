@@ -1,9 +1,40 @@
-# 🚨 FASE 8B - ANÁLISIS CRÍTICO DE DEPENDENCIAS
-## HTML Generator Extraction - Campo Minado Protocol
+# 🚨 FASE 8B - ESTADO REAL DEL PROYECTO (ACTUALIZADO 26-OCT-2025)
+## HTML Generator Extraction - INTENTO FALLIDO Y REPARACIÓN
 
-### 📊 **MAPEO COMPLETO DE DEPENDENCIAS**
+### ⚠️ **SITUACIÓN REAL DEL PROYECTO**
 
-#### ✅ **Variables Globales HTML (Estado Dinámico)**
+**RESUMEN EJECUTIVO:**
+- ❌ **La extracción del html_generator NUNCA se completó exitosamente**
+- ❌ **El archivo tz_core/html_generator.py era un esqueleto vacío que no funcionaba**
+- ❌ **Sistema quedó roto cuando generar_en_modo_manual: false**
+- ✅ **REPARADO 26-OCT-2025: Sistema funciona con código original en script_principal**
+
+### � **REPARACIÓN APLICADA**
+
+**PROBLEMA IDENTIFICADO:**
+```python
+# ANTES (ROTO):
+if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
+    # Intentaba usar html_generator vacío
+    informe_html = html_gen.generar_informe_html(...)
+else:
+    informe_html = None  # 🚨 NO GENERABA HTML!
+```
+
+**SOLUCIÓN IMPLEMENTADA:**
+```python
+# DESPUÉS (FUNCIONAL):
+if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
+    # Modo experimental (html_generator modular - cuando esté listo)
+    informe_html = html_gen.generar_informe_html(...)
+else:
+    # 🔧 FIX: Usar función original cuando modo manual está deshabilitado
+    informe_html = generar_informe_html(df, archivo_kml, carpeta_salida, nombre_salida, hoja)
+```
+
+### 📊 **ESTADO ACTUAL DE DEPENDENCIAS**
+
+#### ✅ **Variables Globales HTML (Funcionando)**
 ```python
 # Línea 2421-2422 - Declaración inicial
 HTML_SECCION_INTERACCIONES = ""
@@ -56,68 +87,52 @@ informe_html = generar_informe_html(
 )
 ```
 
-### 🚨 **ESTRATEGIA DE DESACOPLAMIENTO**
+### 🚨 **LECCIONES APRENDIDAS Y PLAN FUTURO**
 
-#### **Fase 8B.1 - Parametrización**
-1. **CONFIG → Parámetro**: Pasar config como dict
-2. **HTML_SECCION_* → Parámetro**: Pasar como dict `html_sections`
-3. **log → Parámetro**: Función logging inyectable
-4. **_copiar_logo_a_salida → Import**: Importar desde tz_core.utils
+#### **LO QUE SALIÓ MAL:**
+1. **Extracción prematura**: Se intentó extraer sin completar el análisis de dependencias
+2. **Documentación engañosa**: Se documentó como "exitoso" un intento fallido
+3. **Testing insuficiente**: No se validó que el html_generator modular funcionara
+4. **Safety fallback faltante**: No había fallback cuando modo manual = false
 
-#### **Fase 8B.2 - Interfaz Temporal**
-```python
-def generar_informe_html(
-    df, archivo_kml, carpeta_salida, nombre_salida, 
-    hoja=None, nombre_bitacora=None,
-    config=None,                    # NEW: CONFIG parametrizado
-    html_sections=None,             # NEW: HTML_SECCION_* parametrizadas
-    logger_func=None                # NEW: log() inyectable
-):
-    # Fallbacks durante transición
-    if config is None:
-        config = globals().get('CONFIG', {})
-    if html_sections is None:
-        html_sections = {
-            'interacciones': globals().get('HTML_SECCION_INTERACCIONES', ''),
-            'antenas': globals().get('HTML_SECCION_ANTENAS', ''),
-            'todos_contactos': globals().get('HTML_SECCION_TODOS_CONTACTOS', '')
-        }
-    if logger_func is None:
-        logger_func = globals().get('log', print)
+#### **RECOMENDACIONES PARA FUTURA EXTRACCIÓN:**
+```markdown
+⚠️ ADVERTENCIA: Si alguien quiere crear un html_generator.py funcional:
+
+1. **NUNCA borrar la función original** hasta confirmar que el nuevo funciona
+2. **Implementar todos los imports y dependencias** (CONFIG, log, HTML_SECCION_*)
+3. **Probar extensivamente** con casos reales antes de activar
+4. **Mantener fallback robusto** al código original
+5. **Actualizar documentación HONESTAMENTE** sobre el estado real
+
+PROBLEMAS TÉCNICOS A RESOLVER:
+- Dependencias circulares (script_principal ↔ tz_core.html_generator)
+- Variables globales dinámicas (HTML_SECCION_*)
+- Estado mutable de CONFIG
+- Timing de construcción de secciones HTML
 ```
 
-#### **Fase 8B.3 - Call Sites Update**
-```python
-# En main(), después de construir secciones HTML:
-html_sections = {
-    'interacciones': HTML_SECCION_INTERACCIONES,
-    'antenas': HTML_SECCION_ANTENAS, 
-    'todos_contactos': HTML_SECCION_TODOS_CONTACTOS
-}
+#### **ESTADO ACTUAL:**
+- ✅ **Sistema funcionando** con código original (2583 líneas en script_principal)
+- ✅ **HTML, KMZ, y hashes generándose correctamente**
+- ✅ **Configuración generar_en_modo_manual: false funciona**
+- ⚠️ **No existe html_generator modular funcional**
 
-# Llamadas actualizadas:
-informe_html = generar_informe_html(
-    df, archivo_kml, carpeta_salida, nombre_salida, hoja,
-    config=CONFIG,
-    html_sections=html_sections,
-    logger_func=log
-)
-```
+### 🎯 **PRÓXIMOS PASOS (SI SE DESEA MODULARIZACIÓN)**
 
-### ⚡ **RIESGOS IDENTIFICADOS**
+**FASE 8B-REAL.1 - Preparación Correcta:**
+1. Crear html_generator funcional SIN borrar original
+2. Resolver dependencias circulares
+3. Parametrizar correctamente CONFIG y HTML_SECCION_*
+4. Testing exhaustivo
 
-| **Riesgo** | **Criticidad** | **Mitigación** |
-|------------|----------------|----------------|
-| Variables HTML dinámicas | **ALTA** | Parametrización con fallbacks |
-| CONFIG global mutable | **CRÍTICA** | Pass-by-value, defensive copy |
-| Call sites múltiples | **MEDIA** | Update coordinado con wrapper |
-| Estado HTML timing | **ALTA** | Validar construcción antes de uso |
-
-### 🎯 **SIGUIENTE PASO: FASE 8B.4 - GOLDEN BACKUP**
-
-Crear snapshot atómico pre-extracción para garantizar rollback seguro.
+**FASE 8B-REAL.2 - Transición Segura:**
+1. Modo dual (original + modular) funcionando
+2. Validación lado a lado
+3. Documentación real del estado
+4. Rollback plan concreto
 
 ---
-**ESTADO**: ✅ Mapeo completo - Listo para Golden Backup  
-**ROI**: 30% reducción monolito (2590/7680 líneas)  
-**RIESGO**: MODERADO (dependencias parametrizables)
+**ESTADO ACTUAL**: ✅ **SISTEMA REPARADO Y FUNCIONAL**  
+**EXTRACCIÓN HTML**: ❌ **PENDIENTE (NO PRIORITARIO)**  
+**RIESGO**: 🟢 **BAJO (usando código probado original)**

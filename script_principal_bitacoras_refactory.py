@@ -8023,7 +8023,13 @@ def main():
             print(f"[ERROR] No se pudo generar el HTML: {e}")
             informe_html = None
     else:
-        informe_html = None
+        # 🔧 FIX: Usar función original cuando modo manual está deshabilitado
+        try:
+            informe_html = generar_informe_html(df, archivo_kml, carpeta_salida, nombre_salida, hoja)
+            print(f"Informe HTML generado (modo legacy): {informe_html}")
+        except Exception as e:
+            print(f"[ERROR] No se pudo generar el HTML (modo legacy): {e}")
+            informe_html = None
 
     # Log mínimo para Modo 2
     if opcion == "2":

@@ -6,6 +6,16 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
 
 ---
 
+## ⚠️ **ESTADO ACTUAL DEL PROYECTO (26-OCT-2025)**
+
+**✅ SISTEMA FUNCIONANDO:** El TZ Analyzer está operativo y genera correctamente HTML, KMZ, y archivos de hashes.
+
+**🔧 REPARACIÓN RECIENTE:** Se corrigió un problema donde la generación HTML estaba rota debido a un intento fallido de modularización. El sistema ahora usa el código original probado del script principal cuando `"generar_en_modo_manual": false` en config.json.
+
+**📋 MODULARIZACIÓN:** La extracción de funciones al framework `tz_core/` está parcialmente completada. Algunos módulos funcionan (config_manager, data_loader, utils), otros están pendientes o fueron removidos (html_generator era un esqueleto no funcional).
+
+---
+
 ## ⚙️ Características principales
 
 - ✅ **Wizard de mapeo interactivo**: Detecta automáticamente las columnas del archivo Excel y permite mapear manualmente campos esenciales (teléfono, fecha, hora, latitud, longitud, azimut) y no esenciales (alias, usuario, abonado, IMEI, contacto, interacción, duración, etc.).
