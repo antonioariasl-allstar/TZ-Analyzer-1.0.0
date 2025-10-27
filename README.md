@@ -6,13 +6,29 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
 
 ---
 
-## ⚠️ **ESTADO ACTUAL DEL PROYECTO (26-OCT-2025)**
+## 📚 Documentación
+
+**Para documentación completa, consulta [docs/README.md](docs/README.md)**
+
+### 📖 Para Usuarios
+- **[Guía de Instalación](docs/user/GUIA_INSTALACION.md)** - Instalación paso a paso
+- **[Guía de Uso Básico](docs/user/GUIA_USO_BASICO.md)** - Cómo usar el sistema
+- **[Preguntas Frecuentes (FAQ)](docs/user/FAQ.md)** - Solución a problemas comunes
+
+### 👨‍💻 Para Desarrolladores
+- **[Arquitectura Híbrida](docs/development/ARQUITECTURA_HIBRIDA_PERMANENTE.md)** - Diseño del sistema
+- **[Principios de Desarrollo](docs/development/PRINCIPIOS_DESARROLLO_PROFESIONAL.md)** - Estándares de código
+- **[Estrategia de Sincronización](docs/development/ESTRATEGIA_SYNC.md)** - Trabajo casa/oficina
+
+---
+
+## ⚠️ **ESTADO ACTUAL DEL PROYECTO (27-OCT-2025)**
 
 **✅ SISTEMA FUNCIONANDO:** El TZ Analyzer está operativo y genera correctamente HTML, KMZ, y archivos de hashes.
 
-**🔧 REPARACIÓN RECIENTE:** Se corrigió un problema donde la generación HTML estaba rota debido a un intento fallido de modularización. El sistema ahora usa el código original probado del script principal cuando `"generar_en_modo_manual": false` en config.json.
+**🔧 ARQUITECTURA HÍBRIDA:** Sistema con arquitectura dual - framework modular `tz_core/` para nuevas funcionalidades + script principal probado para funciones críticas.
 
-**📋 MODULARIZACIÓN:** La extracción de funciones al framework `tz_core/` está parcialmente completada. Algunos módulos funcionan (config_manager, data_loader, utils), otros están pendientes o fueron removidos (html_generator era un esqueleto no funcional).
+**📋 DOCUMENTACIÓN REORGANIZADA:** Estructura de documentación completamente reorganizada en categorías claras (user, development, technical, planning, audits, legacy).
 
 ---
 
