@@ -22,8 +22,43 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
+          pip install pytest flake8 mypy vulture radon bandit
 
       - name: Run tests
         run: |
           pytest -q
+
+      - name: Static analysis (flake8)
+        continue-on-error: true
+        run: |
+          mkdir reports
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || exit 0
+          flake8 . --count --exit-zero --max-complexity=30 --max-line-length=120 --statistics || exit 0
+
+      - name: Static analysis (mypy)
+        continue-on-error: true
+        run: |
+          mypy . --install-types --non-interactive || exit 0
+
+      - name: Dead code scan (vulture)
+        continue-on-error: true
+        run: |
+          vulture . --min-confidence 60 > reports/vulture.txt || exit 0
+
+      - name: Complexity report (radon)
+        continue-on-error: true
+        run: |
+          radon cc -s -a . > reports/radon_cc.txt || exit 0
+          radon mi . > reports/radon_mi.txt || exit 0
+
+      - name: Security scan (bandit)
+        continue-on-error: true
+        run: |
+          bandit -r -q . -f txt -o reports/bandit.txt || exit 0
+
+      - name: Upload static analysis reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-analysis-reports
+          path: reports
