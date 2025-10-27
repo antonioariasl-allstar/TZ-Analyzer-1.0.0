@@ -959,6 +959,7 @@ def _dedupe_columns(df):
 # === IMPORTS MODULARES (gradual refactoring) ===
 from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
 from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR
+from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 
@@ -1109,43 +1110,6 @@ def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
     rr, gg, bb = s[0:2], s[2:4], s[4:6]
     # KML = AABBGGRR (ojo: orden BGR)
     return f"{a:02x}{bb}{gg}{rr}".lower()
-
-def grados_a_radianes(grados: float) -> float:
-    return grados * math.pi / 180.0
-
-def calcular_punto_final(lat: float, lon: float, azimut: float, distancia_km: float):
-    """Calcula el punto final moviéndose 'distancia_km' desde (lat, lon) con rumbo 'azimut' (grados)."""
-    R = 6371.0  # Radio terrestre en km
-    lat_rad = grados_a_radianes(lat)
-    lon_rad = grados_a_radianes(lon)
-    azimut_rad = grados_a_radianes(azimut)
-
-    lat_final = math.asin(
-        math.sin(lat_rad) * math.cos(distancia_km / R)
-        + math.cos(lat_rad) * math.sin(distancia_km / R) * math.cos(azimut_rad)
-    )
-    lon_final = lon_rad + math.atan2(
-        math.sin(azimut_rad) * math.sin(distancia_km / R) * math.cos(lat_rad),
-        math.cos(distancia_km / R) - math.sin(lat_rad) * math.sin(lat_final)
-    )
-    return math.degrees(lat_final), math.degrees(lon_final)
-
-def generar_cono(kml: Kml, lat: float, lon: float, azimut: float, distancia_km: float, angulo_lateral: int, color: str):
-    """Genera un polígono tipo 'cono' centrado en (lat, lon), abierto en el azimut ± angulo_lateral."""
-    poligono = kml.newpolygon(name=f"Cono Azimut {azimut}°")
-    puntos_cono = []
-
-    for angulo in range(-angulo_lateral, angulo_lateral + 1, 5):
-        azimut_actual = azimut + angulo
-        lat_p, lon_p = calcular_punto_final(lat, lon, azimut_actual, distancia_km)
-        puntos_cono.append((lon_p, lat_p))
-
-    puntos_cono.append((lon, lat))  # cerrar polígono
-    poligono.outerboundaryis = puntos_cono
-
-    poligono.style.polystyle.color = color
-    poligono.style.polystyle.fill = 1
-    poligono.style.polystyle.outline = 1
 
 # =========================
 # Análisis de antenas (tolerante)
