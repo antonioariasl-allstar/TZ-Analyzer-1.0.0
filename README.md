@@ -32,7 +32,7 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
 
 ### 🎯 **MÓDULOS tz_core/ IMPLEMENTADOS:**
 ```bash
-tz_core/                    # 🏆 ARQUITECTURA MODULAR ROBUSTA (10 MÓDULOS)
+tz_core/                    # 🏆 ARQUITECTURA MODULAR ROBUSTA (11 MÓDULOS)
 ├── utils.py               # ✅ Utilidades básicas (sha256, compactar_ruta)
 ├── config_manager.py      # ✅ Configuración completa + color themes  
 ├── data_loader.py         # ✅ Carga Excel + normalización headers
@@ -42,7 +42,8 @@ tz_core/                    # 🏆 ARQUITECTURA MODULAR ROBUSTA (10 MÓDULOS)
 ├── html_utils.py         # ✅ Helpers HTML seguros
 ├── validation_utils.py   # ✅ Validaciones de datos (FASE 2D)
 ├── time_utils.py         # ✅ Utilidades temporales + rangos SV (FASE 2D)  
-└── dataframe_utils.py    # ✅ Utilidades pandas DataFrame (FASE 2E)
+├── dataframe_utils.py    # ✅ Utilidades pandas DataFrame (FASE 2E)
+└── file_utils.py         # ✅ Operaciones de archivos + I/O (FASE 2F)
 ```
 
 **📋 DOCUMENTACIÓN REORGANIZADA:** Estructura de documentación completamente reorganizada en categorías claras (user, development, technical, planning, audits, legacy).

@@ -1,5 +1,16 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
+## 🚀 FASE 2F COMPLETADA - 27 OCT 2025 ✅
+
+**FILE I/O UTILS MIGRADO:** `_escribe_hashes_txt` + `_copiar_logo_a_salida` → `tz_core/file_utils.py`  
+**TESTS EXHAUSTIVOS:** 16 passed, 1 skipped - Operaciones de archivos al 100%  
+**FUNCIONALIDAD:** Escritura hashes forenses + copia recursos con validación robusta  
+**INTEGRACIÓN PERFECTA:** Script principal funcionando sin regresiones, imports optimizados  
+**STATUS:** 11º módulo tz_core/ completado - Velocidad récord en 1 hora oficina ⚡
+
+### 🆕 MÓDULO tz_core/ FASE 2F (1/1):
+- ✅ **file_utils.py** - Operaciones archivos I/O (hashes forenses + copia recursos)
+
 ## 🎉 FASE 2E COMPLETADA - 27 OCT 2025 ✅
 
 **DATAFRAME UTILS MIGRADO:** `_dedupe_columns` → `tz_core/dataframe_utils.py`  
@@ -31,7 +42,7 @@
 **TESTS:** Todos los módulos validados y funcionando  
 **STATUS:** Arquitectura modular robusta - 46+ tests passing ✅
 
-### 🎯 MÓDULOS tz_core/ COMPLETADOS (10/10):
+### 🎯 MÓDULOS tz_core/ COMPLETADOS (11/11):
 - ✅ **utils.py** - sha256, compactar_ruta, sanear_nombre  
 - ✅ **config_manager.py** - Configuración completa  
 - ✅ **data_loader.py** - Carga Excel + normalización  
@@ -42,6 +53,7 @@
 - ✅ **validation_utils.py** - Validadores datos (tiene_valor, es_num, a_float)
 - ✅ **time_utils.py** - Helpers temporales (parse, rangos, clasificación)
 - ✅ **dataframe_utils.py** - Utilidades pandas DataFrame (deduplicación)
+- ✅ **file_utils.py** - Operaciones archivos I/O (hashes + copia recursos)
 
 ---
 

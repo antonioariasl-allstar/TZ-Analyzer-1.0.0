@@ -896,6 +896,7 @@ from tz_core.html_utils import row_html, fmt_imei_item, luhn_check, _row_html, _
 from tz_core.validation_utils import tiene_valor, es_num, a_float, _tiene_valor, _es_num, _a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR, _hhmmss_to_time_or_none, _en_rango, _clasificar_rango_sv
 from tz_core.dataframe_utils import dedupe_columns, _dedupe_columns
+from tz_core.file_utils import escribe_hashes_txt, copiar_logo_a_salida, _escribe_hashes_txt, _copiar_logo_a_salida
 
 # Importar constantes desde tz_core para consistencia
 RANGOS_SV = RANGOS_SV_MODULAR
@@ -903,44 +904,11 @@ RANGOS_SV = RANGOS_SV_MODULAR
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 
 def _escribe_hashes_txt(dest_path: str, pares: list[tuple[str, str]]):
-    """Escribe HASHES.txt en dest_path con formato: SHA256  <hex>  <ruta_relativa>"""
-    lines = []
-    for abs_p, rel_p in pares:
-        try:
-            hexa = sha256_de_archivo(abs_p)  # Uso directo de tz_core.utils
-            lines.append(f"SHA256  {hexa}  {rel_p}")
-        except Exception as e:
-            lines.append(f"# ERROR hashing {rel_p}: {e}")
-    with open(dest_path, "w", encoding="utf-8") as fw:
-        fw.write("\n".join(lines) + "\n")
+    """Wrapper de compatibilidad - usa tz_core.file_utils.escribe_hashes_txt"""
+    return escribe_hashes_txt(dest_path, pares)
 def _copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> str | None:
-    """
-    Copia el logo a la carpeta de salida y devuelve el **nombre de archivo**
-    (basename) que usará el HTML. Si no hay logo o falla, devuelve None.
-    """
-    try:
-        if not logo_src:
-            return None
-
-        # Acepta ruta absoluta o relativa; normalizamos
-        logo_abs = os.path.abspath(logo_src)
-        if not os.path.exists(logo_abs):
-            # si viene relativa a la carpeta del script, probamos ahí
-            base = os.path.dirname(os.path.abspath(__file__))
-            logo_abs = os.path.join(base, logo_src)
-            if not os.path.exists(logo_abs):
-                return None
-
-        os.makedirs(carpeta_salida, exist_ok=True)
-        dest = os.path.join(carpeta_salida, os.path.basename(logo_abs))
-
-        # Evitar copiar sobre sí mismo
-        if os.path.abspath(logo_abs) != os.path.abspath(dest):
-            shutil.copy2(logo_abs, dest)
-
-        return os.path.basename(dest)
-    except Exception:
-        return None
+    """Wrapper de compatibilidad - usa tz_core.file_utils.copiar_logo_a_salida"""
+    return copiar_logo_a_salida(logo_src, carpeta_salida)
 
 
 # Alias para compatibilidad - usar DEFAULT_CONFIG de tz_core.config_manager
