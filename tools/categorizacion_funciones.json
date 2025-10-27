@@ -1,0 +1,166 @@
+{
+  "categorias": {
+    "CONFIG": [
+      "bootstrap_config",
+      "cargar_config",
+      "_normalize_key_for_synonyms",
+      "cfg_build_rename_map",
+      "cfg_add_user_synonym",
+      "get_config"
+    ],
+    "KML": [
+      "_crear_feature_kml",
+      "_hex_to_kml_color",
+      "generar_kml"
+    ],
+    "HTML": [
+      "_construir_seccion_interacciones",
+      "_construir_seccion_todos_contactos",
+      "generar_informe_html"
+    ],
+    "NORMALIZACION": [
+      "_fix_mojibake_text",
+      "_aplicar_reemplazos_regex",
+      "normalizar_texto",
+      "normalizar_columnas_texto",
+      "_dedupe_columns",
+      "_normalizar_fecha",
+      "_normalizar_hora"
+    ],
+    "VALIDACION": [
+      "_wizard_qc_mapeo",
+      "_preflight_esenciales"
+    ],
+    "TIEMPO": [
+      "_hhmmss_to_time_or_none",
+      "_en_rango",
+      "_clasificar_rango_sv",
+      "_parse_hhmmss_to_minutes",
+      "_minutes_from_any",
+      "_pad_hhmmss"
+    ],
+    "UI": [
+      "_solicitar_color_tema",
+      "_seleccionar_hoja_visible",
+      "_seleccionar_hoja",
+      "_modo_manual",
+      "_solicitar_filtros_tiempo",
+      "_solicitar_overrides_topn"
+    ],
+    "IO": [
+      "_sha256_de_archivo",
+      "_escribe_hashes_txt",
+      "_copiar_logo_a_salida",
+      "_atomic_write_json",
+      "_obtener_hojas_visibles",
+      "_listar_todas_hojas",
+      "_cargar_excel_con_normalizacion"
+    ],
+    "UTILIDADES": [
+      "log",
+      "_tiene_valor",
+      "_a_float",
+      "_formatear_valor_para_burbuja",
+      "_armar_descripcion_compacta",
+      "_agregar_bloque",
+      "_construir_rangos_cfg",
+      "etiqueta_rango",
+      "_es_num",
+      "_aplicar_filtros_tiempo",
+      "_compactar_ruta"
+    ],
+    "ANALISIS": [
+      "analizar_antenas",
+      "generar_historial_cambios_antena"
+    ],
+    "ORQUESTACION": [
+      "run_tz_analysis",
+      "main"
+    ],
+    "GEO": [
+      "grados_a_radianes",
+      "calcular_punto_final",
+      "generar_cono"
+    ],
+    "HASH": []
+  },
+  "nudos_criticos": [
+    {
+      "nombre": "main",
+      "categoria": "ORQUESTACION",
+      "dependientes": 3,
+      "llama_a": 20,
+      "score_nudo": 60
+    },
+    {
+      "nombre": "generar_kml",
+      "categoria": "KML",
+      "dependientes": 2,
+      "llama_a": 5,
+      "score_nudo": 10
+    }
+  ],
+  "duplicados": [],
+  "estadisticas": {
+    "CONFIG": {
+      "total": 6,
+      "promedio_dependientes": 1.1666666666666667,
+      "promedio_llamadas": 0.5
+    },
+    "KML": {
+      "total": 3,
+      "promedio_dependientes": 1.3333333333333333,
+      "promedio_llamadas": 2.3333333333333335
+    },
+    "HTML": {
+      "total": 3,
+      "promedio_dependientes": 1.0,
+      "promedio_llamadas": 1.0
+    },
+    "NORMALIZACION": {
+      "total": 7,
+      "promedio_dependientes": 0.7142857142857143,
+      "promedio_llamadas": 0.42857142857142855
+    },
+    "VALIDACION": {
+      "total": 2,
+      "promedio_dependientes": 0.5,
+      "promedio_llamadas": 0.0
+    },
+    "TIEMPO": {
+      "total": 6,
+      "promedio_dependientes": 1.3333333333333333,
+      "promedio_llamadas": 0.5
+    },
+    "UI": {
+      "total": 6,
+      "promedio_dependientes": 1.1666666666666667,
+      "promedio_llamadas": 0.5
+    },
+    "IO": {
+      "total": 7,
+      "promedio_dependientes": 0.5714285714285714,
+      "promedio_llamadas": 0.14285714285714285
+    },
+    "UTILIDADES": {
+      "total": 11,
+      "promedio_dependientes": 1.2727272727272727,
+      "promedio_llamadas": 1.1818181818181819
+    },
+    "ANALISIS": {
+      "total": 2,
+      "promedio_dependientes": 0.5,
+      "promedio_llamadas": 0.5
+    },
+    "ORQUESTACION": {
+      "total": 2,
+      "promedio_dependientes": 1.5,
+      "promedio_llamadas": 10.5
+    },
+    "GEO": {
+      "total": 3,
+      "promedio_dependientes": 1.0,
+      "promedio_llamadas": 0.6666666666666666
+    }
+  }
+}
