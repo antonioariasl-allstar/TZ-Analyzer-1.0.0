@@ -1,11 +1,11 @@
 {
   "total_funciones": 58,
-  "total_conexiones": 60,
-  "promedio_llamadas": 1.0344827586206897,
+  "total_conexiones": 61,
+  "promedio_llamadas": 1.0517241379310345,
   "funciones_criticas": [
     {
       "nombre": "log",
-      "dependientes": 5
+      "dependientes": 6
     },
     {
       "nombre": "_en_rango",
@@ -36,11 +36,11 @@
       "dependientes": 2
     },
     {
-      "nombre": "generar_kml",
+      "nombre": "_solicitar_color_tema",
       "dependientes": 2
     },
     {
-      "nombre": "_solicitar_color_tema",
+      "nombre": "generar_kml",
       "dependientes": 2
     },
     {
@@ -457,13 +457,14 @@
       "llamadas": [
         "_solicitar_color_tema",
         "generar_kml",
+        "log",
         "main"
       ],
-      "num_llamadas": 3
+      "num_llamadas": 4
     },
     "run_tz_analysis": {
       "tipo": "def",
-      "linea": 6361,
+      "linea": 6378,
       "llamadas": [
         "main"
       ],
@@ -471,7 +472,7 @@
     },
     "main": {
       "tipo": "def",
-      "linea": 6550,
+      "linea": 6567,
       "llamadas": [
         "_aplicar_filtros_tiempo",
         "_cargar_excel_con_normalizacion",
@@ -498,13 +499,13 @@
     },
     "_solicitar_filtros_tiempo": {
       "tipo": "def",
-      "linea": 8265,
+      "linea": 8303,
       "llamadas": [],
       "num_llamadas": 0
     },
     "_aplicar_filtros_tiempo": {
       "tipo": "def",
-      "linea": 8305,
+      "linea": 8343,
       "llamadas": [
         "_solicitar_filtros_tiempo"
       ],
@@ -512,13 +513,13 @@
     },
     "_solicitar_overrides_topn": {
       "tipo": "def",
-      "linea": 8380,
+      "linea": 8418,
       "llamadas": [],
       "num_llamadas": 0
     },
     "_compactar_ruta": {
       "tipo": "def",
-      "linea": 8417,
+      "linea": 8455,
       "llamadas": [
         "bootstrap_config",
         "main"

@@ -135,7 +135,7 @@
     "UI": {
       "total": 6,
       "promedio_dependientes": 1.1666666666666667,
-      "promedio_llamadas": 0.5
+      "promedio_llamadas": 0.6666666666666666
     },
     "IO": {
       "total": 7,
@@ -144,7 +144,7 @@
     },
     "UTILIDADES": {
       "total": 11,
-      "promedio_dependientes": 1.2727272727272727,
+      "promedio_dependientes": 1.3636363636363635,
       "promedio_llamadas": 1.1818181818181819
     },
     "ANALISIS": {
