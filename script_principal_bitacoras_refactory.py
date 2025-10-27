@@ -77,66 +77,17 @@ from kml_generador import generar_kml_puntos_libres
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
-# Definición de rangos horarios para clasificación "SV" (usado en carpetas de KML)
-# Formato: clave -> (nombre_carpeta, hora_inicio, hora_fin)
-RANGOS_SV = {
-    "madrugada": ("madrugada_0000-0559", _time(0, 0, 0),  _time(6, 0, 0)),    # 00:00–05:59
-    "manana":    ("manana_0600-1159",    _time(6, 0, 0),  _time(12, 0, 0)),   # 06:00–11:59
-    "tarde":     ("tarde_1200-1759",     _time(12, 0, 0), _time(18, 0, 0)),   # 12:00–17:59
-    "noche":     ("noche_1800-2359",     _time(18, 0, 0), _time(23, 59, 59)), # 18:00–23:59
-}
-
 def _hhmmss_to_time_or_none(hh):
-    """
-    Convierte una cadena en formato HH:MM:SS a objeto datetime.time.
-    
-    Args:
-        hh: Cadena con formato HH:MM:SS (se toman máx. 8 caracteres)
-    
-    Returns:
-        datetime.time si la conversión es exitosa, None en caso de error
-    """
-    try:
-        h, m, s = str(hh).strip()[:8].split(":")
-        return _time(int(h), int(m), int(s))
-    except Exception:
-        return None
+    """Wrapper de compatibilidad - usa tz_core.time_utils.hhmmss_to_time_or_none"""
+    return hhmmss_to_time_or_none(hh)
 
 def _en_rango(t: _time, ini: _time, fin: _time) -> bool:
-    """
-    Verifica si un tiempo t está dentro del rango [ini, fin].
-    Soporta rangos que cruzan medianoche (ej: 22:00 a 02:00).
-    
-    Args:
-        t: Tiempo a verificar
-        ini: Tiempo de inicio del rango
-        fin: Tiempo de fin del rango
-    
-    Returns:
-        True si t está dentro del rango, False en caso contrario
-    """
-    if ini <= fin:
-        return ini <= t <= fin
-    return (t >= ini) or (t <= fin)
+    """Wrapper de compatibilidad - usa tz_core.time_utils.en_rango_tiempo"""
+    return en_rango_tiempo(t, ini, fin)
 
 def _clasificar_rango_sv(hhmmss: str):
-    """
-    Clasifica una hora HH:MM:SS en uno de los rangos SV predefinidos
-    (madrugada, manana, tarde, noche) según RANGOS_SV.
-    
-    Args:
-        hhmmss: Cadena con formato HH:MM:SS
-    
-    Returns:
-        Clave del rango ('madrugada', 'manana', 'tarde', 'noche') o None si no aplica
-    """
-    t = _hhmmss_to_time_or_none(hhmmss)
-    if t is None:
-        return None
-    for clave, (_, ini, fin) in RANGOS_SV.items():
-        if _en_rango(t, ini, fin):
-            return clave
-    return None
+    """Wrapper de compatibilidad - usa tz_core.time_utils.clasificar_rango_sv"""
+    return clasificar_rango_sv(hhmmss)
 
 # =========================
 # Generación de KML (usa CONFIG)
@@ -943,6 +894,10 @@ from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix
 from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
 from tz_core.html_utils import row_html, fmt_imei_item, luhn_check, _row_html, _fmt_imei_item, _luhn_check
 from tz_core.validation_utils import tiene_valor, es_num, a_float, _tiene_valor, _es_num, _a_float
+from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR, _hhmmss_to_time_or_none, _en_rango, _clasificar_rango_sv
+
+# Importar constantes desde tz_core para consistencia
+RANGOS_SV = RANGOS_SV_MODULAR
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 
@@ -3198,15 +3153,12 @@ def _construir_rangos_cfg(rangos_cfg: list[dict]) -> list[tuple[str, int, int]]:
         res.append((n, mi, mf))
     return res
 
-def _en_rango(minutos: int, ini: int, fin: int) -> bool:
+def _en_rango_minutos_local(minutos: int, ini: int, fin: int) -> bool:
     """
     True si 'minutos' cae dentro del rango [ini..fin] en minutos.
     Soporta cruce de medianoche: si ini > fin, el rango pasa por 00:00.
     """
-    if ini <= fin:
-        return ini <= minutos <= fin
-    # Cruce de medianoche: ejemplo 18:01–01:00 -> minutos >= ini O minutos <= fin
-    return minutos >= ini or minutos <= fin
+    return en_rango_minutos(minutos, ini, fin)
 
 def etiqueta_rango(hora, rangos_cfg: list[dict], default: str = "Sin rango") -> str:
     """
@@ -3218,7 +3170,7 @@ def etiqueta_rango(hora, rangos_cfg: list[dict], default: str = "Sin rango") -> 
         return default
     rangos = _construir_rangos_cfg(rangos_cfg)
     for nombre, mi, mf in rangos:
-        if _en_rango(m, mi, mf):
+        if _en_rango_minutos_local(m, mi, mf):
             return nombre
     return default
 # === FIN RANGOS-UTILS ===
@@ -5902,40 +5854,7 @@ def _normalizar_hora(df: pd.DataFrame) -> list:
     return avisos
 
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
-from datetime import time as _time
-
-# Definición de rangos horarios para clasificación "SV" (usado en carpetas de KML)
-# Formato: clave -> (nombre_carpeta, hora_inicio, hora_fin)
-RANGOS_SV = {
-    "madrugada": ("madrugada_0000-0559", _time(0, 0, 0),  _time(6, 0, 0)),    # 00:00–05:59
-    "manana":    ("manana_0600-1159",    _time(6, 0, 0),  _time(12, 0, 0)),   # 06:00–11:59
-    "tarde":     ("tarde_1200-1759",     _time(12, 0, 0), _time(18, 0, 0)),   # 12:00–17:59
-    "noche":     ("noche_1800-2359",     _time(18, 0, 0), _time(23, 59, 59)), # 18:00–23:59
-}
-
-
-def _hhmmss_to_time_or_none(hh):
-    try:
-        h, m, s = str(hh).strip()[:8].split(":")
-        return _time(int(h), int(m), int(s))
-    except Exception:
-        return None
-
-def _en_rango(t: _time, ini: _time, fin: _time) -> bool:
-    """True si t está en [ini..fin], manejando rangos que cruzan medianoche."""
-    if ini <= fin:
-        return ini <= t <= fin
-    # cruza medianoche: p.ej. 18:01..03:00
-    return (t >= ini) or (t <= fin)
-
-def _clasificar_rango_sv(hhmmss: str):
-    t = _hhmmss_to_time_or_none(hhmmss)
-    if t is None:
-        return None  # sin rango si no hay hora válida
-    for clave, (_, ini, fin) in RANGOS_SV.items():
-        if _en_rango(t, ini, fin):
-            return clave
-    return None
+# (Ahora importados desde tz_core.time_utils)
 
 # =========================
 # Flujo principal
