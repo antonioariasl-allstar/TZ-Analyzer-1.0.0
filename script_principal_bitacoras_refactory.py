@@ -1040,16 +1040,6 @@ def cfg_build_rename_map(CONFIG: dict) -> dict:
     from tz_core.config_manager import cfg_build_rename_map as cfg_build_modular
     return cfg_build_modular(CONFIG)
 
-def _atomic_write_json(path: str, data: dict):
-    """
-    🚨 WRAPPER DE COMPATIBILIDAD - usar atomic_write_json de tz_core.config_manager
-    
-    Nota: Función de escritura atómica extraída al módulo config_manager.
-    Este wrapper preserva backup automático y escritura segura de archivos JSON.
-    """
-    from tz_core.config_manager import atomic_write_json
-    return atomic_write_json(path, data)
-
 def cfg_add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cfg: str = None) -> dict:
     """
     🚨 WRAPPER DE COMPATIBILIDAD - usar add_user_synonym de tz_core.config_manager
@@ -5928,10 +5918,6 @@ from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, sele
 def _obtener_hojas_visibles(ruta_excel):
     """Wrapper de compatibilidad para tz_core.data_loader.obtener_hojas_visibles"""
     return obtener_hojas_visibles(ruta_excel)
-
-def _listar_todas_hojas(ruta_excel):
-    """Wrapper de compatibilidad para tz_core.data_loader.listar_todas_hojas"""
-    return listar_todas_hojas(ruta_excel)
 
 def _seleccionar_hoja_visible(ruta_excel):
     """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja_visible"""
