@@ -1,3 +1,27 @@
+"""
+kml_generador.py - Generador KML/KMZ ACTIVO del TZ Analyzer
+============================================================
+
+✅ ESTADO: CÓDIGO EN PRODUCCIÓN - USAR ESTE ARCHIVO
+🎯 PROPÓSITO: Generación funcional de archivos KML/KMZ para Google Earth
+📍 UBICACIÓN: Archivo raíz del proyecto (nivel principal)
+
+CONTEXTO DE ARQUITECTURA HÍBRIDA:
+- Este es el código KML funcional y probado
+- Usado activamente por script_principal_bitacoras_refactory.py
+- Esqueleto modular disponible en tz_core/kml_generator.py (futuro)
+
+FUNCIONES PRINCIPALES:
+- generar_kml_puntos_libres(): Generación de puntos libres con estilos
+- hex_to_abgr(): Conversión de colores HEX a formato ABGR (Google Earth)
+
+EVOLUCIÓN FUTURA:
+- Migración gradual a tz_core/kml_generator.py cuando sea necesario
+- Mantener compatibilidad durante transición híbrida
+
+🔧 MANTENIMIENTO: Este archivo es seguro para modificaciones
+"""
+
 # === Utilidad para convertir color HEX a ABGR (simplekml) ===
 def hex_to_abgr(hex_color):
     hex_color = hex_color.lstrip('#')

@@ -1,6 +1,22 @@
 """
-tz_core.utils - Utilidades comunes y helpers
-Funciones puras sin dependencias cruzadas
+tz_core.utils - UTILIDADES PURAS Y CORE FUNCTIONS
+==================================================
+
+✅ ESTADO: CÓDIGO CORE ACTIVO - FUNCIONES PURAS SIN DEPENDENCIAS
+🎯 PROPÓSITO: Utilidades fundamentales (hashing, strings, archivos)
+📍 DIFERENCIACIÓN: NO confundir con utilidades.py (UI helpers)
+
+RESPONSABILIDADES ESPECÍFICAS:
+- sha256_de_archivo(): Cálculo de hashes para integridad forense
+- escribe_hashes_txt(): Generación de archivos de verificación
+- compactar_ruta(): Formateo de rutas para reportes
+- sanear_nombre_archivo(): Limpieza de nombres para filesystem
+
+ARQUITECTURA HÍBRIDA:
+- Este archivo maneja FUNCIONES PURAS (core utilities)
+- utilidades.py maneja INTERFAZ DE USUARIO (UI dialogs)
+- Son complementarios, NO duplicados
+
 """
 
 import hashlib

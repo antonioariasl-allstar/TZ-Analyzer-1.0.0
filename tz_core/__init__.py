@@ -2,15 +2,14 @@
 TZ Core - Módulo central de TZ Analyzer
 Arquitectura modular para análisis forense de datos de telecomunicaciones
 
-Módulos disponibles:
+Módulos disponibles (ACTIVOS):
 - utils: Utilidades comunes y helpers
 - config_manager: Gestión de configuración y mapeo
 - data_loader: Carga de datos Excel/TSV/CSV
-- data_validator: Validación y limpieza de datos
-- data_processor: Procesamiento analítico y agregaciones
-- kml_generator: Generación de archivos KML/KMZ
-- html_generator: Generación de reportes HTML
-- ui_helpers: Interfaz de usuario y wizards
+- html_generator: Generación de reportes HTML (híbrido)
+
+NOTA: Esqueletos removidos para claridad (data_validator, data_processor, 
+kml_generator, ui_helpers). Funcionalidad activa en archivos raíz.
 """
 
 __version__ = "2.0.0"

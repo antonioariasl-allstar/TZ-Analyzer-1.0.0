@@ -1,6 +1,24 @@
 """
-validaciones.py
-----------------
+validaciones.py - SISTEMA DE VALIDACIÓN FORENSE ACTIVO
+======================================================
+
+✅ ESTADO: CÓDIGO EN PRODUCCIÓN - SISTEMA COMPLETO DE VALIDACIÓN
+🎯 PROPÓSITO: Normalización y validación defensiva de bitácoras forenses
+📍 DIFERENCIACIÓN: NO confundir con tz_core/data_validator.py (esqueleto vacío)
+
+FUNCIONES PRINCIPALES EN PRODUCCIÓN:
+- validar_datos(): Pipeline completo de validación (función pública)
+- guardar_errores(): Generación de reportes de errores
+- _normalize_fecha_col(): Normalización de fechas (Excel serial, ISO, local)
+- _normalize_hora_col(): Normalización de horas con timezone
+- _to_float_safe(): Conversión segura de coordenadas
+- _coerce_azimut(): Validación de azimut [0..360)
+
+ARQUITECTURA HÍBRIDA:
+- Este archivo contiene TODA la lógica de validación funcional
+- tz_core/data_validator.py es esqueleto para migración futura
+- Usado activamente por script_principal_bitacoras_refactory.py
+
 Normalización y validación defensiva de bitácoras antes de generar HTML/KML/KMZ.
 
 Objetivos:

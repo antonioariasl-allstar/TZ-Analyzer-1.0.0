@@ -1,5 +1,23 @@
 #!/usr/bin/env python3
 """
+run_baseline_correct.py - TESTING AUTOMATION TOOL
+===================================================
+
+✅ ESTADO: HERRAMIENTA DE TESTING - USAR PARA AUTOMATIZACIÓN
+🎯 PROPÓSITO: Captura automatizada de baseline dorado para testing
+📍 DIFERENCIACIÓN: NO confundir con run.py (entry point principal)
+
+RESPONSABILIDADES:
+- Automatización de captura de baseline golden
+- Validación de archivos de prueba
+- Guía paso a paso para testing manual
+- Preparación de datos para tests E2E
+
+ARQUITECTURA HÍBRIDA:
+- Este archivo es herramienta de TESTING/QA
+- run.py es el LAUNCHER PRINCIPAL para usuarios
+- Son complementarios, NO duplicados
+
 Script automatizado para capturar baseline dorado con archivo de prueba específico
 """
 

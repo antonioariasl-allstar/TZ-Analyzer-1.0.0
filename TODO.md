@@ -33,21 +33,21 @@ La **Arquitectura Híbrida Permanente** ha sido oficialmente adoptada como la so
 - [x] **Fase 2:** Config Manager (`tz_core/config_manager.py`) - DONE  
 - [x] **Fase 3:** Utils básicas (`tz_core/utils.py`) - DONE
 - [x] **Fase 4:** Data Loader (`tz_core/data_loader.py`) - DONE
-- [x] **Fase 5:** KML Generator (`tz_core/kml_generator.py`) - DONE
+- [x] **Fase 5:** KML Generator (`tz_core/kml_generator.py`) - DONE  
 - [x] **Fase 6:** Validation Engine (`tz_core/validation_engine.py`) - DONE
 - [x] **Fase 7:** Core Processor (`tz_core/core_processor.py`) - DONE
 - [x] **Fase 8A:** HTML Generator - Preparación y esqueleto - DONE
-- [x] **Fase 8B:** ✅ HTML Generator - Extracción modular EXITOSA
-  - **Completado:** `generar_informe_html()` extraída (2591 líneas)
-  - **Framework:** `tz_core/html_generator.py` operativo
-  - **Validación:** End-to-end exitosa, Zero regresiones
-  - **Golden Backup:** commit b60691b preservado
-  - **Commit:** 1040083 - OPERACIÓN EXITOSA
+- [x] **Fase 8B:** ❌ **HTML Generator - INTENTO FALLIDO** (REPARADO 26-OCT-2025)
+  - **REALIDAD:** `tz_core/html_generator.py` era esqueleto vacío NO FUNCIONAL
+  - **PROBLEMA:** Sistema roto cuando `generar_en_modo_manual: false`  
+  - **REPARACIÓN:** Fallback a función original del script principal
+  - **ESTADO ACTUAL:** ✅ Sistema funciona con código original probado
+  - **html_generator.py:** ❌ ELIMINADO (no servía)
 
 ### 🔄 PRÓXIMAS FASES
 
-- [x] **Fase 8C:** ✅ **ARQUITECTURA HÍBRIDA PERMANENTE** - SOLUCIÓN DEFINITIVA
-  - **Completado:** Patrón Strangler Fig implementado permanentemente
+- [x] **Fase 8C:** ⚠️ **ARQUITECTURA HÍBRIDA** - DOCUMENTADA COMO PLANEADA (NO IMPLEMENTADA)
+  - **REALIDAD:** Solo funciona modo original, no hay patrón híbrido real
   - **Framework:** Redirección inteligente como característica definitiva
   - **Validación:** Sistema híbrido probado y documentado
   - **Commit:** 2b3503f - ARQUITECTURA HÍBRIDA PERMANENTE
