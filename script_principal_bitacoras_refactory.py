@@ -961,17 +961,13 @@ from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archi
 from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
-def _sha256_de_archivo(path: str) -> str:
-    """Wrapper para compatibilidad - usar sha256_de_archivo de tz_core.utils"""
-    return sha256_de_archivo(path)
-
 
 def _escribe_hashes_txt(dest_path: str, pares: list[tuple[str, str]]):
     """Escribe HASHES.txt en dest_path con formato: SHA256  <hex>  <ruta_relativa>"""
     lines = []
     for abs_p, rel_p in pares:
         try:
-            hexa = _sha256_de_archivo(abs_p)
+            hexa = sha256_de_archivo(abs_p)  # Uso directo de tz_core.utils
             lines.append(f"SHA256  {hexa}  {rel_p}")
         except Exception as e:
             lines.append(f"# ERROR hashing {rel_p}: {e}")
@@ -8426,10 +8422,6 @@ def _solicitar_overrides_topn(config):
                 ovr['contactos'] = vc
 
     return ovr if ovr else None
-
-def _compactar_ruta(txt: str, maxlen: int = 64) -> str:
-    """Wrapper para compatibilidad - usar compactar_ruta de tz_core.utils"""
-    return compactar_ruta(txt, maxlen)
 
 if __name__ == "__main__":
     bootstrap_config()
