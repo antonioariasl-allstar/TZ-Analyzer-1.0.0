@@ -1495,12 +1495,12 @@ def _armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcc
 
     # Fila 3a: Alias · Usuario
     alias = campos.get("alias", None)
-    nombre_usuario = campos.get("nombre_usuario", None)
+    nombre_usuario = campos.get("usuario", None)  # 🔧 FIX: ahora el diccionario campos sí tiene "usuario"
     l3a = []
     if _tiene_valor(alias):
         l3a.append(f"<b>Alias:</b> {str(alias).strip()}")
     if _tiene_valor(nombre_usuario):
-        l3a.append(f"<b>Nombre de Usuario:</b> {str(nombre_usuario).strip()}")
+        l3a.append(f"<b>Usuario:</b> {str(nombre_usuario).strip()}")
     if l3a:
         P.append(" &middot; ".join(l3a))
         grupo_identidad_tuvo_datos = True
@@ -1977,7 +1977,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
             # Identidad
             "alias": row.get("alias", None),
-            "usuario": row.get("usuario", None),
+            "usuario": row.get("nombre_usuario", None),  # 🔧 FIX: el campo en DataFrame se llama "nombre_usuario"
             "abonado": row.get("abonado", None),
 
             # Contacto principal
@@ -8092,7 +8092,7 @@ def main():
     # Rellena solo si faltan; si ya existen no pregunta
     df = _prep_meta_unicos(df, [
         ("alias", "alias"),
-        ("nombre_usuario", "usuario"),
+        ("nombre_usuario", "nombre_usuario"),  # 🔧 FIX: volver a "nombre_usuario" que es como se guarda realmente
         ("abonado", "abonado"),
     ])
 
@@ -8167,15 +8167,16 @@ def main():
 
         # 4) Generar el HTML
         print("[DEBUG] Llamando a generar_informe_html(...)")
-        # 🚨 MODULARIZADO: Usar framework HTML independiente
-        from tz_core.html_generator import HTMLReportGenerator
-        html_gen = HTMLReportGenerator()
-        html_gen._copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
-        informe_html = html_gen.generar_informe_html(
-            df, archivo_kml, carpeta_salida, nombre_salida, hoja,
-            os.path.basename(archivo_entrada)
-        )
-        print(f"Informe HTML generado en: {informe_html}")
+        # � FIX: Usar función original (no existe html_generator modular funcional)
+        try:
+            informe_html = generar_informe_html(
+                df, archivo_kml, carpeta_salida, nombre_salida, hoja,
+                os.path.basename(archivo_entrada)
+            )
+            print(f"Informe HTML generado en: {informe_html}")
+        except Exception as e:
+            print(f"[ERROR] No se pudo generar el HTML: {e}")
+            informe_html = None
         # --- Normalizar ubicación del KMZ (por si quedó fuera de BASE) ---
         try:
             kmz_esperado = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
