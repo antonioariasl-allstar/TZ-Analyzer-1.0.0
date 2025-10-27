@@ -1034,8 +1034,8 @@ def cfg_build_rename_map(CONFIG: dict) -> dict:
     """
     Wrapper para compatibilidad - usar cfg_build_rename_map de tz_core.config_manager
     
-    MINA DESACTIVADA: Sistema de sinónimos extraído al módulo config_manager.
-    Preserva comportamiento exacto del mapeo de columnas legacy y dinámico.
+    Nota: Sistema de sinónimos extraído al módulo config_manager.
+    Este wrapper preserva el comportamiento exacto del mapeo de columnas legacy y dinámico.
     """
     from tz_core.config_manager import cfg_build_rename_map as cfg_build_modular
     return cfg_build_modular(CONFIG)
@@ -1044,8 +1044,8 @@ def _atomic_write_json(path: str, data: dict):
     """
     🚨 WRAPPER DE COMPATIBILIDAD - usar atomic_write_json de tz_core.config_manager
     
-    MINA DESACTIVADA: Función de escritura atómica extraída al módulo config_manager.
-    Preserva backup automático y escritura segura de archivos JSON.
+    Nota: Función de escritura atómica extraída al módulo config_manager.
+    Este wrapper preserva backup automático y escritura segura de archivos JSON.
     """
     from tz_core.config_manager import atomic_write_json
     return atomic_write_json(path, data)
@@ -1054,8 +1054,8 @@ def cfg_add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, rut
     """
     🚨 WRAPPER DE COMPATIBILIDAD - usar add_user_synonym de tz_core.config_manager
     
-    MINA DESACTIVADA: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.
-    Preserva persistencia automática en config.json y memoria de mapeo manual.
+    Nota: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.
+    Este wrapper preserva persistencia automática en config.json y memoria de mapeo manual.
     """
     from tz_core.config_manager import add_user_synonym
     return add_user_synonym(CONFIG, canonico, encabezado_crudo, ruta_cfg)
@@ -1094,8 +1094,8 @@ def _solicitar_color_tema(CONFIG):
     """
     🚨 WRAPPER DE COMPATIBILIDAD - usar solicitar_color_tema de tz_core.config_manager
     
-    MINA DESACTIVADA: Función interactiva extraída al módulo config_manager.
-    Preserva funcionalidad de paleta de 60 colores para diferenciación de bitácoras.
+    Nota: Función interactiva extraída al módulo config_manager.
+    Este wrapper preserva la paleta de 60 colores para diferenciación de bitácoras.
     """
     from tz_core.config_manager import solicitar_color_tema
     return solicitar_color_tema(CONFIG)
