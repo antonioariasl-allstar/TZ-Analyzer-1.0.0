@@ -942,6 +942,7 @@ from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_c
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
 from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
 from tz_core.html_utils import row_html, fmt_imei_item, luhn_check, _row_html, _fmt_imei_item, _luhn_check
+from tz_core.validation_utils import tiene_valor, es_num, a_float, _tiene_valor, _es_num, _a_float
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 
@@ -1158,17 +1159,8 @@ def analizar_antenas(df: pd.DataFrame, archivo_salida: str):
 # Burbuja condicional
 # =========================
 def _tiene_valor(v):
-    if v is None:
-        return False
-    try:
-        if isinstance(v, float) and math.isnan(v):
-            return False
-    except Exception:
-        pass
-    v_str = str(v).strip()
-    if v_str == "" or v_str.lower() in {"sin inf.", "sin inf", "s/i", "sininf", "none", "null", "n/a", "na", "--", "—"}:
-        return False
-    return True
+    """Wrapper de compatibilidad - usa tz_core.validation_utils.tiene_valor"""
+    return tiene_valor(v)
 
 def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100):
     """
@@ -1288,12 +1280,8 @@ HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></
 
 # --- Formateo para burbuja (números, decimales, duración) ---
 def _a_float(v):
-    try:
-        s = str(v).replace(",", ".")
-        f = float(s)
-        return f if math.isfinite(f) else None  # descarta inf y -inf
-    except Exception:
-        return None
+    """Wrapper de compatibilidad - usa tz_core.validation_utils.a_float"""
+    return a_float(v)
 
 def _formatear_valor_para_burbuja(col, val):
     """
@@ -5859,10 +5847,8 @@ def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
 ESENCIALES_IN = ["fecha", "hora", "tel", "imei", "interaccion", "contacto", "lat", "long", "azimut", "antena"]
 
 def _es_num(x):
-    try:
-        return (isinstance(x, (int, float, np.number)) and not pd.isna(x))
-    except Exception:
-        return False
+    """Wrapper de compatibilidad - usa tz_core.validation_utils.es_num"""
+    return es_num(x)
 
 def _normalizar_fecha(df: pd.DataFrame) -> list:
     avisos = []
