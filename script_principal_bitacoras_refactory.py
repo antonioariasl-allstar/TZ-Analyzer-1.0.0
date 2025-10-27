@@ -5915,17 +5915,9 @@ section{{margin-top:22px}}
 # 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader
 from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja
 
-def _obtener_hojas_visibles(ruta_excel):
-    """Wrapper de compatibilidad para tz_core.data_loader.obtener_hojas_visibles"""
-    return obtener_hojas_visibles(ruta_excel)
-
 def _seleccionar_hoja_visible(ruta_excel):
     """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja_visible"""
     return seleccionar_hoja_visible(ruta_excel)
-
-def _seleccionar_hoja(ruta_excel):
-    """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja"""
-    return seleccionar_hoja(ruta_excel)
 
 def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
     """
@@ -6011,9 +6003,6 @@ def _normalizar_hora(df: pd.DataFrame) -> list:
     df["hora"] = res.where(res.notna(), "Sin Inf.")
     return avisos
 
-def _preflight_esenciales(df: pd.DataFrame) -> list:
-    faltan = [c for c in ESENCIALES_IN if c not in df.columns]
-    return ["Pre-flight: faltan columnas esenciales (IN): " + ", ".join(faltan)] if faltan else []
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
