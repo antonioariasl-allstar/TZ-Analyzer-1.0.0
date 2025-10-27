@@ -1,5 +1,17 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
+## 🚀 FASE 2D EN PROGRESO - 27 OCT 2025 ⚡
+
+**NUEVOS MÓDULOS FASE 2D:** validation_utils.py + time_utils.py completados  
+**DEDUPLICACIÓN EXITOSA:** Funciones duplicadas eliminadas sistemáticamente  
+**TESTING ROBUSTO:** 33+ tests nuevos (14 validation + 19 time)  
+**VALIDACIÓN USUARIO:** Script principal funcionando perfectamente  
+**STATUS:** 2 módulos adicionales listos para merge 🎯
+
+### 🆕 MÓDULOS tz_core/ FASE 2D (2/2):
+- ✅ **validation_utils.py** - Validadores puros (tiene_valor, es_num, a_float)  
+- ✅ **time_utils.py** - Helpers temporales (parse HH:MM:SS, rangos, clasificación SV)
+
 ## 🏗️ FASE 2C COMPLETADA - 27 OCT 2025 ✅
 
 **MODULARIZACIÓN AVANZADA:** 7 módulos tz_core/ funcionales y migrados exitosamente  
@@ -8,7 +20,7 @@
 **TESTS:** Todos los módulos validados y funcionando  
 **STATUS:** Arquitectura modular robusta - 46+ tests passing ✅
 
-### 🎯 MÓDULOS tz_core/ COMPLETADOS (7/7):
+### 🎯 MÓDULOS tz_core/ COMPLETADOS (9/9):
 - ✅ **utils.py** - sha256, compactar_ruta, sanear_nombre  
 - ✅ **config_manager.py** - Configuración completa  
 - ✅ **data_loader.py** - Carga Excel + normalización  
@@ -16,6 +28,8 @@
 - ✅ **text_utils.py** - Normalización y mojibake fix  
 - ✅ **color_utils.py** - Conversiones HEX ↔ KML  
 - ✅ **html_utils.py** - Helpers seguros (row_html, fmt_imei, luhn)
+- ✅ **validation_utils.py** - Validadores datos (tiene_valor, es_num, a_float)
+- ✅ **time_utils.py** - Helpers temporales (parse, rangos, clasificación)
 
 ---
 
