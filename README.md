@@ -97,7 +97,7 @@ TZ-Analyzer/
 │
 ├── config.json                            # Configuración global (estilos, branding, sinónimos)
 ├── script_principal_bitacoras_refactory.py  # Flujo principal y orquestación
-├── tz_core/                               # Framework modular (9 módulos especializados)
+├── tz_core/                               # Framework modular (11 módulos especializados)
 │   ├── utils.py                           # SHA256, rutas, sanitización
 │   ├── config_manager.py                  # Gestión configuración avanzada
 │   ├── data_loader.py                     # Carga Excel + normalización
@@ -105,8 +105,10 @@ TZ-Analyzer/
 │   ├── text_utils.py                      # Normalización texto + mojibake
 │   ├── color_utils.py                     # Conversiones HEX ↔ KML
 │   ├── html_utils.py                      # Helpers HTML seguros
-│   ├── validation_utils.py                # Validadores datos puros
-│   └── time_utils.py                      # Helpers temporales + rangos
+│   ├── validation_utils.py                # Validadores avanzados (Excel, azimut) ⚡ FASE 2G
+│   ├── time_utils.py                      # Helpers temporales + rangos
+│   ├── dataframe_utils.py                 # Operaciones DataFrame especializadas
+│   └── file_utils.py                      # File I/O, hashes, copy recursos
 ├── utilidades.py                          # Selección de archivos/carpetas
 ├── validaciones.py                        # Normalización y validación
 ├── kml_generador.py                       # Generador de puntos libres
@@ -115,7 +117,7 @@ TZ-Analyzer/
 ├── TODO.md                                # Tareas y observaciones
 ├── .gitignore                             # Archivos excluidos del repo
 └── tests/
-    ├── unit/                              # Tests unitarios (60+ tests)
+    ├── unit/                              # Tests unitarios (115+ tests)
     └── test_e2e_regresion.py              # Tests E2E y validación KMZ
 ```
 

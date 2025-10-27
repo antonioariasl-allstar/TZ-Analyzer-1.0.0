@@ -27,11 +27,57 @@
 **NUEVOS MÓDULOS FASE 2D:** validation_utils.py + time_utils.py completados  
 **DEDUPLICACIÓN EXITOSA:** Funciones duplicadas eliminadas sistemáticamente  
 **TESTING ROBUSTO:** 33+ tests nuevos (14 validation + 19 time)  
+## 🏗️ FASE 2G COMPLETADA - 27 OCT 2025 ⚡
+
+**EXPANSION MICRO-FASE:** validation_utils.py expandido en tiempo récord (<20 min)  
+**FUNCIONES MIGRADAS:** 5 funciones avanzadas desde validaciones.py  
+**CAPACIDADES NUEVAS:** Excel serials, azimut validation, float cleaning  
+**TESTS:** 30 nuevos tests + validación funcional directa  
+**VALIDACIÓN USUARIO:** Script principal con imports expandidos funcionando perfectamente  
+**STATUS:** Expansión exitosa - validation_utils ahora es módulo avanzado completo 🎯
+
+### 🚀 FUNCIONES AGREGADAS FASE 2G:
+- ✅ **to_object()** - Conversión segura a dtype object (evita FutureWarnings)
+- ✅ **is_excel_serial()** - Detección números seriales de fechas Excel  
+- ✅ **excel_serial_to_timestamp()** - Conversión seriales Excel a timestamps
+- ✅ **to_float_safe()** - Conversión float tolerante con limpieza de datos
+- ✅ **coerce_azimut()** - Validación azimut geográfico en rango [0..360)
+
+## 🏗️ FASE 2F COMPLETADA - 27 OCT 2025 ✅
+
+**MODULARIZACIÓN EXPRESS:** File I/O utilities migradas en 1 hora de oficina  
+**ESTRATEGIA ULTRA-CONSERVADORA:** Helpers I/O seguros migrados, motor crítico intacto  
+**NUEVO MÓDULO:** file_utils.py completado con operaciones archivo  
+**TESTS:** 16 tests exhaustivos + validación funcional  
+**VALIDACIÓN USUARIO:** Script principal funcionando perfectamente  
+**STATUS:** 11º módulo completado con éxito total 🎯
+
+### 🆕 MÓDULO tz_core/ FASE 2F (1/1):
+- ✅ **file_utils.py** - File I/O (escribe_hashes_txt, copiar_logo_a_salida)
+
+## 🏗️ FASE 2E COMPLETADA - 27 OCT 2025 ✅
+
+**MODULARIZACIÓN EXPRESS:** DataFrame utilities migradas exitosamente  
+**ESTRATEGIA ULTRA-CONSERVADORA:** Helpers DataFrame seguros migrados, motor crítico intacto  
+**NUEVO MÓDULO:** dataframe_utils.py completado con deduplicación  
+**TESTS:** 12 tests exhaustivos + validación funcional  
+**VALIDACIÓN USUARIO:** Script principal funcionando perfectamente  
+**STATUS:** 10º módulo completado con éxito total 🎯
+
+### 🆕 MÓDULO tz_core/ FASE 2E (1/1):
+- ✅ **dataframe_utils.py** - DataFrame ops (_dedupe_columns migrada)
+
+## 🏗️ FASE 2D COMPLETADA - 27 OCT 2025 ✅
+
+**MODULARIZACIÓN DOBLE:** 2 módulos completados en sesión  
+**ESTRATEGIA ULTRA-CONSERVADORA:** Helpers seguros migrados, motor crítico intacto  
+**NUEVOS MÓDULOS:** validation_utils.py, time_utils.py completados  
+**TESTS:** Todos los módulos validados y funcionando  
 **VALIDACIÓN USUARIO:** Script principal funcionando perfectamente  
 **STATUS:** 2 módulos adicionales completados con éxito total 🎯
 
 ### 🆕 MÓDULOS tz_core/ FASE 2D (2/2):
-- ✅ **validation_utils.py** - Validadores puros (tiene_valor, es_num, a_float)  
+- ✅ **validation_utils.py** - Validadores puros (tiene_valor, es_num, a_float) ⚡ EXPANDIDO FASE 2G
 - ✅ **time_utils.py** - Helpers temporales (parse HH:MM:SS, rangos, clasificación SV)
 
 ## 🏗️ FASE 2C COMPLETADA - 27 OCT 2025 ✅

@@ -893,7 +893,14 @@ from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_c
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
 from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
 from tz_core.html_utils import row_html, fmt_imei_item, luhn_check, _row_html, _fmt_imei_item, _luhn_check
-from tz_core.validation_utils import tiene_valor, es_num, a_float, _tiene_valor, _es_num, _a_float
+from tz_core.validation_utils import (
+    tiene_valor, es_num, a_float, _tiene_valor, _es_num, _a_float,
+    # FASE 2G: Funciones avanzadas de validación
+    to_object, is_excel_serial, excel_serial_to_timestamp,
+    to_float_safe, coerce_azimut,
+    _to_object, _is_excel_serial, _excel_serial_to_timestamp,
+    _to_float_safe, _coerce_azimut
+)
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR, _hhmmss_to_time_or_none, _en_rango, _clasificar_rango_sv
 from tz_core.dataframe_utils import dedupe_columns, _dedupe_columns
 from tz_core.file_utils import escribe_hashes_txt, copiar_logo_a_salida, _escribe_hashes_txt, _copiar_logo_a_salida
