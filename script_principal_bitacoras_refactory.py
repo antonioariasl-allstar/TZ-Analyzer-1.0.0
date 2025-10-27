@@ -940,6 +940,7 @@ from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archi
 from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR
 from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
+from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 
@@ -1072,24 +1073,9 @@ def _solicitar_color_tema(CONFIG):
 # =========================
 # --- Helpers de color KML (aabbggrr) desde #RRGGBB ---
 def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
-    """
-    Convierte '#RRGGBB' o 'RRGGBB' a 'aabbggrr' (KML).
-    alpha: 0-255 (0 = transparente, 255 = opaco)
-    """
-    s = (hex_rgb or "").strip().lstrip("#")
-    # Soporta forma corta #RGB
-    if len(s) == 3:
-        s = "".join(ch*2 for ch in s)
-    if len(s) != 6:
-        # fallback seguro (blanco opaco)
-        return "ffffffff"
-    try:
-        a = max(0, min(255, int(alpha)))
-    except Exception:
-        a = 255
-    rr, gg, bb = s[0:2], s[2:4], s[4:6]
-    # KML = AABBGGRR (ojo: orden BGR)
-    return f"{a:02x}{bb}{gg}{rr}".lower()
+    """MIGRADA A tz_core.color_utils - usar import desde allí"""
+    from tz_core.color_utils import hex_to_kml_color
+    return hex_to_kml_color(hex_rgb, alpha)
 
 # =========================
 # Análisis de antenas (tolerante)
@@ -1667,22 +1653,7 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
     """
     import simplekml as sk
 
-    # Fallback local por si _hex_to_kml_color no está definido en el módulo
-    try:
-        _hex_to_kml_color
-    except NameError:
-        def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
-            s = (hex_rgb or "").strip().lstrip("#")
-            if len(s) == 3:
-                s = "".join(ch*2 for ch in s)
-            if len(s) != 6:
-                return "ffffffff"
-            try:
-                a = max(0, min(255, int(alpha)))
-            except Exception:
-                a = 255
-            rr, gg, bb = s[0:2], s[2:4], s[4:6]
-            return f"{a:02x}{bb}{gg}{rr}".lower()
+    # Fallback eliminado - función migrada a tz_core.color_utils
 
     # Cache global de estilos reutilizables para evitar crear objetos Style duplicados
     # en cada llamada (mejora rendimiento del KML). Se inicializa una vez con los
@@ -6384,7 +6355,9 @@ def run_tz_analysis(
 
     # 7) Color tema: no preguntar; dejar CONFIG tal cual
     def _color_mock(cfg):
-        return cfg
+        """MIGRADA A tz_core.color_utils - usar import desde allí"""
+        from tz_core.color_utils import color_mock
+        return color_mock(cfg)
     g["_solicitar_color_tema"] = _color_mock
 
     # --- Silenciar input() durante la ejecución ---
