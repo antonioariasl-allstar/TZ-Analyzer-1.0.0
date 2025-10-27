@@ -941,6 +941,7 @@ from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAU
 from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
 from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
+from tz_core.html_utils import row_html, fmt_imei_item, luhn_check, _row_html, _fmt_imei_item, _luhn_check
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 
