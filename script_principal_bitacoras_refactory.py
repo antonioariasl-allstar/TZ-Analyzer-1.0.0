@@ -7994,15 +7994,17 @@ def main():
     # HTML opcional (solo si lo activás en config.json con html.generar_en_modo_manual = true)
     if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
         try:
-            # 🚨 MODULARIZADO: Usar framework HTML independiente
-            from tz_core.html_generator import HTMLReportGenerator
-            html_gen = HTMLReportGenerator()
-            html_gen._copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
-            informe_html = html_gen.generar_informe_html(
-                df, archivo_kml, carpeta_salida, nombre_salida, hoja
-            )
-
-            print(f"Informe HTML generado en: {informe_html}")
+            # 🚨 DESHABILITADO: Framework HTML modular no implementado completamente
+            # TODO: Implementar tz_core.html_generator cuando sea necesario
+            # from tz_core.html_generator import HTMLReportGenerator
+            # html_gen = HTMLReportGenerator()
+            # html_gen._copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
+            # informe_html = html_gen.generar_informe_html(
+            #     df, archivo_kml, carpeta_salida, nombre_salida, hoja
+            # )
+            # print(f"Informe HTML generado en: {informe_html}")
+            
+            print("[INFO] Generación HTML modular no disponible. Usar generar_en_modo_manual=false en config.json")
             # --- Normalizar ubicación del KMZ (por si quedó fuera de BASE) ---
             try:
                 kmz_esperado = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
