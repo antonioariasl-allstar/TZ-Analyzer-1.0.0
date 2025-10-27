@@ -6076,6 +6076,9 @@ def _modo_manual():
     global CONFIG
     from collections import Counter
 
+    log("=== INICIANDO MODO MANUAL ===")
+    log("Configurando funciones auxiliares para entrada de datos...")
+
     # Helpers locales
     def _input_str(msg, obligatorio=False, maxlen=None):
         while True:
@@ -6166,20 +6169,24 @@ def _modo_manual():
 
     # --------- flujo interactivo ---------
     items = []
+    log("Iniciando flujo interactivo de entrada manual")
     print("\nModo MANUAL. Ingresará uno o más puntos/antenas.")
     
     # Preguntar tipo de registro UNA SOLA VEZ al inicio
+    log("Solicitando tipo de registro al usuario...")
     print("\n¿Qué tipo de registros desea agregar?")
     print("[1] Antenas/Celdas")
     print("[2] Puntos libres (lugares, domicilios, escenas, etc.)")
     tipo_modo = (input("Tipo (1/2, Enter=1): ").strip() or "1")
     es_punto_libre = (tipo_modo == "2")
+    log(f"Usuario seleccionó tipo: {'Puntos libres' if es_punto_libre else 'Antenas/Celdas'}")
     
     if es_punto_libre:
         print("\n→ Modo: Puntos libres (sin azimut, campos simplificados)")
     else:
         print("\n→ Modo: Antenas/Celdas (con azimut y campos completos)")
 
+    log("Iniciando bucle principal de entrada de datos...")
     while True:
         print("\nMenú:")
         print("[A] Agregar registro")
@@ -6188,33 +6195,43 @@ def _modo_manual():
         print("[G] Graficar (generar KML/KMZ)")
         print("[V] Volver (cancelar)")
         op = input("Opción: ").strip().upper() or "A"
+        log(f"Usuario seleccionó opción del menú: '{op}'")
 
         if op == "V":
+            log("Usuario canceló modo manual, regresando sin generar archivos")
             print("Volviendo sin generar…")
             return
 
         if op == "L":
+            log(f"Listando {len(items)} registros existentes")
             _listar(items)
             continue
 
         if op == "E":
             if not items:
+                log("Intento de eliminar registro sin datos existentes")
                 print("No hay registros para eliminar.")
                 continue
             _listar(items)
             s = input("Número de registro a eliminar: ").strip()
+            log(f"Usuario ingresó índice para eliminar: '{s}'")
             if s.isdigit():
                 idx = int(s) - 1
                 if 0 <= idx < len(items):
                     borr = items.pop(idx)
-                    print(f"Eliminado: {borr.get('antena','(sin nombre)')}")
+                    nombre_borrado = borr.get('antena','(sin nombre)')
+                    log(f"Registro eliminado exitosamente: {nombre_borrado}")
+                    print(f"Eliminado: {nombre_borrado}")
                 else:
+                    log(f"Índice fuera de rango: {idx}, total items: {len(items)}")
                     print("Índice fuera de rango.")
             else:
+                log(f"Entrada inválida para eliminar: '{s}' (no es número)")
                 print("Ingrese un número válido.")
             continue
 
         if op == "A":
+            log("Iniciando entrada de nuevo registro...")
             print("\n— Nuevo registro —")
 
             if es_punto_libre:
@@ -6555,47 +6572,67 @@ def main():
     hoja = None
     archivo_errores = ""
 
+    log("=== INICIO APLICACIÓN TZ ANALYZER ===")
+    log("Inicializando variables globales...")
 
     # ===== Menú de modos (único) =====
+    log("Mostrando menú principal de opciones...")
     while True:
         print("\nSeleccione el modo de trabajo:")
         print("[1] Procesar bitácora completa")
         print("[2] Procesar por tiempo (día / rango de días / rango de horas)")
         print("[3] Ingresar antenas manualmente")
         resp = input("Opción (1/2/3, Enter=1): ").strip() or "1"
+        log(f"Usuario seleccionó opción: '{resp}'")
 
         if resp == "3":
+            log("Iniciando modo manual de antenas...")
             _modo_manual()        # Al terminar manual, volvemos a mostrar el menú
+            log("Regresando del modo manual al menú principal")
             continue
 
         if resp in ("1", "2"):
             opcion = resp
+            log(f"Modo válido seleccionado: {opcion}")
             # Preguntar color SIEMPRE para modos 1/2
+            log("Solicitando configuración de tema de colores...")
             CONFIG = _solicitar_color_tema(CONFIG)
+            log("Configuración de colores completada")
             break
 
+        log(f"Opción inválida recibida: '{resp}', mostrando menú nuevamente")
         print("[QC] Opción inválida, intenta de nuevo.")
     
     # ===== Modo Excel (bitácora) =====
+    log("Iniciando selección de archivo de entrada...")
     archivo_entrada = seleccionar_archivo()
     if not archivo_entrada:
+        log("ERROR: Usuario no seleccionó archivo, terminando ejecución")
         print("No se seleccionó un archivo. Saliendo.")
         return
+    
+    log(f"Archivo seleccionado exitosamente: {archivo_entrada}")
 
     # La carpeta se elegirá al final (previsualización)
     carpeta_salida = None
 
     # Selección de hoja visible (si hay varias)
+    log("Iniciando selección de hoja de Excel...")
     hoja = _seleccionar_hoja_visible(archivo_entrada)
+    log(f"Hoja seleccionada: {hoja}")
 
     # Carga del Excel con sistema dual de columnas (FASE 5.3a modular)
+    log(f"Iniciando carga de datos desde {archivo_entrada}...")
     try:
         df, hoja_usada = _cargar_excel_con_normalizacion(archivo_entrada, hoja)
+        log(f"Excel cargado exitosamente: {len(df)} filas, hoja usada: {hoja_usada}")
     except Exception as e:
+        log(f"ERROR CRÍTICO al cargar Excel: {type(e).__name__}: {e}")
         print(f"Error al leer el Excel: {e}")
         return
 
     # Normalización adicional de encabezados (heredada del sistema dual)
+    log("Aplicando normalización de columnas...")
     df.columns = (
         df.columns.astype(str)
           .str.normalize('NFD').str.encode('ascii', 'ignore').str.decode('ascii')
@@ -6607,6 +6644,7 @@ def main():
 
     # Snapshot de columnas originales (antes de cualquier mapeo/rename)
     cols_originales = list(df.columns)
+    log(f"Columnas después de normalización: {cols_originales}")
 
 
     # === VALIDACIÓN DE SCHEMA (aborto elegante) — INICIO =======================
