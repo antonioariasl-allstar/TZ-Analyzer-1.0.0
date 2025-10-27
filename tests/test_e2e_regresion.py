@@ -33,8 +33,8 @@ GOLDEN_HTML_NORM = os.path.join(GOLDEN_DIR, 'html_normalized.txt')
 
 
 def _load_df_imei20() -> pd.DataFrame:
-    fn = os.path.join(DATA, 'bitacora_imei_20.tsv')
-    df_raw = pd.read_csv(fn, sep='\t')
+    fn = os.path.join(DATA, 'bitacora_test.tsv.xlsx')
+    df_raw = pd.read_excel(fn)
     df = pd.DataFrame({
         'fecha': df_raw['FECHA_INICIAL'].astype(str),
         'hora': df_raw['HORA_INICIAL'].astype(str).str[:8],
