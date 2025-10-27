@@ -26,7 +26,21 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
 
 **✅ SISTEMA FUNCIONANDO:** El TZ Analyzer está operativo y genera correctamente HTML, KMZ, y archivos de hashes.
 
-**🔧 ARQUITECTURA HÍBRIDA:** Sistema con arquitectura dual - framework modular `tz_core/` para nuevas funcionalidades + script principal probado para funciones críticas.
+**🏗️ ARQUITECTURA MODULAR AVANZADA:** Framework `tz_core/` con 7 módulos funcionales + script principal para funciones críticas.
+
+**🛡️ ESTRATEGIA ULTRA-CONSERVADORA:** Migración gradual exitosa preservando funcionalidad crítica 100% estable.
+
+### 🎯 **MÓDULOS tz_core/ IMPLEMENTADOS:**
+```bash
+tz_core/                    # 🏆 ARQUITECTURA MODULAR ROBUSTA  
+├── utils.py               # ✅ Utilidades básicas (sha256, compactar_ruta)
+├── config_manager.py      # ✅ Configuración completa + color themes  
+├── data_loader.py         # ✅ Carga Excel + normalización headers
+├── geo_utils.py          # ✅ Funciones geográficas puras  
+├── text_utils.py         # ✅ Normalización texto + mojibake fix
+├── color_utils.py        # ✅ Conversiones HEX ↔ KML  
+└── html_utils.py         # ✅ Helpers HTML seguros
+```
 
 **📋 DOCUMENTACIÓN REORGANIZADA:** Estructura de documentación completamente reorganizada en categorías claras (user, development, technical, planning, audits, legacy).
 
