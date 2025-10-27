@@ -1,12 +1,23 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
-## 🚀 FASE 2D EN PROGRESO - 27 OCT 2025 ⚡
+## 🎉 FASE 2E COMPLETADA - 27 OCT 2025 ✅
+
+**DATAFRAME UTILS MIGRADO:** `_dedupe_columns` → `tz_core/dataframe_utils.py`  
+**TESTS EXHAUSTIVOS:** 17 passed, 1 warning - Funcionalidad al 100%  
+**CORRECCIÓN TÉCNICA:** Fix crítico para columnas pandas duplicadas  
+**VALIDACIÓN TOTAL:** Script principal ejecutado exitosamente sin regresiones  
+**STATUS:** 10º módulo tz_core/ completado - Framework robusto establecido ✅
+
+### 🆕 MÓDULO tz_core/ FASE 2E (1/1):
+- ✅ **dataframe_utils.py** - Deduplicación columnas pandas con consolidación inteligente
+
+## 🚀 FASE 2D COMPLETADA - 27 OCT 2025 ✅
 
 **NUEVOS MÓDULOS FASE 2D:** validation_utils.py + time_utils.py completados  
 **DEDUPLICACIÓN EXITOSA:** Funciones duplicadas eliminadas sistemáticamente  
 **TESTING ROBUSTO:** 33+ tests nuevos (14 validation + 19 time)  
 **VALIDACIÓN USUARIO:** Script principal funcionando perfectamente  
-**STATUS:** 2 módulos adicionales listos para merge 🎯
+**STATUS:** 2 módulos adicionales completados con éxito total 🎯
 
 ### 🆕 MÓDULOS tz_core/ FASE 2D (2/2):
 - ✅ **validation_utils.py** - Validadores puros (tiene_valor, es_num, a_float)  
@@ -20,7 +31,7 @@
 **TESTS:** Todos los módulos validados y funcionando  
 **STATUS:** Arquitectura modular robusta - 46+ tests passing ✅
 
-### 🎯 MÓDULOS tz_core/ COMPLETADOS (9/9):
+### 🎯 MÓDULOS tz_core/ COMPLETADOS (10/10):
 - ✅ **utils.py** - sha256, compactar_ruta, sanear_nombre  
 - ✅ **config_manager.py** - Configuración completa  
 - ✅ **data_loader.py** - Carga Excel + normalización  
@@ -30,6 +41,7 @@
 - ✅ **html_utils.py** - Helpers seguros (row_html, fmt_imei, luhn)
 - ✅ **validation_utils.py** - Validadores datos (tiene_valor, es_num, a_float)
 - ✅ **time_utils.py** - Helpers temporales (parse, rangos, clasificación)
+- ✅ **dataframe_utils.py** - Utilidades pandas DataFrame (deduplicación)
 
 ---
 
