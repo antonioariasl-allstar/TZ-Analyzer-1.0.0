@@ -816,35 +816,14 @@ def _aplicar_reemplazos_regex(s, reglas_regex=None):
     return s
 
 def normalizar_texto(s, reglas=None):
-    """Arregla mojibake, normaliza Unicode y aplica abreviaturas/reglas (regex o literales)."""
-    if not isinstance(s, str):
-        return s
-    s = _fix_mojibake_text(s)
-    # Reglas de config.json (si existen): claves pueden ser regex
-    if reglas and isinstance(reglas, dict):
-        for k, v in reglas.items():
-            try:
-                s = re.sub(k, v, s, flags=re.IGNORECASE)
-            except re.error:
-                s = s.replace(k, v)
-    # Reglas por defecto
-    s = _aplicar_reemplazos_regex(s)
-    return s
+    """MIGRADA A tz_core.text_utils - usar import desde allí"""
+    from tz_core.text_utils import normalizar_texto as normalizar_modular
+    return normalizar_modular(s, reglas)
 
 def normalizar_columnas_texto(df, columnas=None, reglas=None):
-    """
-    Aplica normalización a columnas de texto (por defecto, todas las 'object').
-    Respeta NaN/None sin convertirlos a 'None'.
-    """
-    if df is None:
-        return df
-    try:
-        cols = columnas or [c for c in df.columns if df[c].dtype == 'object']
-        if not cols:
-            return df
-        return df.assign(**{c: df[c].map(lambda x: normalizar_texto(x, reglas)) for c in cols})
-    except Exception:
-        return df
+    """MIGRADA A tz_core.text_utils - usar import desde allí"""
+    from tz_core.text_utils import normalizar_columnas_texto as normalizar_cols_modular
+    return normalizar_cols_modular(df, columnas, reglas)
 # === NORMALIZADOR-1 (fin) ==================================================
 
 
@@ -960,6 +939,7 @@ def _dedupe_columns(df):
 from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
 from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR
 from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
+from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 
