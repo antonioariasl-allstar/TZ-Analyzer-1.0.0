@@ -396,7 +396,7 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
         return "\n".join(filas)
 
     if esenciales is None:
-        esenciales = ["tel", "lat", "long", "fecha", "hora", "azimut"]
+        esenciales = ["fecha", "hora", "tel", "imei", "interaccion", "contacto", "lat", "long", "azimut", "antena"]
     # Actualizar etiquetas para mapeo más claro
     etiquetas_mapeo = {
     "tel": "Tel u Origen",
@@ -5966,7 +5966,7 @@ def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
 
 # --- Normalizadores robustos y pre-flight de esenciales ---
 
-ESENCIALES_IN = ["lat", "long", "azimut", "fecha", "hora", "tel"]
+ESENCIALES_IN = ["fecha", "hora", "tel", "imei", "interaccion", "contacto", "lat", "long", "azimut", "antena"]
 
 def _es_num(x):
     try:
@@ -7593,7 +7593,7 @@ def main():
     # --- WIZARD QC MANUAL ---
     if MANUAL_QC_MAPPING:
         print("\n[QC] Iniciando wizard QC (mapeo manual).")
-        esenciales_qc = ["tel", "lat", "lon", "fecha", "hora", "azimut", "imei", "antena", "interaccion", "contacto"]
+        esenciales_qc = ["fecha", "hora", "tel", "imei", "interaccion", "contacto", "lat", "long", "azimut", "antena"]
         no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
         
         # ⚡ LÍNEA CRÍTICA: Segunda componente del sistema dual
