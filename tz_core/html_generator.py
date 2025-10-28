@@ -127,3 +127,69 @@ section{{margin-top:22px}}
 # - generate_kpi_section()
 # - generate_top_antenas_section()
 # etc.
+
+
+def generate_body_header(logo_html: str, nombre_salida: str, hoja: str | None, gen_dt: str, config_dict: dict = None) -> str:
+    """
+    Genera el bloque <body><header> completo del HTML con branding y título.
+    
+    Extrae la sección HTML-BODY-HEADER que incluye:
+    - Apertura <body>
+    - <header> con layout flexbox
+    - Logo posicionado a la izquierda
+    - Texto de branding (TZ Analyzer + versión)
+    - Título principal del informe con badge
+    - Metadatos de generación (fecha + hoja)
+    
+    Args:
+        logo_html (str): HTML del logo a mostrar (lado izquierdo)
+        nombre_salida (str): Nombre del caso/análisis para mostrar en badge
+        hoja (str | None): Nombre de la hoja analizada (opcional)
+        gen_dt (str): Fecha/hora de generación formateada
+        config_dict (dict, optional): Dict de configuración para obtener versión
+        
+    Returns:
+        str: HTML completo desde <body> hasta </header>
+        
+    Example:
+        >>> header = generate_body_header(
+        ...     "<img src='logo.png'/>", 
+        ...     "caso_xyz", 
+        ...     "Hoja1", 
+        ...     "2025-10-27 15:30"
+        ... )
+        >>> print(header[:20])
+        <body>
+          <header>
+    """
+    # Obtener versión de CONFIG o usar default
+    if config_dict:
+        version = (config_dict.get('brand', {}) or {}).get('version', 'Versión 1.0.0')
+    else:
+        version = 'Versión 1.0.0'
+    
+    # Construir texto de hoja si existe
+    hoja_text = f' — Hoja: {hoja}' if hoja else ''
+    
+    return f"""<body>
+  <header>
+    <div class="brand-row" style="display:flex;align-items:center;gap:16px;padding:8px 0;justify-content:flex-start;">
+  <!-- Logo a la izquierda -->
+  {logo_html}
+
+  <!-- Texto a la derecha -->
+  <div style="line-height:1.25;">
+    <div style="font-size:22px;font-weight:700;margin:0;">
+      TZ Analyzer — {version}
+    </div>
+
+    <h1 style="font-size:20px;font-weight:700;margin:4px 0 0 0;">
+      Informe de Bitácora — <span class="badge">{nombre_salida}</span>
+    </h1>
+
+    <div class="small" style="margin-top:4px;">
+      Generado: {gen_dt}{hoja_text}
+    </div>
+  </div>
+</div>
+  </header>"""

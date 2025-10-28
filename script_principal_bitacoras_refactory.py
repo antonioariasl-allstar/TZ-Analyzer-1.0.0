@@ -3217,7 +3217,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     Retorna la ruta del HTML generado.
     """
     # 🔧 MÓDULO EXTRAÍDO: HTML generator para generar_informe_html
-    from tz_core.html_generator import generate_html_header
+    from tz_core.html_generator import generate_html_header, generate_body_header
     
     # Validación defensiva de entrada
     if df is None:
@@ -3957,29 +3957,11 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     # 🔧 FASE 2.1: HTML Header extraído a módulo independiente  
     html_header = generate_html_header(theme_hex, nombre_salida)
     
+    # 🔧 FASE 2.2: HTML Body Header extraído a módulo independiente
+    body_header = generate_body_header(logo_html, nombre_salida, hoja, gen_dt, CONFIG)
+    
     html = f"""{html_header}
-<body>
-  <header>
-    <div class="brand-row" style="display:flex;align-items:center;gap:16px;padding:8px 0;justify-content:flex-start;">
-  <!-- Logo a la izquierda -->
-  {logo_html}
-
-  <!-- Texto a la derecha -->
-  <div style="line-height:1.25;">
-    <div style="font-size:22px;font-weight:700;margin:0;">
-      TZ Analyzer — {(CONFIG.get('brand', {}) or {}).get('version', 'Versión 1.0.0')}
-    </div>
-
-    <h1 style="font-size:20px;font-weight:700;margin:4px 0 0 0;">
-      Informe de Bitácora — <span class="badge">{nombre_salida}</span>
-    </h1>
-
-    <div class="small" style="margin-top:4px;">
-      Generado: {gen_dt}{' — Hoja: ' + hoja if hoja else ''}
-    </div>
-  </div>
-</div>
-  </header>
+{body_header}
 
   <section class="meta">
     <h2>Metadatos</h2>
