@@ -3,6 +3,7 @@
 **Fecha**: 27 de octubre de 2025  
 **Objetivo**: Mapear TODAS las dependencias de `generar_informe_html` para extracción segura  
 **Líneas analizadas**: 3207-5790 (2,583 líneas)  
+**STATUS**: ✅ **FASE 2.1 COMPLETADA** - HTML Header Extraction Exitosa  
 
 ---
 
@@ -167,6 +168,48 @@ Plan de batalla refinado ✅
 - **Archivos modificados**: 1 (script_principal_bitacoras_refactory.py)
 - **Tests exitosos**: 100% (E2E + producción)
 - **Funcionalidad**: 100% preservada
+
+---
+
+## 🚀 **ACTUALIZACIÓN: FASE 2.1 COMPLETADA EXITOSAMENTE**
+
+**Fecha**: 27 de octubre de 2025  
+**Estado**: ✅ **FASE 2.1 HTML-HEADER-COMPLETE EXTRAÍDA Y VALIDADA**
+
+### 🎯 **LOGROS FASE 2.1:**
+- ✅ **tz_core/html_generator.py**: Módulo HTML Generator creado
+- ✅ **generate_html_header()**: Función modular para DOCTYPE + CSS + Leaflet
+- ✅ **Extracción quirúrgica**: 80+ líneas de HTML/CSS modularizadas
+- ✅ **Triple validación**: Unit test + Integration + Pipeline test EXITOSOS
+- ✅ **5/5 Content checks**: DOCTYPE, CSS variables, Leaflet, título, body
+
+### 📊 **MÉTRICAS FASE 2.1:**
+- **Líneas extraídas**: 80+ (HTML header completo)
+- **Archivos creados**: 1 (tz_core/html_generator.py)
+- **Archivos modificados**: 1 (script_principal_bitacoras_refactory.py)
+- **Tests exitosos**: 100% (3 niveles de validación)
+- **Funcionalidad**: 100% preservada - HTML idéntico generado
+
+### 🔧 **IMPLEMENTACIÓN TÉCNICA:**
+```python
+# ANTES (generar_informe_html):
+html = f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+... [80+ líneas de HTML/CSS/Leaflet] ...
+</head>
+
+# DESPUÉS (modularizado):
+from tz_core.html_generator import generate_html_header
+html_header = generate_html_header(theme_hex, nombre_salida)
+html = f"""{html_header}
+<body>
+```
+
+### 🎯 **PRÓXIMOS OBJETIVOS FASE 2.2:**
+- 🔄 **HTML-BODY-HEADER**: Extraer `<body><header>` con logo y branding
+- 🔄 **HTML-METADATOS**: Modularizar sección de metadatos
+- 🔄 **HTML-INDICADORES-KPI**: Extraer tarjetas de KPIs/indicadores
 
 ---
 
