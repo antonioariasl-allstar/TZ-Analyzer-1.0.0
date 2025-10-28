@@ -1,5 +1,6 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
+<<<<<<< HEAD
 ## 🏆 AUDITORÍA COMPLETA FINALIZADA (26-OCT-2025) ✅
 
 **Auditoría de 8 fases completada exitosamente:**
@@ -11,6 +12,18 @@
 - ✅ **Calidad excepcional** del código confirmada
 
 ## �️ ARQUITECTURA HÍBRIDA PERMANENTE ESTABLECIDA ✅
+=======
+## 🏗️ ACTUALIZACIÓN ARQUITECTURAL - 27 OCT 2025 ✅
+
+**CONSOLIDACIÓN EXITOSA:** Eliminada duplicación tz_analyzer/, consolidado en tz_core/  
+**WRAPPER LIMPIEZA:** _sha256_de_archivo eliminado (redundante)  
+**TESTS:** 46 passing ✅ - Zero regresiones  
+**DOCUMENTACIÓN:** Ver `docs/development/CAMBIOS_ARQUITECTURALES_CONSOLIDACION.md`
+
+---
+
+## 🏗️ ARQUITECTURA HÍBRIDA PERMANENTE ESTABLECIDA ✅
+>>>>>>> 0187c289285ee8673d1ae20c21f599776ac0b009
 
 **Fecha:** 25 de octubre de 2025  
 **Commit:** 2b3503f  

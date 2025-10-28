@@ -1,0 +1,298 @@
+{
+  "script_principal_bitacoras_refactory.py": [
+    {
+      "line": 1037,
+      "tag": "flag_desactivado",
+      "pattern": "MINA DESACTIVADA",
+      "context": "    Wrapper para compatibilidad - usar cfg_build_rename_map de tz_core.config_manager\n    \n    MINA DESACTIVADA: Sistema de sinónimos extraído al módulo config_manager.\n    Preserva comportamiento exacto del mapeo de columnas legacy y dinámico.\n    \"\"\""
+    },
+    {
+      "line": 1037,
+      "tag": "desactivado",
+      "pattern": "desactivad[oa]",
+      "context": "    Wrapper para compatibilidad - usar cfg_build_rename_map de tz_core.config_manager\n    \n    MINA DESACTIVADA: Sistema de sinónimos extraído al módulo config_manager.\n    Preserva comportamiento exacto del mapeo de columnas legacy y dinámico.\n    \"\"\""
+    },
+    {
+      "line": 1047,
+      "tag": "flag_desactivado",
+      "pattern": "MINA DESACTIVADA",
+      "context": "    🚨 WRAPPER DE COMPATIBILIDAD - usar atomic_write_json de tz_core.config_manager\n    \n    MINA DESACTIVADA: Función de escritura atómica extraída al módulo config_manager.\n    Preserva backup automático y escritura segura de archivos JSON.\n    \"\"\""
+    },
+    {
+      "line": 1047,
+      "tag": "desactivado",
+      "pattern": "desactivad[oa]",
+      "context": "    🚨 WRAPPER DE COMPATIBILIDAD - usar atomic_write_json de tz_core.config_manager\n    \n    MINA DESACTIVADA: Función de escritura atómica extraída al módulo config_manager.\n    Preserva backup automático y escritura segura de archivos JSON.\n    \"\"\""
+    },
+    {
+      "line": 1057,
+      "tag": "flag_desactivado",
+      "pattern": "MINA DESACTIVADA",
+      "context": "    🚨 WRAPPER DE COMPATIBILIDAD - usar add_user_synonym de tz_core.config_manager\n    \n    MINA DESACTIVADA: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.\n    Preserva persistencia automática en config.json y memoria de mapeo manual.\n    \"\"\""
+    },
+    {
+      "line": 1057,
+      "tag": "desactivado",
+      "pattern": "desactivad[oa]",
+      "context": "    🚨 WRAPPER DE COMPATIBILIDAD - usar add_user_synonym de tz_core.config_manager\n    \n    MINA DESACTIVADA: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.\n    Preserva persistencia automática en config.json y memoria de mapeo manual.\n    \"\"\""
+    },
+    {
+      "line": 1097,
+      "tag": "flag_desactivado",
+      "pattern": "MINA DESACTIVADA",
+      "context": "    🚨 WRAPPER DE COMPATIBILIDAD - usar solicitar_color_tema de tz_core.config_manager\n    \n    MINA DESACTIVADA: Función interactiva extraída al módulo config_manager.\n    Preserva funcionalidad de paleta de 60 colores para diferenciación de bitácoras.\n    \"\"\""
+    },
+    {
+      "line": 1097,
+      "tag": "desactivado",
+      "pattern": "desactivad[oa]",
+      "context": "    🚨 WRAPPER DE COMPATIBILIDAD - usar solicitar_color_tema de tz_core.config_manager\n    \n    MINA DESACTIVADA: Función interactiva extraída al módulo config_manager.\n    Preserva funcionalidad de paleta de 60 colores para diferenciación de bitácoras.\n    \"\"\""
+    },
+    {
+      "line": 2565,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "        return \"\"\n\n    # TODOS los días con actividad (ordenados de más reciente a más antiguo)\n    fechas_ord = sorted(df_local['_fecha'].dropna().unique().tolist(), reverse=True)\n    if not fechas_ord:"
+    },
+    {
+      "line": 4356,
+      "tag": "desactivado",
+      "pattern": "desactivad[oa]",
+      "context": "        # ⬇️ Dejar SOLO este if, con pass adentro\n        if _title:\n            # Desactivado: no inyectar el H1 centrado\n            pass\n"
+    },
+    {
+      "line": 4397,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "            _links.append('<a href=\"#top-antenas\">Todas las antenas</a>')\n        if 'id=\"todos-contactos\"' in html:\n            _links.append('<a href=\"#todos-contactos\">Todos los contactos</a>')\n\n        if _links:"
+    },
+    {
+      "line": 4402,
+      "tag": "desactivado",
+      "pattern": "desactivad[oa]",
+      "context": "            _toc_html = '<nav id=\"toc\" class=\"toc\" style=\"z-index:999; background:#fff; border-bottom:1px solid #e5e7eb; box-shadow:0 2px 6px rgba(0,0,0,.06); padding:8px 12px;\">' + ' ... '.join(_links) + '</nav>'\n\n            # 3) CSS para la barra sticky (desactivada en móvil)\n            _css_toc = \"\"\"\n.toc{position:sticky;top:0;background:#fff;padding:8px 0 10px;margin:6px 0 10px;border-bottom:1px solid #eee;z-index:999}"
+    },
+    {
+      "line": 4444,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "        _css_tc = \"\"\"\n/* Tabla de 'Todos los contactos' con más respiración */\n#todos-contactos table.tbl{\n  border-collapse:separate !important;\n  border-spacing:18px 8px !important;"
+    },
+    {
+      "line": 4450,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "  width:100%;\n}\n#todos-contactos table.tbl th,\n#todos-contactos table.tbl td{\n  padding:12px 20px !important;"
+    },
+    {
+      "line": 4451,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "}\n#todos-contactos table.tbl th,\n#todos-contactos table.tbl td{\n  padding:12px 20px !important;\n}"
+    },
+    {
+      "line": 4456,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "\n/* # (angosta, derecha) */\n#todos-contactos table.tbl th:nth-child(1),\n#todos-contactos table.tbl td:nth-child(1){\n  width:56px !important;"
+    },
+    {
+      "line": 4457,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "/* # (angosta, derecha) */\n#todos-contactos table.tbl th:nth-child(1),\n#todos-contactos table.tbl td:nth-child(1){\n  width:56px !important;\n  text-align:right !important;"
+    },
+    {
+      "line": 4463,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "\n/* Contacto (más ancha, con elipsis si se desborda) */\n#todos-contactos table.tbl th:nth-child(2),\n#todos-contactos table.tbl td:nth-child(2){\n  width:300px !important;"
+    },
+    {
+      "line": 4464,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "/* Contacto (más ancha, con elipsis si se desborda) */\n#todos-contactos table.tbl th:nth-child(2),\n#todos-contactos table.tbl td:nth-child(2){\n  width:300px !important;\n  overflow:hidden !important;"
+    },
+    {
+      "line": 4472,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "\n/* Conteo y Minutos (alineadas a la derecha, anchas) */\n#todos-contactos table.tbl th:nth-child(3),\n#todos-contactos table.tbl td:nth-child(3),\n#todos-contactos table.tbl th:nth-child(4),"
+    },
+    {
+      "line": 4473,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "/* Conteo y Minutos (alineadas a la derecha, anchas) */\n#todos-contactos table.tbl th:nth-child(3),\n#todos-contactos table.tbl td:nth-child(3),\n#todos-contactos table.tbl th:nth-child(4),\n#todos-contactos table.tbl td:nth-child(4){"
+    },
+    {
+      "line": 4474,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "#todos-contactos table.tbl th:nth-child(3),\n#todos-contactos table.tbl td:nth-child(3),\n#todos-contactos table.tbl th:nth-child(4),\n#todos-contactos table.tbl td:nth-child(4){\n  width:200px !important;"
+    },
+    {
+      "line": 4475,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "#todos-contactos table.tbl td:nth-child(3),\n#todos-contactos table.tbl th:nth-child(4),\n#todos-contactos table.tbl td:nth-child(4){\n  width:200px !important;\n  text-align:right !important;"
+    },
+    {
+      "line": 4481,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "\n/* Tarjetas visuales por fila (sombra sutil) */\n#todos-contactos table.tbl tbody tr{\n  background:#fff;\n  box-shadow:0 1px 0 #eee;"
+    },
+    {
+      "line": 4485,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "  box-shadow:0 1px 0 #eee;\n}\n#todos-contactos table.tbl thead tr{\n  box-shadow:none;\n}"
+    },
+    {
+      "line": 4571,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "        pass\n\n        # TODOS-CONTACTOS-HTML: inyectar sección si fue calculada\n    try:\n        _html_all = globals().get(\"HTML_SECCION_TODOS_CONTACTOS\", \"\")"
+    },
+    {
+      "line": 5609,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "                        <style>\n                        /* Solo afecta la sección con id=\"todos-contactos\" */\n                        #todos-contactos table{\n                            width: 100%;\n                            border-collapse: collapse;"
+    },
+    {
+      "line": 5613,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "                            border-collapse: collapse;\n                        }\n                        #todos-contactos thead th{\n                            background: #f7f7f7;\n                            border-top: 1px solid #e6e6e6;"
+    },
+    {
+      "line": 5618,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "                            border-bottom: 1px solid #e6e6e6;\n                        }\n                        #todos-contactos tbody td{\n                            border-bottom: 1px solid #eaeaea;\n                        }"
+    },
+    {
+      "line": 5622,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "                        }\n                        /* (Opcional) líneas verticales suaves como en otras tablas */\n                        #todos-contactos th:not(:last-child),\n                        #todos-contactos td:not(:last-child){\n                            border-right: 1px solid #f0f0f0;"
+    },
+    {
+      "line": 5623,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "                        /* (Opcional) líneas verticales suaves como en otras tablas */\n                        #todos-contactos th:not(:last-child),\n                        #todos-contactos td:not(:last-child){\n                            border-right: 1px solid #f0f0f0;\n                        }"
+    },
+    {
+      "line": 5627,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "                        }\n                        /* Hover sutil para lectura */\n                        #todos-contactos tbody tr:hover{\n                            background: #fafafa;\n                        }"
+    },
+    {
+      "line": 5638,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "                        <style>\n                        :root { --anchor-offset: 96px; } /* valor seguro; JS lo ajusta a la altura real */\n                        /* Cualquier sección con id (#meta, #antenas, #todos-contactos, etc.) dejará colchón arriba */\n                        section[id] { scroll-margin-top: var(--anchor-offset); }\n"
+    },
+    {
+      "line": 5844,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "            _links.append('<a href=\"#top-antenas\">Todas las antenas</a>')\n        if _has(\"todos-contactos\"):\n            _links.append('<a href=\"#todos-contactos\">Todos los contactos</a>')\n\n        if _links:"
+    },
+    {
+      "line": 6825,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "\n                # Armar lista de nombres \"con sufijo posición\" para poder ordenarlos por preferencia\n                dup_names = [df.columns[i] for i in idxs]  # todos se llaman igual, pero usamos posiciones\n                # Orden: primero los que estén en 'prefer' (si alguno matchea exactamente), luego el resto\n                def _rank(n):"
+    },
+    {
+      "line": 6931,
+      "tag": "desactivado",
+      "pattern": "desactivad[oa]",
+      "context": "        if not _has_location_ok():\n            if MANUAL_QC_MAPPING:\n                print(\"\\n[WIZARD] Falta UBICACIÓN → modo asistido desactivado. Usando 'lat + long' automáticamente (QC).\")\n                choice = None  # QC manual: se mapea lat/lon dentro del wizard QC, no aquí\n            else:"
+    },
+    {
+      "line": 8026,
+      "tag": "deshabilitado",
+      "pattern": "deshabilitad[oa]",
+      "context": "            informe_html = None\n    else:\n        # 🔧 FIX: Usar función original cuando modo manual está deshabilitado\n        try:\n            informe_html = generar_informe_html(df, archivo_kml, carpeta_salida, nombre_salida, hoja)"
+    }
+  ],
+  "tools\\auditar_codigo_muerto.py": [
+    {
+      "line": 3,
+      "tag": "desactivado",
+      "pattern": "desactivad[oa]",
+      "context": "#!/usr/bin/env python3\n\"\"\"\nAuditor de código desactivado/legacy\n- Busca patrones comunes de código comentado o desactivado que podrían limpiarse\n- Genera un reporte JSON con ubicaciones y contexto"
+    },
+    {
+      "line": 4,
+      "tag": "desactivado",
+      "pattern": "desactivad[oa]",
+      "context": "\"\"\"\nAuditor de código desactivado/legacy\n- Busca patrones comunes de código comentado o desactivado que podrían limpiarse\n- Genera un reporte JSON con ubicaciones y contexto\n\"\"\""
+    },
+    {
+      "line": 15,
+      "tag": "flag_desactivado",
+      "pattern": "MINA DESACTIVADA",
+      "context": "\nPATTERNS = [\n    (r\"MINA DESACTIVADA\", \"flag_desactivado\"),\n    (r\"desactivad[oa]\", \"desactivado\"),\n    (r\"deshabilitad[oa]\", \"deshabilitado\"),"
+    },
+    {
+      "line": 15,
+      "tag": "desactivado",
+      "pattern": "desactivad[oa]",
+      "context": "\nPATTERNS = [\n    (r\"MINA DESACTIVADA\", \"flag_desactivado\"),\n    (r\"desactivad[oa]\", \"desactivado\"),\n    (r\"deshabilitad[oa]\", \"deshabilitado\"),"
+    },
+    {
+      "line": 16,
+      "tag": "desactivado",
+      "pattern": "desactivad[oa]",
+      "context": "PATTERNS = [\n    (r\"MINA DESACTIVADA\", \"flag_desactivado\"),\n    (r\"desactivad[oa]\", \"desactivado\"),\n    (r\"deshabilitad[oa]\", \"deshabilitado\"),\n    (r\"disabled\", \"disabled\"),"
+    },
+    {
+      "line": 17,
+      "tag": "deshabilitado",
+      "pattern": "deshabilitad[oa]",
+      "context": "    (r\"MINA DESACTIVADA\", \"flag_desactivado\"),\n    (r\"desactivad[oa]\", \"desactivado\"),\n    (r\"deshabilitad[oa]\", \"deshabilitado\"),\n    (r\"disabled\", \"disabled\"),\n    (r\"deprecated|obsoleto\", \"deprecated\"),"
+    },
+    {
+      "line": 18,
+      "tag": "disabled",
+      "pattern": "disabled",
+      "context": "    (r\"desactivad[oa]\", \"desactivado\"),\n    (r\"deshabilitad[oa]\", \"deshabilitado\"),\n    (r\"disabled\", \"disabled\"),\n    (r\"deprecated|obsoleto\", \"deprecated\"),\n    (r\"if\\s+False\\s*:\\s*$\", \"if_false\"),"
+    },
+    {
+      "line": 19,
+      "tag": "deprecated",
+      "pattern": "deprecated|obsoleto",
+      "context": "    (r\"deshabilitad[oa]\", \"deshabilitado\"),\n    (r\"disabled\", \"disabled\"),\n    (r\"deprecated|obsoleto\", \"deprecated\"),\n    (r\"if\\s+False\\s*:\\s*$\", \"if_false\"),\n    (r\"return\\s+.*#\\s*TEMP|return\\s+.*#\\s*TODO\", \"return_temporal\"),"
+    }
+  ],
+  "tz_core\\config_manager.py": [
+    {
+      "line": 93,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "\n# =====================================\n# TODO: Extraer más funciones de configuración aquí:\n# - cfg_build_rename_map()\n# - cfg_add_user_synonym() "
+    },
+    {
+      "line": 194,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "\n\n# TODO: Extraer del script principal:\n# - cfg_add_user_synonym()\n"
+    }
+  ],
+  "tz_core\\utils.py": [
+    {
+      "line": 179,
+      "tag": "todo_marker",
+      "pattern": "#\\s*TODO|#\\s*HACK|#\\s*FIXME",
+      "context": "    pass\n\n# TODO: Extraer funciones del script principal:\n# - Funciones sin dependencias externas\n# - Helpers matemáticos/formateo"
+    }
+  ]
+}

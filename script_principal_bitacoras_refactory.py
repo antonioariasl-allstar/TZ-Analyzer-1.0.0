@@ -816,35 +816,14 @@ def _aplicar_reemplazos_regex(s, reglas_regex=None):
     return s
 
 def normalizar_texto(s, reglas=None):
-    """Arregla mojibake, normaliza Unicode y aplica abreviaturas/reglas (regex o literales)."""
-    if not isinstance(s, str):
-        return s
-    s = _fix_mojibake_text(s)
-    # Reglas de config.json (si existen): claves pueden ser regex
-    if reglas and isinstance(reglas, dict):
-        for k, v in reglas.items():
-            try:
-                s = re.sub(k, v, s, flags=re.IGNORECASE)
-            except re.error:
-                s = s.replace(k, v)
-    # Reglas por defecto
-    s = _aplicar_reemplazos_regex(s)
-    return s
+    """MIGRADA A tz_core.text_utils - usar import desde allí"""
+    from tz_core.text_utils import normalizar_texto as normalizar_modular
+    return normalizar_modular(s, reglas)
 
 def normalizar_columnas_texto(df, columnas=None, reglas=None):
-    """
-    Aplica normalización a columnas de texto (por defecto, todas las 'object').
-    Respeta NaN/None sin convertirlos a 'None'.
-    """
-    if df is None:
-        return df
-    try:
-        cols = columnas or [c for c in df.columns if df[c].dtype == 'object']
-        if not cols:
-            return df
-        return df.assign(**{c: df[c].map(lambda x: normalizar_texto(x, reglas)) for c in cols})
-    except Exception:
-        return df
+    """MIGRADA A tz_core.text_utils - usar import desde allí"""
+    from tz_core.text_utils import normalizar_columnas_texto as normalizar_cols_modular
+    return normalizar_cols_modular(df, columnas, reglas)
 # === NORMALIZADOR-1 (fin) ==================================================
 
 
@@ -959,19 +938,17 @@ def _dedupe_columns(df):
 # === IMPORTS MODULARES (gradual refactoring) ===
 from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
 from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR
+from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
+from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
-def _sha256_de_archivo(path: str) -> str:
-    """Wrapper para compatibilidad - usar sha256_de_archivo de tz_core.utils"""
-    return sha256_de_archivo(path)
-
 
 def _escribe_hashes_txt(dest_path: str, pares: list[tuple[str, str]]):
     """Escribe HASHES.txt en dest_path con formato: SHA256  <hex>  <ruta_relativa>"""
     lines = []
     for abs_p, rel_p in pares:
         try:
-            hexa = _sha256_de_archivo(abs_p)
+            hexa = sha256_de_archivo(abs_p)  # Uso directo de tz_core.utils
             lines.append(f"SHA256  {hexa}  {rel_p}")
         except Exception as e:
             lines.append(f"# ERROR hashing {rel_p}: {e}")
@@ -1034,28 +1011,18 @@ def cfg_build_rename_map(CONFIG: dict) -> dict:
     """
     Wrapper para compatibilidad - usar cfg_build_rename_map de tz_core.config_manager
     
-    MINA DESACTIVADA: Sistema de sinónimos extraído al módulo config_manager.
-    Preserva comportamiento exacto del mapeo de columnas legacy y dinámico.
+    Nota: Sistema de sinónimos extraído al módulo config_manager.
+    Este wrapper preserva el comportamiento exacto del mapeo de columnas legacy y dinámico.
     """
     from tz_core.config_manager import cfg_build_rename_map as cfg_build_modular
     return cfg_build_modular(CONFIG)
-
-def _atomic_write_json(path: str, data: dict):
-    """
-    🚨 WRAPPER DE COMPATIBILIDAD - usar atomic_write_json de tz_core.config_manager
-    
-    MINA DESACTIVADA: Función de escritura atómica extraída al módulo config_manager.
-    Preserva backup automático y escritura segura de archivos JSON.
-    """
-    from tz_core.config_manager import atomic_write_json
-    return atomic_write_json(path, data)
 
 def cfg_add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cfg: str = None) -> dict:
     """
     🚨 WRAPPER DE COMPATIBILIDAD - usar add_user_synonym de tz_core.config_manager
     
-    MINA DESACTIVADA: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.
-    Preserva persistencia automática en config.json y memoria de mapeo manual.
+    Nota: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.
+    Este wrapper preserva persistencia automática en config.json y memoria de mapeo manual.
     """
     from tz_core.config_manager import add_user_synonym
     return add_user_synonym(CONFIG, canonico, encabezado_crudo, ruta_cfg)
@@ -1094,8 +1061,8 @@ def _solicitar_color_tema(CONFIG):
     """
     🚨 WRAPPER DE COMPATIBILIDAD - usar solicitar_color_tema de tz_core.config_manager
     
-    MINA DESACTIVADA: Función interactiva extraída al módulo config_manager.
-    Preserva funcionalidad de paleta de 60 colores para diferenciación de bitácoras.
+    Nota: Función interactiva extraída al módulo config_manager.
+    Este wrapper preserva la paleta de 60 colores para diferenciación de bitácoras.
     """
     from tz_core.config_manager import solicitar_color_tema
     return solicitar_color_tema(CONFIG)
@@ -1123,43 +1090,6 @@ def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
     rr, gg, bb = s[0:2], s[2:4], s[4:6]
     # KML = AABBGGRR (ojo: orden BGR)
     return f"{a:02x}{bb}{gg}{rr}".lower()
-
-def grados_a_radianes(grados: float) -> float:
-    return grados * math.pi / 180.0
-
-def calcular_punto_final(lat: float, lon: float, azimut: float, distancia_km: float):
-    """Calcula el punto final moviéndose 'distancia_km' desde (lat, lon) con rumbo 'azimut' (grados)."""
-    R = 6371.0  # Radio terrestre en km
-    lat_rad = grados_a_radianes(lat)
-    lon_rad = grados_a_radianes(lon)
-    azimut_rad = grados_a_radianes(azimut)
-
-    lat_final = math.asin(
-        math.sin(lat_rad) * math.cos(distancia_km / R)
-        + math.cos(lat_rad) * math.sin(distancia_km / R) * math.cos(azimut_rad)
-    )
-    lon_final = lon_rad + math.atan2(
-        math.sin(azimut_rad) * math.sin(distancia_km / R) * math.cos(lat_rad),
-        math.cos(distancia_km / R) - math.sin(lat_rad) * math.sin(lat_final)
-    )
-    return math.degrees(lat_final), math.degrees(lon_final)
-
-def generar_cono(kml: Kml, lat: float, lon: float, azimut: float, distancia_km: float, angulo_lateral: int, color: str):
-    """Genera un polígono tipo 'cono' centrado en (lat, lon), abierto en el azimut ± angulo_lateral."""
-    poligono = kml.newpolygon(name=f"Cono Azimut {azimut}°")
-    puntos_cono = []
-
-    for angulo in range(-angulo_lateral, angulo_lateral + 1, 5):
-        azimut_actual = azimut + angulo
-        lat_p, lon_p = calcular_punto_final(lat, lon, azimut_actual, distancia_km)
-        puntos_cono.append((lon_p, lat_p))
-
-    puntos_cono.append((lon, lat))  # cerrar polígono
-    poligono.outerboundaryis = puntos_cono
-
-    poligono.style.polystyle.color = color
-    poligono.style.polystyle.fill = 1
-    poligono.style.polystyle.outline = 1
 
 # =========================
 # Análisis de antenas (tolerante)
@@ -5925,21 +5855,9 @@ section{{margin-top:22px}}
 # 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader
 from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja
 
-def _obtener_hojas_visibles(ruta_excel):
-    """Wrapper de compatibilidad para tz_core.data_loader.obtener_hojas_visibles"""
-    return obtener_hojas_visibles(ruta_excel)
-
-def _listar_todas_hojas(ruta_excel):
-    """Wrapper de compatibilidad para tz_core.data_loader.listar_todas_hojas"""
-    return listar_todas_hojas(ruta_excel)
-
 def _seleccionar_hoja_visible(ruta_excel):
     """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja_visible"""
     return seleccionar_hoja_visible(ruta_excel)
-
-def _seleccionar_hoja(ruta_excel):
-    """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja"""
-    return seleccionar_hoja(ruta_excel)
 
 def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
     """
@@ -6025,9 +5943,6 @@ def _normalizar_hora(df: pd.DataFrame) -> list:
     df["hora"] = res.where(res.notna(), "Sin Inf.")
     return avisos
 
-def _preflight_esenciales(df: pd.DataFrame) -> list:
-    faltan = [c for c in ESENCIALES_IN if c not in df.columns]
-    return ["Pre-flight: faltan columnas esenciales (IN): " + ", ".join(faltan)] if faltan else []
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
@@ -6075,6 +5990,9 @@ def _modo_manual():
     """
     global CONFIG
     from collections import Counter
+
+    log("=== INICIANDO MODO MANUAL ===")
+    log("Configurando funciones auxiliares para entrada de datos...")
 
     # Helpers locales
     def _input_str(msg, obligatorio=False, maxlen=None):
@@ -6166,20 +6084,24 @@ def _modo_manual():
 
     # --------- flujo interactivo ---------
     items = []
+    log("Iniciando flujo interactivo de entrada manual")
     print("\nModo MANUAL. Ingresará uno o más puntos/antenas.")
     
     # Preguntar tipo de registro UNA SOLA VEZ al inicio
+    log("Solicitando tipo de registro al usuario...")
     print("\n¿Qué tipo de registros desea agregar?")
     print("[1] Antenas/Celdas")
     print("[2] Puntos libres (lugares, domicilios, escenas, etc.)")
     tipo_modo = (input("Tipo (1/2, Enter=1): ").strip() or "1")
     es_punto_libre = (tipo_modo == "2")
+    log(f"Usuario seleccionó tipo: {'Puntos libres' if es_punto_libre else 'Antenas/Celdas'}")
     
     if es_punto_libre:
         print("\n→ Modo: Puntos libres (sin azimut, campos simplificados)")
     else:
         print("\n→ Modo: Antenas/Celdas (con azimut y campos completos)")
 
+    log("Iniciando bucle principal de entrada de datos...")
     while True:
         print("\nMenú:")
         print("[A] Agregar registro")
@@ -6188,33 +6110,43 @@ def _modo_manual():
         print("[G] Graficar (generar KML/KMZ)")
         print("[V] Volver (cancelar)")
         op = input("Opción: ").strip().upper() or "A"
+        log(f"Usuario seleccionó opción del menú: '{op}'")
 
         if op == "V":
+            log("Usuario canceló modo manual, regresando sin generar archivos")
             print("Volviendo sin generar…")
             return
 
         if op == "L":
+            log(f"Listando {len(items)} registros existentes")
             _listar(items)
             continue
 
         if op == "E":
             if not items:
+                log("Intento de eliminar registro sin datos existentes")
                 print("No hay registros para eliminar.")
                 continue
             _listar(items)
             s = input("Número de registro a eliminar: ").strip()
+            log(f"Usuario ingresó índice para eliminar: '{s}'")
             if s.isdigit():
                 idx = int(s) - 1
                 if 0 <= idx < len(items):
                     borr = items.pop(idx)
-                    print(f"Eliminado: {borr.get('antena','(sin nombre)')}")
+                    nombre_borrado = borr.get('antena','(sin nombre)')
+                    log(f"Registro eliminado exitosamente: {nombre_borrado}")
+                    print(f"Eliminado: {nombre_borrado}")
                 else:
+                    log(f"Índice fuera de rango: {idx}, total items: {len(items)}")
                     print("Índice fuera de rango.")
             else:
+                log(f"Entrada inválida para eliminar: '{s}' (no es número)")
                 print("Ingrese un número válido.")
             continue
 
         if op == "A":
+            log("Iniciando entrada de nuevo registro...")
             print("\n— Nuevo registro —")
 
             if es_punto_libre:
@@ -6555,47 +6487,67 @@ def main():
     hoja = None
     archivo_errores = ""
 
+    log("=== INICIO APLICACIÓN TZ ANALYZER ===")
+    log("Inicializando variables globales...")
 
     # ===== Menú de modos (único) =====
+    log("Mostrando menú principal de opciones...")
     while True:
         print("\nSeleccione el modo de trabajo:")
         print("[1] Procesar bitácora completa")
         print("[2] Procesar por tiempo (día / rango de días / rango de horas)")
         print("[3] Ingresar antenas manualmente")
         resp = input("Opción (1/2/3, Enter=1): ").strip() or "1"
+        log(f"Usuario seleccionó opción: '{resp}'")
 
         if resp == "3":
+            log("Iniciando modo manual de antenas...")
             _modo_manual()        # Al terminar manual, volvemos a mostrar el menú
+            log("Regresando del modo manual al menú principal")
             continue
 
         if resp in ("1", "2"):
             opcion = resp
+            log(f"Modo válido seleccionado: {opcion}")
             # Preguntar color SIEMPRE para modos 1/2
+            log("Solicitando configuración de tema de colores...")
             CONFIG = _solicitar_color_tema(CONFIG)
+            log("Configuración de colores completada")
             break
 
+        log(f"Opción inválida recibida: '{resp}', mostrando menú nuevamente")
         print("[QC] Opción inválida, intenta de nuevo.")
     
     # ===== Modo Excel (bitácora) =====
+    log("Iniciando selección de archivo de entrada...")
     archivo_entrada = seleccionar_archivo()
     if not archivo_entrada:
+        log("ERROR: Usuario no seleccionó archivo, terminando ejecución")
         print("No se seleccionó un archivo. Saliendo.")
         return
+    
+    log(f"Archivo seleccionado exitosamente: {archivo_entrada}")
 
     # La carpeta se elegirá al final (previsualización)
     carpeta_salida = None
 
     # Selección de hoja visible (si hay varias)
+    log("Iniciando selección de hoja de Excel...")
     hoja = _seleccionar_hoja_visible(archivo_entrada)
+    log(f"Hoja seleccionada: {hoja}")
 
     # Carga del Excel con sistema dual de columnas (FASE 5.3a modular)
+    log(f"Iniciando carga de datos desde {archivo_entrada}...")
     try:
         df, hoja_usada = _cargar_excel_con_normalizacion(archivo_entrada, hoja)
+        log(f"Excel cargado exitosamente: {len(df)} filas, hoja usada: {hoja_usada}")
     except Exception as e:
+        log(f"ERROR CRÍTICO al cargar Excel: {type(e).__name__}: {e}")
         print(f"Error al leer el Excel: {e}")
         return
 
     # Normalización adicional de encabezados (heredada del sistema dual)
+    log("Aplicando normalización de columnas...")
     df.columns = (
         df.columns.astype(str)
           .str.normalize('NFD').str.encode('ascii', 'ignore').str.decode('ascii')
@@ -6607,6 +6559,7 @@ def main():
 
     # Snapshot de columnas originales (antes de cualquier mapeo/rename)
     cols_originales = list(df.columns)
+    log(f"Columnas después de normalización: {cols_originales}")
 
 
     # === VALIDACIÓN DE SCHEMA (aborto elegante) — INICIO =======================
@@ -8415,10 +8368,6 @@ def _solicitar_overrides_topn(config):
                 ovr['contactos'] = vc
 
     return ovr if ovr else None
-
-def _compactar_ruta(txt: str, maxlen: int = 64) -> str:
-    """Wrapper para compatibilidad - usar compactar_ruta de tz_core.utils"""
-    return compactar_ruta(txt, maxlen)
 
 if __name__ == "__main__":
     bootstrap_config()

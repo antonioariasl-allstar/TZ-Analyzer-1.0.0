@@ -6,10 +6,28 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
 
 ---
 
-## ⚠️ **ESTADO ACTUAL DEL PROYECTO (26-OCT-2025)**
+## 📚 Documentación
+
+**Para documentación completa, consulta [docs/README.md](docs/README.md)**
+
+### 📖 Para Usuarios
+- **[Guía de Instalación](docs/user/GUIA_INSTALACION.md)** - Instalación paso a paso
+- **[Guía de Uso Básico](docs/user/GUIA_USO_BASICO.md)** - Cómo usar el sistema
+- **[Preguntas Frecuentes (FAQ)](docs/user/FAQ.md)** - Solución a problemas comunes
+
+### 👨‍💻 Para Desarrolladores
+- **🚨 [PROTOCOLO DE SINCRONIZACIÓN](docs/development/PROTOCOLO_SYNC_OBLIGATORIO.md)** - **⚠️ LEER ANTES DE CUALQUIER CAMBIO**
+- **[Arquitectura Híbrida](docs/development/ARQUITECTURA_HIBRIDA_PERMANENTE.md)** - Diseño del sistema
+- **[Principios de Desarrollo](docs/development/PRINCIPIOS_DESARROLLO_PROFESIONAL.md)** - Estándares de código
+- **[Estrategia de Sincronización](docs/development/ESTRATEGIA_SYNC.md)** - Trabajo casa/oficina
+
+---
+
+## ⚠️ **ESTADO ACTUAL DEL PROYECTO (27-OCT-2025)**
 
 **✅ SISTEMA COMPLETAMENTE FUNCIONAL:** El TZ Analyzer está operativo y genera correctamente HTML, KMZ, y archivos de hashes.
 
+<<<<<<< HEAD
 **🔧 AUDITORÍA COMPLETADA:** Se realizó una auditoría completa de 8 fases que confirmó el excelente estado del proyecto (98% de archivos válidos). Se resolvieron problemas menores y se optimizó la estructura.
 
 **📋 ARQUITECTURA HÍBRIDA ESTABLE:** El framework `tz_core/` está funcionando correctamente con 4 módulos activos (config_manager, data_loader, utils, html_generator en desarrollo). La arquitectura híbrida permanente garantiza estabilidad.
@@ -19,6 +37,11 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
 - Sistema de testing robusto con 18/18 tests unitarios pasando
 - Documentación técnica completa y actualizada
 - Puntos de recuperación implementados (tag v1.0.0-stable)
+=======
+**🔧 ARQUITECTURA HÍBRIDA:** Sistema con arquitectura dual - framework modular `tz_core/` para nuevas funcionalidades + script principal probado para funciones críticas.
+
+**📋 DOCUMENTACIÓN REORGANIZADA:** Estructura de documentación completamente reorganizada en categorías claras (user, development, technical, planning, audits, legacy).
+>>>>>>> 0187c289285ee8673d1ae20c21f599776ac0b009
 
 ---
 
