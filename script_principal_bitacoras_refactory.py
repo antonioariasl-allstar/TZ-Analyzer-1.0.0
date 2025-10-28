@@ -901,12 +901,7 @@ from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix
 from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
 from tz_core.html_utils import row_html, fmt_imei_item, luhn_check, _row_html, _fmt_imei_item, _luhn_check
 from tz_core.validation_utils import (
-    tiene_valor, es_num, a_float, _tiene_valor, _es_num, _a_float,
-    # FASE 2G: Funciones avanzadas de validación
-    to_object, is_excel_serial, excel_serial_to_timestamp,
-    to_float_safe, coerce_azimut,
-    _to_object, _is_excel_serial, _excel_serial_to_timestamp,
-    _to_float_safe, _coerce_azimut
+    tiene_valor, es_num, a_float, _tiene_valor, _es_num, _a_float
 )
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR, _hhmmss_to_time_or_none, _en_rango, _clasificar_rango_sv
 from tz_core.dataframe_utils import dedupe_columns, _dedupe_columns
@@ -5524,56 +5519,20 @@ def _es_num(x):
     """Wrapper de compatibilidad - usa tz_core.validation_utils.es_num"""
     return es_num(x)
 
-def _normalizar_fecha(df: pd.DataFrame) -> list:
-    avisos = []
-    if "fecha" not in df.columns:
-        avisos.append("Pre-flight: no existe columna 'fecha'.")
-        return avisos
-    s = df["fecha"]
-    res = pd.Series([pd.NaT] * len(df), index=s.index, dtype="datetime64[ns]")
-    mask_num = s.apply(_es_num)
-    if mask_num.any():
-        res.loc[mask_num] = pd.to_datetime(s[mask_num], unit="D", origin="1899-12-30", errors="coerce")
-    mask_str = ~mask_num
-    if mask_str.any():
-        res.loc[mask_str] = pd.to_datetime(s[mask_str], errors="coerce", dayfirst=True)
-    df["fecha"] = res.dt.strftime("%d/%m/%Y").fillna("Sin Inf.")
-    return avisos
-
 def _pad_hhmmss(s: str) -> str | None:
-    if s is None: return None
-    t = str(s).strip()
-    if not t or t.lower() in {"sin inf.", "nan", "none"}: return None
-    t = re.sub(r"\s+", "", t).replace(".", ":").replace("-", ":").replace("/", ":")
-    if ":" in t:
-        p = t.split(":")
-        h = (p[0] if p[0] else "00").zfill(2)
-        m = (p[1] if len(p)>1 else "00").zfill(2)
-        s2= (p[2] if len(p)>2 else "00").zfill(2)
-        cand = f"{h}:{m}:{s2}"
-        try:
-            datetime.strptime(cand, "%H:%M:%S")
-            return cand
-        except Exception:
-            return None
-    return None
+    """Wrapper de compatibilidad - usa tz_core.data_normalizer._pad_hhmmss"""
+    from tz_core.data_normalizer import _pad_hhmmss as _pad_modular
+    return _pad_modular(s)
+
+def _normalizar_fecha(df: pd.DataFrame) -> list:
+    """Wrapper de compatibilidad - usa tz_core.data_normalizer._normalizar_fecha"""
+    from tz_core.data_normalizer import _normalizar_fecha as _normalizar_fecha_modular
+    return _normalizar_fecha_modular(df)
 
 def _normalizar_hora(df: pd.DataFrame) -> list:
-    avisos = []
-    if "hora" not in df.columns:
-        avisos.append("Pre-flight: no existe columna 'hora'.")
-        return avisos
-    col = df["hora"]
-    res = pd.Series([None]*len(col), index=col.index, dtype="object")
-    dt = pd.to_datetime(col, errors="coerce")
-    mask_ok = dt.notna()
-    if mask_ok.any():
-        res.loc[mask_ok] = dt.loc[mask_ok].dt.strftime("%H:%M:%S")
-    mask_rest = ~mask_ok
-    if mask_rest.any():
-        res.loc[mask_rest] = col.loc[mask_rest].apply(_pad_hhmmss)
-    df["hora"] = res.where(res.notna(), "Sin Inf.")
-    return avisos
+    """Wrapper de compatibilidad - usa tz_core.data_normalizer._normalizar_hora"""
+    from tz_core.data_normalizer import _normalizar_hora as _normalizar_hora_modular
+    return _normalizar_hora_modular(df)
 
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 # (Ahora importados desde tz_core.time_utils)

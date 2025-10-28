@@ -20,10 +20,35 @@
 ✅ **Testing estabilizado** → 47/47 tests passing con E2E re-habilitado  
 ✅ **Monolito reducido** → De 8,239 a 7,987 líneas (252 líneas menos)
 
-**Módulos nuevos extraídos:**
+**Módulos nuevos extraídos (HTML Epic):**
 - `tz_core/html_generator.py` (307 líneas) - Sistema HTML completo
 - `tz_core/html_helpers.py` (290 líneas) - Helpers categorizados con emojis  
 - `tz_core/format_utils.py` (125 líneas) - Formateo especializado
+
+### 🔥 **FASE 9A COMPLETADA - 28 OCT 2025**
+
+**✅ EXTRACCIÓN DE NORMALIZACIÓN EXITOSA**
+
+**Módulo extraído:**
+- `tz_core/data_normalizer.py` (240 líneas) - Normalización temporal especializada
+
+**Funciones migradas:**
+- `_normalizar_fecha()` - Conversión robusta fechas (Excel serial + ISO)
+- `_normalizar_hora()` - Normalización formatos horarios múltiples  
+- `_pad_hhmmss()` - Helper formateo cadenas tiempo
+
+**Características técnicas:**
+- ✅ Manejo seriales Excel (origin="1899-12-30")
+- ✅ Formato dayfirst=True para El Salvador
+- ✅ Tolerancia múltiples formatos entrada
+- ✅ Fallbacks robustos "Sin Inf." 
+- ✅ Wrappers compatibilidad implementados
+- ✅ Tests regresión E2E passing (3/3)
+
+**Impacto arquitectural:**
+- **Framework modular:** 16 módulos tz_core/ (vs 15 previos)
+- **Monolito reducido:** ~40 líneas menos en normalización
+- **Especialización:** Separación responsabilidades temporal
 
 ---
 
@@ -157,13 +182,15 @@
 
 ### 📈 **ROADMAP DE MODULARIZACIÓN**
 
-#### **FASE 9A: Normalización y Utilidades** (Segura - 1-2 días)
+#### **✅ FASE 9A: Normalización y Utilidades** (COMPLETADA - 28 OCT 2025)
 ```python
-# Extraer módulos de bajo riesgo
-tz_core/data_normalizer.py  # _normalizar_fecha, _normalizar_hora, normalizar_texto
-tz_core/validation_utils.py # _tiene_valor, _es_num, validadores
-tz_core/logging_utils.py    # log() y funciones de trazas
+# ✅ EXTRAÍDO EXITOSAMENTE
+tz_core/data_normalizer.py  # _normalizar_fecha, _normalizar_hora, _pad_hhmmss
+# 📝 YA EXISTÍA: normalizar_texto → tz_core/text_utils
+# 📝 YA EXISTÍA: validadores → tz_core/validation_utils
+# 🔄 PENDIENTE: logging_utils (diferido a FASE 9C)
 ```
+**Resultado:** ✅ 240 líneas extraídas, tests E2E passing, compatibilidad preservada
 
 #### **FASE 9B: Analytics** (Moderada - 2-3 días)
 ```python
@@ -214,8 +241,11 @@ tz_core/report_builder.py   # _construir_seccion_interacciones, _construir_secci
 - [x] **Módulo html_generator.py extraído** (307 líneas) ✅  
 - [x] **Módulo html_helpers.py extraído** (290 líneas) ✅
 - [x] **Módulo format_utils.py extraído** (125 líneas) ✅
-- [x] **15 módulos funcionando** en tz_core/ ✅
-- [x] **47/47 tests passing** con E2E re-habilitado ✅
+- [x] **FASE 9A COMPLETADA** ✅
+- [x] **Módulo data_normalizer.py extraído** (240 líneas) ✅
+- [x] **16 módulos funcionando** en tz_core/ ✅
+- [x] **Tests E2E passing** (3/3) post-FASE 9A ✅
+- [x] Wrappers compatibilidad implementados ✅
 - [x] Reordenamiento campos UX implementado
 - [x] Import fantasma limpiado  
 - [x] Documentación actualizada
@@ -223,15 +253,18 @@ tz_core/report_builder.py   # _construir_seccion_interacciones, _construir_secci
 
 ### 🚀 PRÓXIMOS PASOS SUGERIDOS (ACTUALIZACIÓN 28-OCT-2025)
 
-#### **INMEDIATO (1-2 días)**
-1. **FASE 9A: Normalización** (riesgo bajo)
-   - Extraer `_normalizar_fecha/_normalizar_hora` a `tz_core/data_normalizer.py`
-   - Extraer validadores simples a `tz_core/validation_utils.py`
+#### **INMEDIATO (1-2 días)** 
+✅ **COMPLETADO**: FASE 9A - Módulo data_normalizer.py extraído exitosamente
+
+#### **SIGUIENTE PRIORIDAD**
+1. **FASE 9B: Analytics** (riesgo moderado - 2-3 días)
+   - Extraer `analizar_antenas` y `generar_historial_cambios_antena`
+   - Consolidar funciones de sección HTML en tz_core/analytics.py
 
 #### **CORTO PLAZO (1-2 semanas)**  
-2. **FASE 9B: Analytics** (riesgo moderado)
-   - Extraer `analizar_antenas` y `generar_historial_cambios_antena`
-   - Consolidar funciones de sección HTML
+2. **FASE 9C: Logging** (riesgo bajo - 1 día)
+   - Extraer función `log()` a `tz_core/logging_utils.py`
+   - Consolidar funciones de trazas y debugging
 
 #### **MEDIANO PLAZO (1 mes)**
 3. **FASE 10: Consolidación KML** 
