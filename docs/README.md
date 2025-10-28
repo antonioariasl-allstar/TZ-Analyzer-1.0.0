@@ -22,6 +22,9 @@ Si vas a **contribuir al código** o **entender la arquitectura**:
 - ⚠️ **[PROTOCOLO DE SINCRONIZACIÓN](development/PROTOCOLO_SYNC_OBLIGATORIO.md)** - **LEER ANTES DE CUALQUIER CAMBIO**
 - 🕵️ **[PROTOCOLO PARANOICO](development/PROTOCOLO_CIA_DESARROLLO.md)** - **EL PROTOCOLO ORIGINAL CREADO POR OMAR + AI**
 
+### 🚀 HAZAÑAS TÉCNICAS ÉPICAS
+- 💥 **[MODULARIZACIÓN ÉPICA OCT-2025](development/MODULARIZACION_EPICA_OCT2025.md)** - **47/47 TESTS + E2E HABILITADO**
+
 ### Arquitectura y Principios
 - 🏗️ **[Arquitectura Híbrida Permanente](development/ARQUITECTURA_HIBRIDA_PERMANENTE.md)** - Diseño del sistema
 - 📐 **[Principios de Desarrollo Profesional](development/PRINCIPIOS_DESARROLLO_PROFESIONAL.md)** - Estándares de código

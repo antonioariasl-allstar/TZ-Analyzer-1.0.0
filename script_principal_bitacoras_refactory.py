@@ -1309,70 +1309,9 @@ def _a_float(v):
         return None
 
 def _formatear_valor_para_burbuja(col, val):
-    """
-    Reglas:
-    - lat/long: 6 decimales
-    - azimut/lac: enteros (sin .0) si son numéricos; si no, se dejan tal cual
-    - celda: entero si es numérica; si es texto (p.ej. "C102"), se deja tal cual
-    - duracion: si es numérico -> "Xs"; si ya viene "HH:MM:SS", se deja tal cual; si no es numérico, se deja tal cual
-    - demás: tal cual
-    """
-    col = (col or "").strip().lower()
-    s = str(val).strip()
-
-    # lat/long -> 6 decimales
-    if col in {"lat", "long"}:
-        f = _a_float(val)
-        return None if f is None else f"{f:.6f}"
-
-    # azimut / lac -> enteros si son numéricos; si no, se deja el texto
-    if col in {"azimut", "lac"}:
-        f = _a_float(val)
-        return s if f is None else str(int(round(f)))
-
-    # celda -> entero si es numérico; si no, se deja el texto (p.ej., "C102")
-    if col == "celda":
-        f = _a_float(val)
-        return s if f is None else str(int(round(f)))
-
-    # imei -> cadena limpia sin .0 ni notación científica
-    if col == "imei":
-        s_clean = str(val).strip()
-        try:
-            # caso 123456789012345.0 -> 123456789012345
-            m = re.fullmatch(r'(\d+)\.0+', s_clean)
-            if m:
-                return m.group(1)
-            # caso notación científica: 3.579E14 -> 357900000000000
-            if re.fullmatch(r'\d+(?:\.\d+)?[eE][+-]?\d+', s_clean):
-                from decimal import Decimal
-                d = Decimal(s_clean)
-                s_clean = format(d, 'f').rstrip('0').rstrip('.')
-                return s_clean
-            # si ya son solo dígitos, devolver tal cual
-            if re.fullmatch(r'\d+', s_clean):
-                return s_clean
-        except Exception:
-            # ante cualquier cosa rara, devuelve lo que venga
-            return s_clean
-        return s_clean
-
-    # duracion -> si es numérica (segundos) => HH:MM:SS; si ya trae "HH:MM[:SS]" se deja
-    if col == "duracion":
-        if ":" in s:
-            return s
-        f = _a_float(val)
-        if f is None:
-            return s
-        f = int(round(f))
-        h = f // 3600
-        m = (f % 3600) // 60
-        sec = f % 60
-        return f"{h:02d}:{m:02d}:{sec:02d}"
-
-
-    # default: como string
-    return s
+    """MIGRADA A tz_core.format_utils - usar import desde allí"""
+    from tz_core.format_utils import _formatear_valor_para_burbuja as formatear_modular
+    return formatear_modular(col, val)
 
 # --- Descripción compacta para la burbuja ---
 def _armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direccion_si_igual=True) -> str:
