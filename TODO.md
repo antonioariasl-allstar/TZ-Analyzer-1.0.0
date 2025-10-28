@@ -20,6 +20,14 @@
 **TESTS:** 46 passing ✅ - Zero regresiones  
 **DOCUMENTACIÓN:** Ver `docs/development/CAMBIOS_ARQUITECTURALES_CONSOLIDACION.md`
 
+### 🔧 FIX CAMPO USUARIO KML - 27 OCT 2025 ✅
+
+**PROBLEMA:** Campo "Usuario" solo aparecía en carpeta `todas_las_antenas`, faltaba en `top_las_mas_activadas` y `top_por_rango_horario`  
+**CAUSA:** Inconsistencia entre `_armar_descripcion_compacta()` y template hardcodeado  
+**SOLUCIÓN:** Agregado `"usuario": None` a diccionario campos + unified template  
+**VALIDADO:** ✅ Usuario confirma fix funcionando perfectamente  
+**DOCUMENTACIÓN:** `docs/development/FIX_USUARIO_KML.md`
+
 ---
 
 ## 🏗️ ARQUITECTURA HÍBRIDA PERMANENTE ESTABLECIDA ✅

@@ -2200,6 +2200,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     # Definir campos base para deduplicación y descripción
     campos = {
         "nombre_usuario": None,
+        "usuario": None,  # 🔧 FIX: Agregar campo "usuario" para compatibilidad con _armar_descripcion_compacta
         "abonado": None,
         "alias": None,
     }
@@ -2298,7 +2299,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     <b>Número:</b> {numero}<br>
     <b>IMEI:</b> {imei}<br>
     <b>Alias:</b> {alias}<br>
-    <b>Nombre de Usuario:</b> {campos.get("nombre_usuario", "")}<br>
+    <b>Usuario:</b> {usuario}<br>
     <b>Abonado:</b> {abonado}<br>
     <hr>
     <b>Lat:</b> {lat} &nbsp; <b>Long:</b> {lon}<br>
