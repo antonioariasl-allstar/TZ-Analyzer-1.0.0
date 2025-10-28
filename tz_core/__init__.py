@@ -7,7 +7,8 @@ Módulos disponibles (ACTIVOS):
 - config_manager: Gestión de configuración y mapeo
 - data_loader: Carga de datos Excel/TSV/CSV
 - html_generator: Generación de reportes HTML (híbrido)
-- time_utils: Utilidades de tiempo (NUEVO - funciones puras)
+- time_utils: Utilidades de tiempo (funciones puras)
+- validation_utils: Utilidades de validación (NUEVO - funciones puras)
 
 NOTA: Esqueletos removidos para claridad (data_validator, data_processor, 
 kml_generator, ui_helpers). Funcionalidad activa en archivos raíz.
@@ -43,4 +44,19 @@ from .time_utils import (
     _minutes_from_any,
     _construir_rangos_cfg,
     _en_rango_minutos
+)
+
+# validation_utils - Funciones de validación extraídas para modularización
+from .validation_utils import (
+    tiene_valor,
+    es_num,
+    a_float,
+    es_vacio_o_nulo,
+    normalizar_numero,
+    es_entero_valido,
+    limpiar_texto_validacion,
+    # Aliases para compatibilidad hacia atrás
+    _tiene_valor,
+    _es_num,
+    _a_float
 )
