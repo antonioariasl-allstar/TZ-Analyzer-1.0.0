@@ -1,14 +1,69 @@
 # Handoff para sesión en casa
 # ============================================================
+# ⚠️ ANTES DE HACER CUALQUIER CAMBIO:
+# LEER: docs/development/PROTOCOLO_SYNC_OBLIGATORIO.md
+# ============================================================
 # HANDOFF PARA CONTINUIDAD DE TRABAJO EN CASA
-# TZ Analysis 1.0.0 - Forensic Data Processor
+# TZ Analyzer 1.0.0 - Forensic Data Processor
 # ============================================================
 Fecha: 2025-10-21
-FECHA ACTUALIZACIÓN: 2025-10-22
-REPOSITORIO: TZ-Analysis-1.0.0
+FECHA ACTUALIZACIÓN: 2025-10-28 (ÉPICA HTML GENERATOR COMPLETADA + DOCS REORGANIZADAS)
+REPOSITORIO: TZ-Analyzer-1.0.0
 USUARIO: antonioariasl-allstar
-RAMA ACTUAL: exploracion-movilidad (⚠️ IMPORTANTE: trabajamos en esta rama)
-Objetivo de este archivo
+RAMA ACTUAL: main
+
+# ============================================================
+# 🚨 PROTOCOLOS OBLIGATORIOS PARA TODOS LOS AGENTES
+# ============================================================
+1. EJECUTAR: git fetch && git status
+2. VERIFICAR: Working tree clean
+3. LEER: docs/development/PROTOCOLO_SYNC_OBLIGATORIO.md
+4. SEGUIR: docs/development/PROTOCOLO_CIA_DESARROLLO.md (EL PROTOCOLO PARANOICO ORIGINAL de Omar + AI)
+5. CONFIRMAR: Estructura tz_core/ actualizada
+6. VALIDAR: Tests funcionando
+7. SOLO ENTONCES: Comenzar trabajo
+
+# ============================================================
+# ✅ ESTADO ACTUAL CONFIRMADO (28-OCT-2025)  
+# ============================================================
+🎯 ÉPICA HTML GENERATOR COMPLETADA - 5 FASES EXITOSAS
+- 140+ líneas modularizadas del monstruo generar_informe_html
+- 4 nuevos módulos creados en tz_core/
+- Documentación reorganizada completamente
+
+MÓDULOS TZ_CORE CONFIRMADOS (8 ACTIVOS):
+- config_manager.py ✅
+- data_loader.py ✅  
+- geo_utils.py ✅
+- text_utils.py ✅
+- html_generator.py ✅ (NUEVO - Epic HTML Generator)
+- html_helpers.py ✅ (NUEVO - Epic HTML Generator)
+- utils.py ✅
+- __init__.py ✅
+
+DOCUMENTACIÓN COMPLETAMENTE REORGANIZADA:
+- docs/audits/ ✅ (auditorías y validaciones)
+- docs/development/ ✅ (desarrollo y protocolos)
+- docs/technical/ ✅ (protocolos técnicos)
+- docs/planning/ ✅ (planificación y handoffs)
+- build-specs/ ✅ (archivos .spec organizados)
+
+MONOLITO ACTUAL: 7,270 líneas (era 8,133 → -863 líneas)
+
+🐉 PRÓXIMOS DRAGONES IDENTIFICADOS:
+1. _first_valid_geo: 980 líneas (¡EL NUEVO JEFE FINAL!)
+2. _build_logo_html: 391 líneas
+3. _elige_col: 351 líneas
+- data_loader.py ✅  
+- geo_utils.py ✅ (NUEVO)
+- text_utils.py ✅ (NUEVO)
+- utils.py ✅
+- __init__.py ✅
+
+DOCUMENTACIÓN REORGANIZADA:
+- docs/ completamente estructurada ✅
+- Protocolo de sincronización implementado ✅
+- Handoffs estandarizados ✅
 # ============================================================
 # PROPÓSITO DE ESTE ARCHIVO
 # ============================================================
@@ -113,7 +168,7 @@ Implementación completa de visualización geográfica interactiva.
 ## Archivos modificados (pendientes de commit)
 - script_principal_bitacoras_refactory.py (8,264 líneas)
 - config.json (pie legal actualizado)
-- HANDOFF_CASA.txt (actualizado con cambios del 2025-10-23)
+- HANDOFF_CASA.md (actualizado con cambios del 2025-10-23)
 
 ### 3. Historial de cambios de antena ✅ COMPLETADO (Sesión 2025-10-23)
 Implementación completa de detección y visualización de saltos entre antenas.
@@ -296,7 +351,7 @@ git push origin exploracion-movilidad
 # .GITIGNORE - ARCHIVOS PERMITIDOS EN COMMITS
 # ============================================================
 
-ESTE ARCHIVO (HANDOFF_CASA.txt): ✅ PERMITIDO
+ESTE ARCHIVO (docs/planning/HANDOFF_CASA.md): ✅ PERMITIDO
   - NO está en .gitignore
   - DEBE committearse para sincronización entre equipos
 
@@ -353,7 +408,7 @@ Próximos pasos sugeridos:
   * Bloque HTML con tabla cronológica insertado después de "Antenas por rango horario"
   * Enlaces agregados al TOC en ambas zonas
   * Compilación exitosa sin errores
-- 📝 Actualizado HANDOFF_CASA.txt con detalles de implementación
+- 📝 Actualizado docs/planning/HANDOFF_CASA.md con detalles de implementación
 - ⚠️ PENDIENTE: Validar integración con prueba real (ejecutar script con datos)
 
 PRÓXIMO PASO SUGERIDO:

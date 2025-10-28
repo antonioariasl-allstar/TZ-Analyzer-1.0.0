@@ -74,6 +74,13 @@ from simplekml import Kml
 from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
 from kml_generador import generar_kml_puntos_libres
+# 🔧 MÓDULO EXTRAÍDO: HTML helpers para generar_informe_html
+from tz_core.html_helpers import (
+    fmt_datetime as fmt_dt, first_nonempty_in, 
+    nunique_in, unique_values_in,
+    fmt_imei_item, row_html, 
+    luhn_check, is_valid_imei
+)
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
@@ -1215,70 +1222,9 @@ def _a_float(v):
     return a_float(v)
 
 def _formatear_valor_para_burbuja(col, val):
-    """
-    Reglas:
-    - lat/long: 6 decimales
-    - azimut/lac: enteros (sin .0) si son numéricos; si no, se dejan tal cual
-    - celda: entero si es numérica; si es texto (p.ej. "C102"), se deja tal cual
-    - duracion: si es numérico -> "Xs"; si ya viene "HH:MM:SS", se deja tal cual; si no es numérico, se deja tal cual
-    - demás: tal cual
-    """
-    col = (col or "").strip().lower()
-    s = str(val).strip()
-
-    # lat/long -> 6 decimales
-    if col in {"lat", "long"}:
-        f = _a_float(val)
-        return None if f is None else f"{f:.6f}"
-
-    # azimut / lac -> enteros si son numéricos; si no, se deja el texto
-    if col in {"azimut", "lac"}:
-        f = _a_float(val)
-        return s if f is None else str(int(round(f)))
-
-    # celda -> entero si es numérico; si no, se deja el texto (p.ej., "C102")
-    if col == "celda":
-        f = _a_float(val)
-        return s if f is None else str(int(round(f)))
-
-    # imei -> cadena limpia sin .0 ni notación científica
-    if col == "imei":
-        s_clean = str(val).strip()
-        try:
-            # caso 123456789012345.0 -> 123456789012345
-            m = re.fullmatch(r'(\d+)\.0+', s_clean)
-            if m:
-                return m.group(1)
-            # caso notación científica: 3.579E14 -> 357900000000000
-            if re.fullmatch(r'\d+(?:\.\d+)?[eE][+-]?\d+', s_clean):
-                from decimal import Decimal
-                d = Decimal(s_clean)
-                s_clean = format(d, 'f').rstrip('0').rstrip('.')
-                return s_clean
-            # si ya son solo dígitos, devolver tal cual
-            if re.fullmatch(r'\d+', s_clean):
-                return s_clean
-        except Exception:
-            # ante cualquier cosa rara, devuelve lo que venga
-            return s_clean
-        return s_clean
-
-    # duracion -> si es numérica (segundos) => HH:MM:SS; si ya trae "HH:MM[:SS]" se deja
-    if col == "duracion":
-        if ":" in s:
-            return s
-        f = _a_float(val)
-        if f is None:
-            return s
-        f = int(round(f))
-        h = f // 3600
-        m = (f % 3600) // 60
-        sec = f % 60
-        return f"{h:02d}:{m:02d}:{sec:02d}"
-
-
-    # default: como string
-    return s
+    """MIGRADA A tz_core.format_utils - usar import desde allí"""
+    from tz_core.format_utils import _formatear_valor_para_burbuja as formatear_modular
+    return formatear_modular(col, val)
 
 # --- Descripción compacta para la burbuja ---
 def _armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direccion_si_igual=True) -> str:
@@ -2091,6 +2037,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     # Definir campos base para deduplicación y descripción
     campos = {
         "nombre_usuario": None,
+        "usuario": None,  # 🔧 FIX: Agregar campo "usuario" para compatibilidad con _armar_descripcion_compacta
         "abonado": None,
         "alias": None,
     }
@@ -2189,7 +2136,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     <b>Número:</b> {numero}<br>
     <b>IMEI:</b> {imei}<br>
     <b>Alias:</b> {alias}<br>
-    <b>Nombre de Usuario:</b> {campos.get("nombre_usuario", "")}<br>
+    <b>Usuario:</b> {usuario}<br>
     <b>Abonado:</b> {abonado}<br>
     <hr>
     <b>Lat:</b> {lat} &nbsp; <b>Long:</b> {lon}<br>
@@ -3157,6 +3104,9 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     Genera un informe HTML sencillo (portada + KPIs + enlaces) en la misma carpeta del KML.
     Retorna la ruta del HTML generado.
     """
+    # 🔧 MÓDULO EXTRAÍDO: HTML generator para generar_informe_html
+    from tz_core.html_generator import generate_html_header, generate_body_header, generate_metadata_section, generate_kpi_section
+    
     # Validación defensiva de entrada
     if df is None:
         log("[ERROR] generar_informe_html: DataFrame es None, abortando")
@@ -3287,9 +3237,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     # rango de fechas/horas (visual dd/mm/aaaa HH:MM — dd/mm/aaaa HH:MM)
     rango_str = "Sin datos"
 
-    def _fmt_dt(ts):
-        return ts.strftime("%d/%m/%Y %H:%M")
-
+    # 🔧 EXTRAÍDO: Usando fmt_dt del módulo html_helpers
     if "fecha" in df.columns:
         # Preferir combinar fecha+hora si existe 'hora'
         dt = None
@@ -3305,7 +3253,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                 if not fechas.empty:
                     fmin = fechas.min().normalize()                        # 00:00
                     fmax = (fechas.max().normalize() + pd.Timedelta(hours=23, minutes=59))
-                    rango_str = f"{_fmt_dt(fmin)} — {_fmt_dt(fmax)}"
+                    rango_str = f"{fmt_dt(fmin)} — {fmt_dt(fmax)}"
                 else:
                     rango_str = "Sin datos"
         except Exception as e:
@@ -3314,7 +3262,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
         if dt is not None and not dt.empty:
             min_ts, max_ts = dt.min(), dt.max()
-            rango_str = f"{_fmt_dt(min_ts)} — {_fmt_dt(max_ts)}"
+            rango_str = f"{fmt_dt(min_ts)} — {fmt_dt(max_ts)}"
         elif dt is None:
             # ya se resolvió arriba (solo fecha) o quedó Sin datos
             rango_str = rango_str if 'rango_str' in locals() else "Sin datos"
@@ -3332,97 +3280,19 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     gen_dt = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     # --- Identificación del número analizado (se omite lo que no exista) ---
-    def _first_nonempty_in(df: pd.DataFrame, cols: list[str]):
-        for c in cols:
-            if c in df.columns:
-                s = df[c].dropna().astype(str).str.strip()
-                s = s[s != ""]
-                if not s.empty:
-                    return s.iloc[0]
-        return None
+    # 🔧 EXTRAÍDO: Usando first_nonempty_in del módulo html_helpers
 
-    def _nunique_in(df: pd.DataFrame, cols: list[str]) -> int:
-        n = 0
-        for c in cols:
-            if c in df.columns:
-                s = df[c].dropna().astype(str).str.strip()
-                s = s[s != ""]
-                n = max(n, int(s.nunique())) if not s.empty else n
-        return n
+    # 🔧 EXTRAÍDO: Usando nunique_in del módulo html_helpers
     
-    def _unique_values_in(df: pd.DataFrame, cols: list[str], max_items: int = 8):
-        vals = []
-        for c in cols:
-            if c in df.columns:
-                s = df[c].dropna().astype(str).str.strip()
-                s = s[s != ""]
-                if not s.empty:
-                    vals.extend(s.tolist())
+    # 🔧 EXTRAÍDO: Usando unique_values_in del módulo html_helpers
 
-        # de-duplicar manteniendo orden
-        seen = set()
-        uniq = []
-        for v in vals:
-            if v not in seen:
-                seen.add(v)
-                uniq.append(v)
-        if not uniq:
-            return [], 0
-        extra = max(0, len(uniq) - max_items)
-        return uniq[:max_items], extra
+    # 🔧 EXTRAÍDO: Usando fmt_imei_item del módulo html_helpers
 
-    def _fmt_imei_item(x: str) -> str:
-        try:
-            f = float(str(x))
-            if f.is_integer():
-                return str(int(f))
-        except Exception:
-            pass
-        return str(x)
-
-    def _row_html(label: str, single: str | None, n: int, lst: list[str], extra: int, mono: bool = False) -> str:
-        if n > 1 and lst:
-            cls = 'list mono' if mono else 'list'
-            items = "".join(f"<li>{v}</li>" for v in lst)
-            more  = f"<li>… y {extra} más</li>" if extra > 0 else ""
-            return f"<tr><td><b>{label}:</b></td><td><ul class=\"{cls}\">{items}{more}</ul></td></tr>\n"
-        elif single:
-            return f"<tr><td><b>{label}:</b></td><td>{single}</td></tr>\n"
-        else:
-            return ""
+    # 🔧 EXTRAÍDO: Usando row_html del módulo html_helpers
         
-    def _luhn_check(num: str) -> bool:
-        """Valida IMEI de 15 dígitos con Luhn."""
-        s = 0
-        parity = len(num) % 2
-        for i, ch in enumerate(num):
-            d = ord(ch) - 48  # int(ch)
-            if (i % 2) == parity:
-                d *= 2
-                if d > 9:
-                    d -= 9
-            s += d
-        return (s % 10) == 0
+    # 🔧 EXTRAÍDO: Usando luhn_check del módulo html_helpers
 
-    def _is_valid_imei(val: str) -> bool:
-        """
-        Acepta:
-          - IMEI de 15 dígitos (Luhn OK).
-          - IMEISV de 16 dígitos (sin checkdigit) si los primeros 14 no son todo ceros.
-        Rechaza: vacío, '0', 'null', 'none', 'nan', 'sin inf', 's/i', todos ceros, longitudes != 15/16 o no numérico.
-        """
-        raw = str(val).strip().lower()
-        if raw in {"", "0", "null", "none", "nan", "sin inf.", "sin inf", "s/i"}:
-            return False
-        # conservar solo dígitos
-        s = "".join(ch for ch in raw if ch.isdigit())
-        if not s or set(s) == {"0"}:
-            return False
-        if len(s) == 15:
-            return _luhn_check(s)
-        if len(s) == 16:  # IMEISV
-            return not set(s[:14]) == {"0"}
-        return False
+    # 🔧 EXTRAÍDO: Usando is_valid_imei del módulo html_helpers
 
     tel_cols    = ["tel","telefono","numero","msisdn","a_number","origen","from","callingnumber","num"]
     alias_cols  = ["alias","alias_usuario","apodo"]
@@ -3433,14 +3303,14 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     # [IMSI] columnas canónicas
     imsi_cols  = ["imsi","imsi1","imsi_1","imsi_origen"]
 
-    tel_val     = _first_nonempty_in(df, tel_cols)
-    alias_val   = _first_nonempty_in(df, alias_cols)
-    user_val    = _first_nonempty_in(df, user_cols)
-    abon_val    = _first_nonempty_in(df, abon_cols)
-    imei_raw    = _first_nonempty_in(df, imei_cols)
+    tel_val     = first_nonempty_in(df, tel_cols)
+    alias_val   = first_nonempty_in(df, alias_cols)
+    user_val    = first_nonempty_in(df, user_cols)
+    abon_val    = first_nonempty_in(df, abon_cols)
+    imei_raw    = first_nonempty_in(df, imei_cols)
 
     # [IMSI] obtener valor único (similar a IMEI)
-    imsi_raw = _first_nonempty_in(df, imsi_cols)
+    imsi_raw = first_nonempty_in(df, imsi_cols)
     if imsi_raw is not None:
         try:
             f = float(str(imsi_raw))
@@ -3493,13 +3363,13 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
         imei_val = None
 
     # Si hay múltiples valores en alguna columna, mostrar "múltiples (N)"
-    tel_n  = _nunique_in(df, tel_cols)
-    ali_n  = _nunique_in(df, alias_cols)
-    usr_n  = _nunique_in(df, user_cols)
-    abo_n  = _nunique_in(df, abon_cols)
-    ime_n  = _nunique_in(df, imei_cols)
+    tel_n  = nunique_in(df, tel_cols)
+    ali_n  = nunique_in(df, alias_cols)
+    usr_n  = nunique_in(df, user_cols)
+    abo_n  = nunique_in(df, abon_cols)
+    ime_n  = nunique_in(df, imei_cols)
     # [IMSI] conteo de valores únicos
-    imsi_n  = _nunique_in(df, imsi_cols)
+    imsi_n  = nunique_in(df, imsi_cols)
 
 
     def _fmt_uni(val, n):
@@ -3517,21 +3387,21 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
 
     # Listas de valores (para cuando hay múltiples)
-    tel_list,  tel_more  = _unique_values_in(df, tel_cols,  max_items=8)
-    ali_list,  ali_more  = _unique_values_in(df, alias_cols, max_items=8)
-    usr_list,  usr_more  = _unique_values_in(df, user_cols, max_items=8)
-    abo_list,  abo_more  = _unique_values_in(df, abon_cols, max_items=8)
-    imei_list, imei_more = _unique_values_in(df, imei_cols, max_items=20)
+    tel_list,  tel_more  = unique_values_in(df, tel_cols,  max_items=8)
+    ali_list,  ali_more  = unique_values_in(df, alias_cols, max_items=8)
+    usr_list,  usr_more  = unique_values_in(df, user_cols, max_items=8)
+    abo_list,  abo_more  = unique_values_in(df, abon_cols, max_items=8)
+    imei_list, imei_more = unique_values_in(df, imei_cols, max_items=20)
     
     # limpiar “.0” y filtrar inválidos (0, null/none/nan, todos ceros, Luhn malo, etc.)
-    imei_list = [_fmt_imei_item(x) for x in imei_list]
-    imei_list = [x for x in imei_list if _is_valid_imei(x)]
+    imei_list = [fmt_imei_item(x) for x in imei_list]
+    imei_list = [x for x in imei_list if is_valid_imei(x)]
     if not imei_list:
         imei_disp = None
         imei_more = 0
     
     # [IMSI] lista de valores (múltiples)
-    imsi_list, imsi_more = _unique_values_in(df, imsi_cols, max_items=20)
+    imsi_list, imsi_more = unique_values_in(df, imsi_cols, max_items=20)
 
     # limpieza ligera
     _tmp = []
@@ -3574,17 +3444,17 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                 tel_imsi.append(f"{tel} — IMSI: {', '.join(imsis)}")
             else:
                 tel_imsi.append(str(tel))
-        ident_rows += _row_html("Número telefónico", None, len(tel_imsi), tel_imsi, 0, mono=True)
+        ident_rows += row_html("Número telefónico", None, len(tel_imsi), tel_imsi, 0, mono=True)
     else:
-        ident_rows += _row_html("Número telefónico", tel_disp,  tel_n,  tel_list,  tel_more,  mono=True)
+        ident_rows += row_html("Número telefónico", tel_disp,  tel_n,  tel_list,  tel_more,  mono=True)
     # 2) IMEI (subimos esta fila para que quede inmediatamente debajo del número)
-    ident_rows += _row_html("IMEI",             imei_disp,  ime_n,  imei_list, imei_more, mono=True)
+    ident_rows += row_html("IMEI",             imei_disp,  ime_n,  imei_list, imei_more, mono=True)
     # 3) Alias
-    ident_rows += _row_html("Alias",            alias_disp, ali_n,  ali_list,  ali_more,  mono=False)
+    ident_rows += row_html("Alias",            alias_disp, ali_n,  ali_list,  ali_more,  mono=False)
     # 4) Usuario
-    ident_rows += _row_html("Usuario",          user_disp,  usr_n,  usr_list,  usr_more,  mono=False)
+    ident_rows += row_html("Usuario",          user_disp,  usr_n,  usr_list,  usr_more,  mono=False)
     # 5) Abonado
-    ident_rows += _row_html("Abonado",          abon_disp,  abo_n,  abo_list,  abo_more,  mono=False)
+    ident_rows += row_html("Abonado",          abon_disp,  abo_n,  abo_list,  abo_more,  mono=False)
 
 
     # --- Top contactos (por conteo y por duración) ---
@@ -3972,148 +3842,24 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
         # ante cualquier problema, evita romper: deja un placeholder textual
         logo_html = "<div style='font-weight:700;font-size:18px'>TZ Analyzer</div>"
 
+    # 🔧 FASE 2.1: HTML Header extraído a módulo independiente  
+    html_header = generate_html_header(theme_hex, nombre_salida)
+    
+    # 🔧 FASE 2.2: HTML Body Header extraído a módulo independiente
+    body_header = generate_body_header(logo_html, nombre_salida, hoja, gen_dt, CONFIG)
+    
+    # 🔧 FASE 2.3: HTML Metadatos extraído a módulo independiente
+    metadata_section = generate_metadata_section(nombre_bitacora, hoja, rango_str, ident_rows)
+    
+    # 🔧 FASE 2.4: HTML KPIs/Indicadores extraído a módulo independiente
+    kpi_section = generate_kpi_section(total, coord_validas, coord_invalidas, ant_uniq, cel_uniq, cel_label, top_antena, top_count, top_pct)
+    
+    html = f"""{html_header}
+{body_header}
 
-    html = f"""<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<title>Informe de Bitácora — {nombre_salida}</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-:root {{ 
-  --accent: {theme_hex};
-}}
-* {{ box-sizing: border-box; }}
-body {{
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  margin: 20px;
-  color: #222;
-}}
-h1 {{ margin: 0 0 6px 0; font-size: 20px; }}
-h2 {{ margin: 18px 0 10px; font-size: 16px; color: #333; }}
-.small {{ color:#666; font-size: 12px; }}
-.badge {{ display:inline-block; padding:2px 8px; border-radius:999px; background: var(--accent); color:white; font-size:12px; }}
-.kpis {{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px,1fr));
-  gap: 10px;
-  margin-top: 10px;
-}}
-.card {{
-  border: 1px solid #e6e6e6;
-  border-radius: 10px;
-  padding: 10px;
-}}
-.card .n {{
-  font-size: 18px; font-weight: 700; color:#111; margin: 2px 0 6px;
-}}
-.card .label {{ color:#555; font-size: 12px; }}
-.links a {{ color: var(--accent); text-decoration: none; }}
-.links a:hover {{ text-decoration: underline; }}
-.meta table {{ border-collapse: collapse; font-size: 12px; }}
-.meta td {{ padding: 2px 6px; vertical-align: top; }}
-hr {{ border:0; border-top:1px solid #ddd; margin:14px 0; }}
+{metadata_section}
 
-/* tablas */
-table.tbl{{width:100%;border-collapse:collapse;font-size:12px}}
-table.tbl th,table.tbl td{{border:1px solid #e6e6e6;padding:6px 8px;text-align:left}}
-table.tbl th{{background:#fafafa}}
-.nowrap{{white-space:nowrap}}
-.mono{{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}}
-
-/* listas compactas */
-ul.list{{margin:4px 0 0 16px;padding:0}}
-ul.list li{{font-size:12px; line-height:1.2}}
-.two{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}}
-.sub{{font-size:12px;color:#666;margin-top:2px}}
-.grid2{{display:grid;grid-template-columns:1fr 1fr;gap:16px}}
-.right{{text-align:right}}
-.bar{{height:8px;background:#eee;border-radius:4px}}
-.bar .fill{{height:100%;background:var(--accent,#ff00ff);border-radius:4px}}
-/* === TIPOGRAFÍA BASE (normalizada) === */
-:root{{ --fs-base: 15px; --lh-base: 1.45; }}
-html, body{{ font-size: var(--fs-base); line-height: var(--lh-base); }}
-main, section, p, li, td, th, div, span{{ font-size: inherit; line-height: inherit; }}
-.mono{{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: inherit; }}
-small{{ font-size: 0.92em; }}
-table{{ font-size: 1em; }}
-/* encabezados de sección */
-/* encabezados de sección */
-section > h2{{background:#000;color:#fff;padding:8px 10px;border-radius:6px;margin:18px 0 10px}}
-/* separador visual entre secciones */
-section{{margin-top:22px}}
-.barrow td{{padding-top:0}}
-/* estilos para mini-mapas por día */
-.map-notice{{ padding:12px; background:#f0f0f0; border:1px solid #ddd; border-radius:6px; color:#666; text-align:center; font-size:13px; }}
-</style>
-
-<!-- Dependencias de Leaflet para mapas de calor -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
-
-</head>
-<body>
-  <header>
-    <div class="brand-row" style="display:flex;align-items:center;gap:16px;padding:8px 0;justify-content:flex-start;">
-  <!-- Logo a la izquierda -->
-  {logo_html}
-
-  <!-- Texto a la derecha -->
-  <div style="line-height:1.25;">
-    <div style="font-size:22px;font-weight:700;margin:0;">
-      TZ Analyzer — {(CONFIG.get('brand', {}) or {}).get('version', 'Versión 1.0.0')}
-    </div>
-
-    <h1 style="font-size:20px;font-weight:700;margin:4px 0 0 0;">
-      Informe de Bitácora — <span class="badge">{nombre_salida}</span>
-    </h1>
-
-    <div class="small" style="margin-top:4px;">
-      Generado: {gen_dt}{' — Hoja: ' + hoja if hoja else ''}
-    </div>
-  </div>
-</div>
-  </header>
-
-  <section class="meta">
-    <h2>Metadatos</h2>
-    <table>
-        <tr><td><b>Bitácora telefónica:</b></td><td class="mono">{nombre_bitacora or '—'}</td></tr>
-        <tr><td><b>Hoja analizada:</b></td><td class="mono">{hoja or '—'}</td></tr>
-        <tr><td><b>Periodo analizado:</b></td><td class="mono">{rango_str}</td></tr>
-        {ident_rows}
-    </table>
-
-  </section>
-
-  <section>
-    <h2>Indicadores</h2>
-    <div class="kpis">
-      <div class="card">
-        <div class="n">{total:,}</div>
-        <div class="label">Registros totales</div>
-      </div>
-      <div class="kpi">
-        <div class="num">{coord_validas:,}</div>
-        <div class="lbl">Con coordenadas válidas</div>
-        <div class="sub">({coord_invalidas:,} inválidas)</div>
-      </div>
-
-      <div class="card">
-        <div class="n">{ant_uniq:,}</div>
-        <div class="label">Antenas únicas</div>
-      </div>
-      <div class="card">
-        <div class="n">{cel_uniq:,}</div>
-        <div class="label">{cel_label}</div>
-      </div>
-      <div class="card">
-        <div class="n">{top_antena}</div>
-        <div class="label">Top antena ({top_count:,} — {top_pct:.1f}%)</div>
-      </div>
-    </div>
-  </section>
+{kpi_section}
 
     <section>
     <h2>Top antenas</h2>
@@ -7802,15 +7548,17 @@ def main():
     # HTML opcional (solo si lo activás en config.json con html.generar_en_modo_manual = true)
     if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
         try:
-            # 🚨 MODULARIZADO: Usar framework HTML independiente
-            from tz_core.html_generator import HTMLReportGenerator
-            html_gen = HTMLReportGenerator()
-            html_gen._copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
-            informe_html = html_gen.generar_informe_html(
-                df, archivo_kml, carpeta_salida, nombre_salida, hoja
-            )
-
-            print(f"Informe HTML generado en: {informe_html}")
+            # 🚨 DESHABILITADO: Framework HTML modular no implementado completamente
+            # TODO: Implementar tz_core.html_generator cuando sea necesario
+            # from tz_core.html_generator import HTMLReportGenerator
+            # html_gen = HTMLReportGenerator()
+            # html_gen._copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
+            # informe_html = html_gen.generar_informe_html(
+            #     df, archivo_kml, carpeta_salida, nombre_salida, hoja
+            # )
+            # print(f"Informe HTML generado en: {informe_html}")
+            
+            print("[INFO] Generación HTML modular no disponible. Usar generar_en_modo_manual=false en config.json")
             # --- Normalizar ubicación del KMZ (por si quedó fuera de BASE) ---
             try:
                 kmz_esperado = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")

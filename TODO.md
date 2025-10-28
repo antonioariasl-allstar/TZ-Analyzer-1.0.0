@@ -1,108 +1,31 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
-## 🚀 FASE 2F COMPLETADA - 27 OCT 2025 ✅
+## 🚀 MODULARIZACIÓN ÉPICA COMPLETADA (27-OCT-2025) ✅
 
-**FILE I/O UTILS MIGRADO:** `_escribe_hashes_txt` + `_copiar_logo_a_salida` → `tz_core/file_utils.py`  
-**TESTS EXHAUSTIVOS:** 16 passed, 1 skipped - Operaciones de archivos al 100%  
-**FUNCIONALIDAD:** Escritura hashes forenses + copia recursos con validación robusta  
-**INTEGRACIÓN PERFECTA:** Script principal funcionando sin regresiones, imports optimizados  
-**STATUS:** 11º módulo tz_core/ completado - Velocidad récord en 1 hora oficina ⚡
+**LA BARBARIE TÉCNICA MÁS ÉPICA DEL PROYECTO:**
+- 🎯 **47/47 tests PASANDO** (100% SUCCESS) bajo protocolo de máxima paranoia
+- 🔓 **Test E2E habilitado** - Resuelto problema histórico de no determinismo 
+- 📦 **3 módulos extraídos:** `time_utils`, `validation_utils`, `format_utils`
+- 🛡️ **Zero regresiones** - Modularización sin romper nada
+- 🔍 **Root cause encontrado:** `datetime.now()` causaba no determinismo en HTML
+- 🏆 **Estabilidad mejorada** - Los cambios modulares eliminaron elementos no deterministas
 
-### 🆕 MÓDULO tz_core/ FASE 2F (1/1):
-- ✅ **file_utils.py** - Operaciones archivos I/O (hashes forenses + copia recursos)
+**📖 DOCUMENTACIÓN ÉPICA:** `docs/development/MODULARIZACION_EPICA_OCT2025.md`  
+**🧪 PROTOCOLO APLICADO:** Máxima paranoia + validación exhaustiva + arqueología git
 
-## 🎉 FASE 2E COMPLETADA - 27 OCT 2025 ✅
+<<<<<<< HEAD
+## 🏆 AUDITORÍA COMPLETA FINALIZADA (26-OCT-2025) ✅
 
-**DATAFRAME UTILS MIGRADO:** `_dedupe_columns` → `tz_core/dataframe_utils.py`  
-**TESTS EXHAUSTIVOS:** 17 passed, 1 warning - Funcionalidad al 100%  
-**CORRECCIÓN TÉCNICA:** Fix crítico para columnas pandas duplicadas  
-**VALIDACIÓN TOTAL:** Script principal ejecutado exitosamente sin regresiones  
-**STATUS:** 10º módulo tz_core/ completado - Framework robusto establecido ✅
+**Auditoría de 8 fases completada exitosamente:**
+- ✅ **98% del proyecto validado** como funcional y bien estructurado
+- ✅ **Reordenamiento campos UX** implementado para mejor flujo
+- ✅ **Sistema testing robusto** confirmado (18/18 tests unitarios pasando)
+- ✅ **Documentación consolidada** y actualizada
+- ✅ **Import fantasma limpiado** y estructura optimizada
+- ✅ **Calidad excepcional** del código confirmada
 
-### 🆕 MÓDULO tz_core/ FASE 2E (1/1):
-- ✅ **dataframe_utils.py** - Deduplicación columnas pandas con consolidación inteligente
-
-## 🚀 FASE 2D COMPLETADA - 27 OCT 2025 ✅
-
-**NUEVOS MÓDULOS FASE 2D:** validation_utils.py + time_utils.py completados  
-**DEDUPLICACIÓN EXITOSA:** Funciones duplicadas eliminadas sistemáticamente  
-**TESTING ROBUSTO:** 33+ tests nuevos (14 validation + 19 time)  
-## 🏗️ FASE 2G COMPLETADA - 27 OCT 2025 ⚡
-
-**EXPANSION MICRO-FASE:** validation_utils.py expandido en tiempo récord (<20 min)  
-**FUNCIONES MIGRADAS:** 5 funciones avanzadas desde validaciones.py  
-**CAPACIDADES NUEVAS:** Excel serials, azimut validation, float cleaning  
-**TESTS:** 30 nuevos tests + validación funcional directa  
-**VALIDACIÓN USUARIO:** Script principal con imports expandidos funcionando perfectamente  
-**STATUS:** Expansión exitosa - validation_utils ahora es módulo avanzado completo 🎯
-
-### 🚀 FUNCIONES AGREGADAS FASE 2G:
-- ✅ **to_object()** - Conversión segura a dtype object (evita FutureWarnings)
-- ✅ **is_excel_serial()** - Detección números seriales de fechas Excel  
-- ✅ **excel_serial_to_timestamp()** - Conversión seriales Excel a timestamps
-- ✅ **to_float_safe()** - Conversión float tolerante con limpieza de datos
-- ✅ **coerce_azimut()** - Validación azimut geográfico en rango [0..360)
-
-## 🏗️ FASE 2F COMPLETADA - 27 OCT 2025 ✅
-
-**MODULARIZACIÓN EXPRESS:** File I/O utilities migradas en 1 hora de oficina  
-**ESTRATEGIA ULTRA-CONSERVADORA:** Helpers I/O seguros migrados, motor crítico intacto  
-**NUEVO MÓDULO:** file_utils.py completado con operaciones archivo  
-**TESTS:** 16 tests exhaustivos + validación funcional  
-**VALIDACIÓN USUARIO:** Script principal funcionando perfectamente  
-**STATUS:** 11º módulo completado con éxito total 🎯
-
-### 🆕 MÓDULO tz_core/ FASE 2F (1/1):
-- ✅ **file_utils.py** - File I/O (escribe_hashes_txt, copiar_logo_a_salida)
-
-## 🏗️ FASE 2E COMPLETADA - 27 OCT 2025 ✅
-
-**MODULARIZACIÓN EXPRESS:** DataFrame utilities migradas exitosamente  
-**ESTRATEGIA ULTRA-CONSERVADORA:** Helpers DataFrame seguros migrados, motor crítico intacto  
-**NUEVO MÓDULO:** dataframe_utils.py completado con deduplicación  
-**TESTS:** 12 tests exhaustivos + validación funcional  
-**VALIDACIÓN USUARIO:** Script principal funcionando perfectamente  
-**STATUS:** 10º módulo completado con éxito total 🎯
-
-### 🆕 MÓDULO tz_core/ FASE 2E (1/1):
-- ✅ **dataframe_utils.py** - DataFrame ops (_dedupe_columns migrada)
-
-## 🏗️ FASE 2D COMPLETADA - 27 OCT 2025 ✅
-
-**MODULARIZACIÓN DOBLE:** 2 módulos completados en sesión  
-**ESTRATEGIA ULTRA-CONSERVADORA:** Helpers seguros migrados, motor crítico intacto  
-**NUEVOS MÓDULOS:** validation_utils.py, time_utils.py completados  
-**TESTS:** Todos los módulos validados y funcionando  
-**VALIDACIÓN USUARIO:** Script principal funcionando perfectamente  
-**STATUS:** 2 módulos adicionales completados con éxito total 🎯
-
-### 🆕 MÓDULOS tz_core/ FASE 2D (2/2):
-- ✅ **validation_utils.py** - Validadores puros (tiene_valor, es_num, a_float) ⚡ EXPANDIDO FASE 2G
-- ✅ **time_utils.py** - Helpers temporales (parse HH:MM:SS, rangos, clasificación SV)
-
-## 🏗️ FASE 2C COMPLETADA - 27 OCT 2025 ✅
-
-**MODULARIZACIÓN AVANZADA:** 7 módulos tz_core/ funcionales y migrados exitosamente  
-**ESTRATEGIA ULTRA-CONSERVADORA:** Helpers seguros migrados, motor crítico intacto  
-**NUEVOS MÓDULOS:** color_utils.py, html_utils.py completados  
-**TESTS:** Todos los módulos validados y funcionando  
-**STATUS:** Arquitectura modular robusta - 46+ tests passing ✅
-
-### 🎯 MÓDULOS tz_core/ COMPLETADOS (11/11):
-- ✅ **utils.py** - sha256, compactar_ruta, sanear_nombre  
-- ✅ **config_manager.py** - Configuración completa  
-- ✅ **data_loader.py** - Carga Excel + normalización  
-- ✅ **geo_utils.py** - Funciones geográficas puras  
-- ✅ **text_utils.py** - Normalización y mojibake fix  
-- ✅ **color_utils.py** - Conversiones HEX ↔ KML  
-- ✅ **html_utils.py** - Helpers seguros (row_html, fmt_imei, luhn)
-- ✅ **validation_utils.py** - Validadores datos (tiene_valor, es_num, a_float)
-- ✅ **time_utils.py** - Helpers temporales (parse, rangos, clasificación)
-- ✅ **dataframe_utils.py** - Utilidades pandas DataFrame (deduplicación)
-- ✅ **file_utils.py** - Operaciones archivos I/O (hashes + copia recursos)
-
----
-
+## �️ ARQUITECTURA HÍBRIDA PERMANENTE ESTABLECIDA ✅
+=======
 ## 🏗️ ACTUALIZACIÓN ARQUITECTURAL - 27 OCT 2025 ✅
 
 **CONSOLIDACIÓN EXITOSA:** Eliminada duplicación tz_analyzer/, consolidado en tz_core/  
@@ -110,9 +33,18 @@
 **TESTS:** 46 passing ✅ - Zero regresiones  
 **DOCUMENTACIÓN:** Ver `docs/development/CAMBIOS_ARQUITECTURALES_CONSOLIDACION.md`
 
+### 🔧 FIX CAMPO USUARIO KML - 27 OCT 2025 ✅
+
+**PROBLEMA:** Campo "Usuario" solo aparecía en carpeta `todas_las_antenas`, faltaba en `top_las_mas_activadas` y `top_por_rango_horario`  
+**CAUSA:** Inconsistencia entre `_armar_descripcion_compacta()` y template hardcodeado  
+**SOLUCIÓN:** Agregado `"usuario": None` a diccionario campos + unified template  
+**VALIDADO:** ✅ Usuario confirma fix funcionando perfectamente  
+**DOCUMENTACIÓN:** `docs/development/FIX_USUARIO_KML.md`
+
 ---
 
 ## 🏗️ ARQUITECTURA HÍBRIDA PERMANENTE ESTABLECIDA ✅
+>>>>>>> 0187c289285ee8673d1ae20c21f599776ac0b009
 
 **Fecha:** 25 de octubre de 2025  
 **Commit:** 2b3503f  
