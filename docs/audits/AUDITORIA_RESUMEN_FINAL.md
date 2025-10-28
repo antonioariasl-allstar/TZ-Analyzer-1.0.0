@@ -25,6 +25,33 @@
 - `tz_core/html_helpers.py` (290 líneas) - Helpers categorizados con emojis  
 - `tz_core/format_utils.py` (125 líneas) - Formateo especializado
 
+### 🔥 **FASE 9B COMPLETADA - 28 OCT 2025**
+
+**✅ EXTRACCIÓN DE ANALYTICS EXITOSA**
+
+**Módulo extraído:**
+- `tz_core/analytics.py` (370 líneas) - Motor de análisis de datos forenses
+
+**Funciones migradas:**
+- `analizar_antenas()` - Análisis estadístico activaciones por antena
+- `generar_historial_cambios_antena()` - Detección saltos geográficos con distancias
+- `construir_seccion_todos_contactos()` - Generación tablas contactos HTML
+- `construir_rangos_cfg()` + `etiqueta_rango()` - Utilities rangos horarios
+
+**Características técnicas:**
+- ✅ Análisis patrones movilidad entre antenas
+- ✅ Cálculo distancias geográficas (fórmula haversine) 
+- ✅ Manejo rangos horarios con cruce medianoche
+- ✅ Generación reportes estadísticos uso
+- ✅ Wrappers compatibilidad implementados
+- ✅ Tests regresión E2E passing (3/3)
+
+**Impacto arquitectural:**
+- **Framework modular:** 17 módulos tz_core/ (vs 16 previos)
+- **Monolito reducido:** ~500 líneas menos en analytics
+- **Especialización:** Separación analytics puro de HTML builders
+- **Diferida:** `_construir_seccion_interacciones` (760L) por complejidad HTML
+
 ### 🔥 **FASE 9A COMPLETADA - 28 OCT 2025**
 
 **✅ EXTRACCIÓN DE NORMALIZACIÓN EXITOSA**
@@ -182,6 +209,15 @@
 
 ### 📈 **ROADMAP DE MODULARIZACIÓN**
 
+#### **✅ FASE 9B: Analytics** (COMPLETADA - 28 OCT 2025)
+```python
+# ✅ EXTRAÍDO EXITOSAMENTE  
+tz_core/analytics.py        # analizar_antenas, generar_historial_cambios_antena
+                           # construir_seccion_todos_contactos, utilities rangos
+# 🔄 DIFERIDA: _construir_seccion_interacciones (760L complejidad HTML)
+```
+**Resultado:** ✅ 370 líneas extraídas, tests E2E passing, analytics puro separado
+
 #### **✅ FASE 9A: Normalización y Utilidades** (COMPLETADA - 28 OCT 2025)
 ```python
 # ✅ EXTRAÍDO EXITOSAMENTE
@@ -243,8 +279,10 @@ tz_core/report_builder.py   # _construir_seccion_interacciones, _construir_secci
 - [x] **Módulo format_utils.py extraído** (125 líneas) ✅
 - [x] **FASE 9A COMPLETADA** ✅
 - [x] **Módulo data_normalizer.py extraído** (240 líneas) ✅
-- [x] **16 módulos funcionando** en tz_core/ ✅
-- [x] **Tests E2E passing** (3/3) post-FASE 9A ✅
+- [x] **FASE 9B COMPLETADA** ✅
+- [x] **Módulo analytics.py extraído** (370 líneas) ✅
+- [x] **17 módulos funcionando** en tz_core/ ✅
+- [x] **Tests E2E passing** (3/3) post-FASE 9A y 9B ✅
 - [x] Wrappers compatibilidad implementados ✅
 - [x] Reordenamiento campos UX implementado
 - [x] Import fantasma limpiado  
@@ -253,18 +291,19 @@ tz_core/report_builder.py   # _construir_seccion_interacciones, _construir_secci
 
 ### 🚀 PRÓXIMOS PASOS SUGERIDOS (ACTUALIZACIÓN 28-OCT-2025)
 
-#### **INMEDIATO (1-2 días)** 
-✅ **COMPLETADO**: FASE 9A - Módulo data_normalizer.py extraído exitosamente
+#### **COMPLETADO** ✅
+- FASE 9A: Data normalizer extraído exitosamente
+- FASE 9B: Analytics extraído exitosamente (diferida _construir_seccion_interacciones)
 
 #### **SIGUIENTE PRIORIDAD**
-1. **FASE 9B: Analytics** (riesgo moderado - 2-3 días)
-   - Extraer `analizar_antenas` y `generar_historial_cambios_antena`
-   - Consolidar funciones de sección HTML en tz_core/analytics.py
-
-#### **CORTO PLAZO (1-2 semanas)**  
-2. **FASE 9C: Logging** (riesgo bajo - 1 día)
+1. **FASE 9C: Logging** (riesgo bajo - 1 día)
    - Extraer función `log()` a `tz_core/logging_utils.py`
    - Consolidar funciones de trazas y debugging
+
+#### **CORTO PLAZO (1-2 semanas)**  
+2. **FASE 9D: HTML Builders Complejos** (riesgo alto - 3-5 días)
+   - Extraer `_construir_seccion_interacciones` (760L) con cuidado extremo
+   - Separar JavaScript embebido en archivos dedicados
 
 #### **MEDIANO PLAZO (1 mes)**
 3. **FASE 10: Consolidación KML** 

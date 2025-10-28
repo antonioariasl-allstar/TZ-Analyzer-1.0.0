@@ -1016,77 +1016,9 @@ def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
 # Análisis de antenas (tolerante)
 # =========================
 def analizar_antenas(df: pd.DataFrame, archivo_salida: str):
-    resumen = []
-
-    if "antena" not in df.columns:
-        resumen.append("No se encontró la columna 'antena' tras la normalización de encabezados.\n")
-        resumen.append("Sugerencia: ajustar 'rename_map' para mapear el nombre real de la columna a 'antena'.\n\n")
-        try:
-            validas = df[(df.get("lat").notna()) & (df.get("long").notna())]
-            resumen.append(f"Filas con coordenadas no vacías: {len(validas)}\n")
-        except Exception:
-            pass
-        with open(archivo_salida, "w", encoding="utf-8") as f:
-            f.writelines(resumen)
-        return
-
-    conteo_antenas = df["antena"].value_counts(dropna=False)
-    top_5_antenas = conteo_antenas.head(5)
-
-    resumen.append("Top 5 Antenas más activadas:\n")
-    for antena, activaciones in top_5_antenas.items():
-        detalles = df[df["antena"] == antena].iloc[0]
-        resumen.append(
-            f"Antena: {antena}\n"
-            f"Activaciones: {activaciones}\n"
-            f"Latitud: {detalles.get('lat', 'Sin Inf.')}\n"
-            f"Longitud: {detalles.get('long', 'Sin Inf.')}\n"
-            f"Azimut: {detalles.get('azimut', 'Sin Inf.')}\n"
-        )
-
-        azimuts = df[df["antena"] == antena]["azimut"].value_counts(dropna=False)
-        resumen.append("  Desglose por azimut:\n")
-        for azimut, cantidad in azimuts.items():
-            resumen.append(f"    Azimut {azimut}: {cantidad} activaciones\n")
-        resumen.append("\n")
-
-        rangos_horarios = {
-        "Madrugada (00:00-05:59)": ("00:00:00", "05:59:59"),
-        "Mañana (06:00-11:59)": ("06:00:00", "11:59:59"),
-        "Tarde (12:00-17:59)": ("12:00:00", "17:59:59"),
-        "Noche (18:00-23:59)": ("18:00:00", "23:59:59"),
-    }
-
-
-    resumen.append("Activaciones por rango horario:\n")
-    # Optimización: una sola copia en lugar de dos (líneas 1248 y 1251 duplicadas)
-    df_hora = df.copy()
-    if "hora" in df.columns:
-        df_hora["hora"] = df_hora["hora"].astype(str).str[:8]
-    else:
-        df_hora["hora"] = "Sin Inf."
-
-    for rango, (inicio, fin) in rangos_horarios.items():
-        if inicio < fin:
-            activaciones = df_hora[(df_hora["hora"] >= inicio) & (df_hora["hora"] <= fin)]
-        else:
-            activaciones = df_hora[(df_hora["hora"] >= inicio) | (df_hora["hora"] <= fin)]
-        resumen.append(f"{rango}: {len(activaciones)} activaciones\n")
-
-        if "antena" in activaciones.columns:
-            antenas_rango = activaciones["antena"].value_counts().head(3)
-            resumen.append(f"  Antenas más activas en {rango}:\n")
-            for antena, cantidad in antenas_rango.items():
-                detalles = df[df["antena"] == antena].iloc[0]
-                resumen.append(
-                    f"    Antena: {antena}, Activaciones: {cantidad}, "
-                    f"Latitud: {detalles.get('lat', 'Sin Inf.')}, "
-                    f"Longitud: {detalles.get('long', 'Sin Inf.')}\n"
-                )
-        resumen.append("\n")
-
-    with open(archivo_salida, "w", encoding="utf-8") as f:
-        f.writelines(resumen)
+    """Wrapper de compatibilidad - usa tz_core.analytics.analizar_antenas"""
+    from tz_core.analytics import analizar_antenas as analizar_modular
+    return analizar_modular(df, archivo_salida)
 
 # =========================
 # Burbuja condicional
@@ -1096,118 +1028,9 @@ def _tiene_valor(v):
     return tiene_valor(v)
 
 def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100):
-    """
-    Extrae la secuencia de saltos entre antenas (cambios de antena en el tiempo).
-    
-    Args:
-        df: DataFrame con columnas 'antena', 'fecha y hora' (o similar), 'lat', 'long'
-        max_saltos: Límite máximo de saltos a retornar (para no saturar HTML)
-    
-    Returns:
-        Lista de diccionarios con: {origen, destino, timestamp, lat_origen, lon_origen, lat_destino, lon_destino, distancia_km}
-    """
-    try:
-        # Detectar columnas de antena y timestamp
-        cols_low = {c.lower(): c for c in df.columns}
-        col_ant = None
-        col_ts = None
-        col_lat = None
-        col_lon = None
-        
-        for name_var in ["antena", "antenanombre", "antena_nombre"]:
-            if name_var in cols_low:
-                col_ant = cols_low[name_var]
-                break
-        
-        for name_var in ["fecha y hora", "fechahora", "datetime", "timestamp", "fecha_hora", "fechayhora"]:
-            if name_var in cols_low:
-                col_ts = cols_low[name_var]
-                break
-        
-        for name_var in ["lat", "latitud"]:
-            if name_var in cols_low:
-                col_lat = cols_low[name_var]
-                break
-        
-        for name_var in ["long", "lon", "longitud"]:
-            if name_var in cols_low:
-                col_lon = cols_low[name_var]
-                break
-        
-        if not col_ant or not col_ts:
-            return []
-        
-        # Copiar y limpiar
-        work_df = df.copy()
-        work_df[col_ant] = work_df[col_ant].astype(str).str.strip()
-        
-        # Convertir timestamp
-        work_df['_ts'] = pd.to_datetime(work_df[col_ts], errors='coerce')
-        
-        # Filtrar válidos y sin antena = '0' o vacío
-        work_df = work_df[
-            (work_df['_ts'].notna()) &
-            (work_df[col_ant] != '') &
-            (work_df[col_ant] != '0') &
-            (work_df[col_ant].notna())
-        ].sort_values('_ts').reset_index(drop=True)
-        
-        if len(work_df) < 2:
-            return []
-        
-        # Convertir lat/lon
-        if col_lat and col_lat in work_df.columns:
-            work_df[col_lat] = pd.to_numeric(work_df[col_lat], errors='coerce')
-        if col_lon and col_lon in work_df.columns:
-            work_df[col_lon] = pd.to_numeric(work_df[col_lon], errors='coerce')
-        
-        # Detectar saltos (cambios de antena)
-        saltos = []
-        for i in range(1, len(work_df)):
-            ant_prev = str(work_df.iloc[i-1][col_ant]).strip()
-            ant_curr = str(work_df.iloc[i][col_ant]).strip()
-            ts_curr = work_df.iloc[i]['_ts']
-            
-            if ant_prev != ant_curr:
-                lat_prev = work_df.iloc[i-1].get(col_lat) if col_lat else None
-                lon_prev = work_df.iloc[i-1].get(col_lon) if col_lon else None
-                lat_curr = work_df.iloc[i].get(col_lat) if col_lat else None
-                lon_curr = work_df.iloc[i].get(col_lon) if col_lon else None
-                
-                # Calcular distancia si hay coords
-                dist_km = None
-                if (lat_prev is not None and lon_prev is not None and 
-                    lat_curr is not None and lon_curr is not None and
-                    not (pd.isna(lat_prev) or pd.isna(lon_prev) or pd.isna(lat_curr) or pd.isna(lon_curr))):
-                    try:
-                        from math import radians, cos, sin, asin, sqrt
-                        lon1, lat1, lon2, lat2 = map(radians, [float(lon_prev), float(lat_prev), float(lon_curr), float(lat_curr)])
-                        dlon = lon2 - lon1
-                        dlat = lat2 - lat1
-                        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-                        c = 2 * asin(sqrt(a))
-                        dist_km = 6371 * c
-                    except Exception:
-                        dist_km = None
-                
-                saltos.append({
-                    'origen': ant_prev,
-                    'destino': ant_curr,
-                    'timestamp': ts_curr,
-                    'lat_origen': lat_prev,
-                    'lon_origen': lon_prev,
-                    'lat_destino': lat_curr,
-                    'lon_destino': lon_curr,
-                    'distancia_km': dist_km
-                })
-                
-                if len(saltos) >= max_saltos:
-                    break
-        
-        return saltos
-    except Exception as e:
-        log(f"[WARNING] Error generando historial de cambios de antena: {e}")
-        return []
+    """Wrapper de compatibilidad - usa tz_core.analytics.generar_historial_cambios_antena"""
+    from tz_core.analytics import generar_historial_cambios_antena as historial_modular
+    return historial_modular(df, max_saltos)
 
 HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
 
@@ -2945,79 +2768,9 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
     out.append('</section>')
     return "".join(out)
 def _construir_seccion_todos_contactos(df, columnas_config=None):
-    """
-    Sección HTML 'Todos los contactos':
-    columnas: # | Contacto | Conteo llamadas | Minutos acumulados
-    """
-    try:
-        if df is None or df.empty:
-            return ""
-
-        cols_cfg = columnas_config or {}
-        candidatos = [
-            cols_cfg.get("tel_contacto"), "tel_contacto", "contacto",
-            "telefono_contacto", "numero_contacto", "destino", "origen"
-        ]
-        c_col = next((c for c in candidatos if c and c in df.columns), None)
-        if not c_col:
-            return ""
-
-        # Normalizar contacto a dígitos (dejamos '+', quitamos separadores)
-        s = df[c_col].astype(str).str.strip()
-        s = s.str.replace(r"[^\d+]", "", regex=True)
-        s = s.str.replace(r"^\+?0+(?=\d)", "", regex=True)
-
-        d = df.loc[s != ""].copy()
-        if d.empty:
-            return ""
-        d["_c_norm"] = s[s != ""]
-
-        # Segundos (_sec)
-        if "_sec" in d.columns:
-            sec = pd.to_numeric(d["_sec"], errors="coerce").fillna(0)
-        elif "duracion" in d.columns:
-            d_dur = d["duracion"].astype(str).str.strip()
-            td = pd.to_timedelta(
-                d_dur.where(d_dur.str.contains(":"), None), errors="coerce"
-            )
-            sec = td.dt.total_seconds()
-            sec = sec.fillna(pd.to_numeric(d_dur, errors="coerce")).fillna(0)
-        else:
-            sec = 0
-        d["_sec"] = pd.to_numeric(sec, errors="coerce").fillna(0).astype(int)
-
-        g = d.groupby("_c_norm", dropna=False)
-        tb = (
-            pd.DataFrame({
-                "contacto": g.size().index,
-                "conteo": g.size().values,
-                "minutos": (g["_sec"].sum() / 60.0).round().astype(int).values
-            })
-            .sort_values(["conteo", "minutos"], ascending=False)
-            .reset_index(drop=True)
-        )
-
-        out = []
-        out.append('<section id="todos-contactos">')
-        out.append('<h2>Todos los contactos</h2>')
-        out.append('<div style="font-size:13px; color:#444; margin-bottom:8px;">Esta lista muestra todos los contactos detectados para el usuario del número analizado durante el período seleccionado. Cada registro corresponde a un contacto con el que se ha registrado alguna interacción, sin importar la frecuencia o tipo de comunicación.</div>')
-        out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
-        out.append('<thead><tr>'
-                   '<th>#</th><th>Contacto</th><th>Conteo llamadas</th><th>Minutos acumulados</th>'
-                   '</tr></thead><tbody>')
-        for i, row in tb.iterrows():
-            out.append(
-                "<tr>"
-                f"<td class='mono' style='text-align:center'>{i+1}</td>"
-                f"<td class='mono' style='text-align:center'>{row['contacto']}</td>"
-                f"<td class='mono' style='text-align:center'>{int(row['conteo']):,}</td>"
-                f"<td class='mono' style='text-align:center'>{int(row['minutos']):,}</td>"
-                "</tr>"
-            )
-        out.append("</tbody></table></div></section>")
-        return "\n".join(out)
-    except Exception:
-        return ""
+    """Wrapper de compatibilidad - usa tz_core.analytics.construir_seccion_todos_contactos"""
+    from tz_core.analytics import construir_seccion_todos_contactos as contactos_modular
+    return contactos_modular(df, columnas_config)
 
 
 # === HTML-INTERACCIONES-1 (fin) ===========================================
@@ -3057,19 +2810,9 @@ def _minutes_from_any(hora) -> int | None:
         return None
 
 def _construir_rangos_cfg(rangos_cfg: list[dict]) -> list[tuple[str, int, int]]:
-    """
-    rangos_cfg: [{"nombre":..., "inicio":"HH:MM(:SS)", "fin":"HH:MM(:SS)"}, ...]
-    Retorna lista [(nombre, m_ini, m_fin)] en minutos.
-    """
-    res = []
-    for r in rangos_cfg:
-        n = str(r.get("nombre", "")).strip() or "Rango"
-        mi = _parse_hhmmss_to_minutes(r.get("inicio"))
-        mf = _parse_hhmmss_to_minutes(r.get("fin"))
-        if mi is None or mf is None:
-            continue
-        res.append((n, mi, mf))
-    return res
+    """Wrapper de compatibilidad - usa tz_core.analytics.construir_rangos_cfg"""
+    from tz_core.analytics import construir_rangos_cfg as rangos_modular
+    return rangos_modular(rangos_cfg)
 
 def _en_rango_minutos_local(minutos: int, ini: int, fin: int) -> bool:
     """
@@ -3079,18 +2822,9 @@ def _en_rango_minutos_local(minutos: int, ini: int, fin: int) -> bool:
     return en_rango_minutos(minutos, ini, fin)
 
 def etiqueta_rango(hora, rangos_cfg: list[dict], default: str = "Sin rango") -> str:
-    """
-    Devuelve el 'nombre' del rango del config que contiene 'hora'.
-    'hora' puede ser time/datetime/Timestamp o str 'HH:MM(:SS)'.
-    """
-    m = _minutes_from_any(hora)
-    if m is None:
-        return default
-    rangos = _construir_rangos_cfg(rangos_cfg)
-    for nombre, mi, mf in rangos:
-        if _en_rango_minutos_local(m, mi, mf):
-            return nombre
-    return default
+    """Wrapper de compatibilidad - usa tz_core.analytics.etiqueta_rango"""
+    from tz_core.analytics import etiqueta_rango as etiqueta_modular
+    return etiqueta_modular(hora, rangos_cfg, default)
 # === FIN RANGOS-UTILS ===
 
 
