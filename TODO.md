@@ -1,6 +1,24 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
-## � FASE 9C - LOGGING COMPLETADA (28-OCT-2025) ✨ NUEVA
+## 🧹 FASE 9D - LIMPIEZA DUPLICACIÓN COMPLETADA (28-OCT-2025) ✨ NUEVA
+
+**ELIMINACIÓN EXITOSA DE CÓDIGO DUPLICADO:**
+- 🗑️ **Función duplicada eliminada:** `_crear_feature_kml` (171 líneas duplicadas)
+- 📉 **Reducción significativa:** 7,736 → 7,565 líneas (-171 líneas, -2.2%)
+- 🔍 **Análisis exhaustivo:** 2 implementaciones idénticas detectadas, conservada versión más reciente
+- ✅ **Validación rigurosa:** 3/3 E2E tests pasando - Zero regresiones detectadas
+- 🎯 **Impacto técnico:** Código KML más limpio, sin duplicación, mantenimiento simplificado
+
+**🧹 CARACTERÍSTICAS TÉCNICAS:**
+- Función KML compleja: generación de puntos, líneas de azimut, conos de orientación
+- Versión conservada: línea 1138 (implementación más reciente y completa)
+- Versión eliminada: línea 119 (código obsoleto sin uso activo)
+- Redirección automática: todas las llamadas dirigidas a implementación única
+- Cache de estilos: rendimiento optimizado para generación masiva de features
+
+**🎯 PRÓXIMAS OPORTUNIDADES:** Identificar más duplicaciones o extraer funciones KML complejas
+
+## 🔥 FASE 9C - LOGGING COMPLETADA (28-OCT-2025) ✨ NUEVA
 
 **EXTRACCIÓN EXITOSA DEL SISTEMA DE LOGGING:**
 - 📦 **Nuevo módulo:** `tz_core/logging_utils.py` (220 líneas, sistema completo)
