@@ -3217,7 +3217,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     Retorna la ruta del HTML generado.
     """
     # 🔧 MÓDULO EXTRAÍDO: HTML generator para generar_informe_html
-    from tz_core.html_generator import generate_html_header, generate_body_header
+    from tz_core.html_generator import generate_html_header, generate_body_header, generate_metadata_section
     
     # Validación defensiva de entrada
     if df is None:
@@ -3960,19 +3960,13 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     # 🔧 FASE 2.2: HTML Body Header extraído a módulo independiente
     body_header = generate_body_header(logo_html, nombre_salida, hoja, gen_dt, CONFIG)
     
+    # 🔧 FASE 2.3: HTML Metadatos extraído a módulo independiente
+    metadata_section = generate_metadata_section(nombre_bitacora, hoja, rango_str, ident_rows)
+    
     html = f"""{html_header}
 {body_header}
 
-  <section class="meta">
-    <h2>Metadatos</h2>
-    <table>
-        <tr><td><b>Bitácora telefónica:</b></td><td class="mono">{nombre_bitacora or '—'}</td></tr>
-        <tr><td><b>Hoja analizada:</b></td><td class="mono">{hoja or '—'}</td></tr>
-        <tr><td><b>Periodo analizado:</b></td><td class="mono">{rango_str}</td></tr>
-        {ident_rows}
-    </table>
-
-  </section>
+{metadata_section}
 
   <section>
     <h2>Indicadores</h2>

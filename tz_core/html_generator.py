@@ -193,3 +193,44 @@ def generate_body_header(logo_html: str, nombre_salida: str, hoja: str | None, g
   </div>
 </div>
   </header>"""
+
+
+def generate_metadata_section(nombre_bitacora: str | None, hoja: str | None, rango_str: str, ident_rows: str) -> str:
+    """
+    Genera la sección de metadatos del HTML con tabla de información clave.
+    
+    Extrae la sección HTML-METADATOS que incluye:
+    - <section class="meta"> container
+    - Título "Metadatos" con estilo h2
+    - Tabla con información de bitácora, hoja, periodo
+    - Filas de identificación dinámicas (ident_rows)
+    
+    Args:
+        nombre_bitacora (str | None): Nombre del archivo de bitácora analizado
+        hoja (str | None): Nombre de la hoja específica procesada
+        rango_str (str): String del rango temporal analizado (ej: "2024-01-01 a 2024-12-31")
+        ident_rows (str): HTML de filas adicionales de identificación (IMEI, etc.)
+        
+    Returns:
+        str: HTML completo de la sección metadatos
+        
+    Example:
+        >>> metadata = generate_metadata_section(
+        ...     "bitacora_test.xlsx", 
+        ...     "Datos2024", 
+        ...     "2024-01-01 a 2024-03-31",
+        ...     "<tr><td><b>IMEI:</b></td><td>123456789</td></tr>"
+        ... )
+        >>> print("Metadatos" in metadata)
+        True
+    """
+    return f"""  <section class="meta">
+    <h2>Metadatos</h2>
+    <table>
+        <tr><td><b>Bitácora telefónica:</b></td><td class="mono">{nombre_bitacora or '—'}</td></tr>
+        <tr><td><b>Hoja analizada:</b></td><td class="mono">{hoja or '—'}</td></tr>
+        <tr><td><b>Periodo analizado:</b></td><td class="mono">{rango_str}</td></tr>
+        {ident_rows}
+    </table>
+
+  </section>"""
