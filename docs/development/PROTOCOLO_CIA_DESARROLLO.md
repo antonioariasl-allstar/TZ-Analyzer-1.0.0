@@ -67,7 +67,7 @@ python script_principal.py  # Quick smoke test
 # Actualizar archivos relevantes:
 # - TODO.md (marcar completed/in-progress)
 # - docs/development/ESTADO_ACTUAL.md
-# - HANDOFF_CASA.txt (si es crítico)
+# - docs/planning/HANDOFF_CASA.md (si es crítico)
 # - README.md (si cambia funcionalidad)
 
 # 3.2 VERIFICATION MATRIX

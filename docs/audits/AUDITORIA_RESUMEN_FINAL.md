@@ -78,7 +78,7 @@
 **RESULTADO:** COMPLETADA
 - README.md actualizado con estado post-auditoría
 - TODO.md actualizado con resultados de auditoría
-- HANDOFF_CASA.txt actualizado con branch actual
+- docs/planning/HANDOFF_CASA.md actualizado con branch actual
 - Documentación sincronizada con realidad del proyecto
 
 ---

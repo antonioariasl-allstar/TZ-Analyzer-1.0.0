@@ -126,7 +126,7 @@ AGENTE NUEVO confirma:
 **Este archivo debe estar en:**
 - ✅ `docs/development/PROTOCOLO_SYNC_OBLIGATORIO.md`
 - ✅ Referenciado en `docs/README.md`
-- ✅ Mencionado en `HANDOFF_CASA.txt`
+- ✅ Mencionado en `docs/planning/HANDOFF_CASA.md`
 - ✅ Link en root `README.md`
 
 ---

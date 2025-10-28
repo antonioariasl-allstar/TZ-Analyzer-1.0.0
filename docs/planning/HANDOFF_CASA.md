@@ -142,7 +142,7 @@ Implementación completa de visualización geográfica interactiva.
 ## Archivos modificados (pendientes de commit)
 - script_principal_bitacoras_refactory.py (8,264 líneas)
 - config.json (pie legal actualizado)
-- HANDOFF_CASA.txt (actualizado con cambios del 2025-10-23)
+- HANDOFF_CASA.md (actualizado con cambios del 2025-10-23)
 
 ### 3. Historial de cambios de antena ✅ COMPLETADO (Sesión 2025-10-23)
 Implementación completa de detección y visualización de saltos entre antenas.
@@ -325,7 +325,7 @@ git push origin exploracion-movilidad
 # .GITIGNORE - ARCHIVOS PERMITIDOS EN COMMITS
 # ============================================================
 
-ESTE ARCHIVO (HANDOFF_CASA.txt): ✅ PERMITIDO
+ESTE ARCHIVO (docs/planning/HANDOFF_CASA.md): ✅ PERMITIDO
   - NO está en .gitignore
   - DEBE committearse para sincronización entre equipos
 
@@ -382,7 +382,7 @@ Próximos pasos sugeridos:
   * Bloque HTML con tabla cronológica insertado después de "Antenas por rango horario"
   * Enlaces agregados al TOC en ambas zonas
   * Compilación exitosa sin errores
-- 📝 Actualizado HANDOFF_CASA.txt con detalles de implementación
+- 📝 Actualizado docs/planning/HANDOFF_CASA.md con detalles de implementación
 - ⚠️ PENDIENTE: Validar integración con prueba real (ejecutar script con datos)
 
 PRÓXIMO PASO SUGERIDO:

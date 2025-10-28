@@ -84,7 +84,7 @@ git status
 - `utilidades.py`, `validaciones.py`, `kml_generador.py`
 - `config.json`
 - `requirements.txt`
-- `README.md`, `TODO.md`, `HANDOFF_CASA.txt`
+- `README.md`, `TODO.md`, `docs/planning/HANDOFF_CASA.md`
 - `docs/*.md`
 - Archivos en `tests/` que sean código (`.py`)
 
@@ -172,21 +172,21 @@ git stash pop  # Aplica el backup
 - [ ] `git add` (archivos importantes)
 - [ ] `git commit -m "..."`
 - [ ] `git push origin main`
-- [ ] Actualizar `HANDOFF_CASA.txt` con estado actual
-- [ ] Commit del HANDOFF: `git add HANDOFF_CASA.txt && git commit -m "docs: updated handoff" && git push`
+- [ ] Actualizar `docs/planning/HANDOFF_CASA.md` con estado actual
+- [ ] Commit del HANDOFF: `git add docs/planning/HANDOFF_CASA.md && git commit -m "docs: updated handoff" && git push`
 
 ### Antes de irte de CASA:
 - [ ] `git status`
 - [ ] `git add` (archivos importantes)
 - [ ] `git commit -m "..."`
 - [ ] `git push origin main`
-- [ ] Actualizar `HANDOFF_CASA.txt`
+- [ ] Actualizar `docs/planning/HANDOFF_CASA.md`
 - [ ] Commit del HANDOFF
 
 ### Al llegar a OFICINA/CASA:
 - [ ] `git fetch --all`
 - [ ] `git pull origin main`
-- [ ] Leer `HANDOFF_CASA.txt`
+- [ ] Leer `docs/planning/HANDOFF_CASA.md`
 - [ ] Continuar trabajo
 
 ---
@@ -279,7 +279,7 @@ Tengo dos ambientes (casa/oficina).
 Por favor, antes de hacer cambios:
 1. Verifica git status
 2. Verifica git log --oneline -5
-3. Lee HANDOFF_CASA.txt
+3. Lee docs/planning/HANDOFF_CASA.md
 4. Pregúntame si hay dudas sobre sincronización
 ```
 
@@ -290,7 +290,7 @@ Por favor, antes de hacer cambios:
 1. **SIEMPRE** `git pull` al empezar
 2. **SIEMPRE** `git push` al terminar
 3. **NUNCA** forzar push (`git push -f`) a menos que sepas lo que haces
-4. **ACTUALIZAR** `HANDOFF_CASA.txt` en cada sesión
+4. **ACTUALIZAR** `docs/planning/HANDOFF_CASA.md` en cada sesión
 5. **USAR** commits descriptivos
 6. **VERIFICAR** `git status` frecuentemente
 7. **BACKUP** manual antes de operaciones complejas
