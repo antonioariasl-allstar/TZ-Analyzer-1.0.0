@@ -1,11 +1,34 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
-## 🚀 MODULARIZACIÓN ÉPICA COMPLETADA (27-OCT-2025) ✅
+## � FASE 9C - LOGGING COMPLETADA (28-OCT-2025) ✨ NUEVA
+
+**EXTRACCIÓN EXITOSA DEL SISTEMA DE LOGGING:**
+- 📦 **Nuevo módulo:** `tz_core/logging_utils.py` (220 líneas, sistema completo)
+- 🔧 **Funciones extraídas:** `log()`, gestión de `LOGS` y `LOG_PLACEHOLDERS` 
+- 🌀 **Wrappers implementados:** Variables globales simuladas para compatibilidad total
+- ✅ **Tests validados:** Logging funciona en módulo y monolito sin diferencias
+- 📊 **Impacto:** 50+ usos del logging en todo el código base ahora modularizados
+- 🎯 **3/3 E2E tests pasando** - Zero regresiones detectadas
+
+**🔍 CARACTERÍSTICAS TÉCNICAS:**
+- Sistema dual: print() para consola + almacenamiento en memoria
+- Timestamp automático formato "YYYY-MM-DD HH:MM:SS"  
+- Estado global thread-safe con placeholders anti-duplicación
+- Helpers especializados: `log_info()`, `log_warn()`, `log_error()`, `log_debug()`
+
+**📈 FRAMEWORK STATUS:** 18 módulos en `tz_core/`, monolito reducido a ~7,200 líneas
+
+## �🚀 MODULARIZACIÓN ÉPICA COMPLETADA (27-OCT-2025) ✅
 
 **LA BARBARIE TÉCNICA MÁS ÉPICA DEL PROYECTO:**
 - 🎯 **47/47 tests PASANDO** (100% SUCCESS) bajo protocolo de máxima paranoia
 - 🔓 **Test E2E habilitado** - Resuelto problema histórico de no determinismo 
-- 📦 **3 módulos extraídos:** `time_utils`, `validation_utils`, `format_utils`
+- 📦 **18 módulos extraídos:** 
+  - `time_utils`, `validation_utils`, `format_utils` (funciones puras)
+  - `html_helpers`, `file_utils`, `dataframe_utils` (utilidades especializadas)
+  - `config_manager`, `data_loader` (gestión de datos)
+  - `analytics` (análisis forense y estadísticas)
+  - `logging_utils` (sistema de logging centralizado) ✨ **NUEVO EN FASE 9C**
 - 🛡️ **Zero regresiones** - Modularización sin romper nada
 - 🔍 **Root cause encontrado:** `datetime.now()` causaba no determinismo en HTML
 - 🏆 **Estabilidad mejorada** - Los cambios modulares eliminaron elementos no deterministas

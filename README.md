@@ -29,10 +29,15 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
 
 **✅ SISTEMA COMPLETAMENTE FUNCIONAL:** El TZ Analyzer está operativo y genera correctamente HTML, KMZ, y archivos de hashes.
 
-**� MODULARIZACIÓN ÉPICA COMPLETADA (OCT-2025):** 
+**🔧 MODULARIZACIÓN ÉPICA COMPLETADA (OCT-2025):** 
 - **47/47 tests PASANDO** (100% SUCCESS) - Logrado bajo protocolo de máxima paranoia
 - **Test E2E habilitado:** Resuelto problema crítico de no determinismo que tenía el test deshabilitado desde hace semanas
-- **3 módulos extraídos con éxito:** `time_utils`, `validation_utils`, `format_utils` - funciones puras, cero dependencias
+- **18 módulos extraídos con éxito:** 
+  - `time_utils`, `validation_utils`, `format_utils` (funciones puras, cero dependencias)
+  - `html_helpers`, `file_utils`, `dataframe_utils` (utilidades especializadas) 
+  - `config_manager`, `data_loader` (gestión de datos)
+  - `analytics` (análisis forense y estadísticas)
+  - `logging_utils` (sistema de logging centralizado) ✨ **NUEVO EN FASE 9C**
 - **Estabilidad comprobada:** Los cambios modulares **estabilizaron** el output, eliminando elementos no deterministas
 
 **� ARQUITECTURA HÍBRIDA ESTABLE:** El framework `tz_core/` está funcionando correctamente con módulos activos. La arquitectura híbrida permanente garantiza estabilidad mientras permite evolución modular controlada.
@@ -90,6 +95,17 @@ TZ-Analyzer/
 ├── README.md                              # Este archivo
 ├── TODO.md                                # Tareas y observaciones
 ├── .gitignore                             # Archivos excluidos del repo
+├── tz_core/                               # 🔧 Framework modular (18 módulos)
+│   ├── time_utils.py                      # Utilidades de tiempo y fecha
+│   ├── validation_utils.py                # Validaciones y normalización
+│   ├── format_utils.py                    # Formateo de datos
+│   ├── html_helpers.py                    # Generación de HTML
+│   ├── file_utils.py                      # Gestión de archivos
+│   ├── dataframe_utils.py                 # Utilidades de DataFrames
+│   ├── config_manager.py                  # Gestión de configuración
+│   ├── data_loader.py                     # Carga de datos Excel
+│   ├── analytics.py                       # Análisis forense y estadísticas
+│   └── logging_utils.py                   # Sistema de logging centralizado ✨ NUEVO
 └── tests/
     └── test_e2e_regresion.py              # Tests E2E y validación KMZ
     └── unit/                              # Tests unitarios por componente

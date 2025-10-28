@@ -81,6 +81,23 @@ from tz_core.html_helpers import (
     fmt_imei_item, row_html, 
     luhn_check, is_valid_imei
 )
+# 🔧 MÓDULO EXTRAÍDO: Sistema de logging centralizado
+from tz_core.logging_utils import (
+    log as _log_impl,
+    get_logs,
+    get_log_placeholders,
+    add_log_placeholder,
+    has_log_placeholder,
+    clear_logs,
+    clear_log_placeholders,
+    clear_all_logging_state,
+    get_logs_count,
+    get_recent_logs,
+    log_info,
+    log_warn,
+    log_error,
+    log_debug
+)
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
@@ -718,14 +735,52 @@ from collections import Counter
 from datetime import datetime
 from datetime import datetime
 
-LOGS: list[str] = []
-LOG_PLACEHOLDERS: set[str] = set()   # <<< GLOBAL, una sola vez
+# ===================================================================
+# WRAPPERS DE COMPATIBILIDAD PARA LOGGING - FASE 9C
+# ===================================================================
+# EXTRAÍDO A: tz_core.logging_utils
+# MIGRACIÓN: Variables globales LOGS y LOG_PLACEHOLDERS movidas a módulo
+# COMPATIBILIDAD: Wrappers mantienen interfaz original del monolito
+
+# Crear objetos que simulan las variables globales originales
+class _LogsCompat:
+    def __iter__(self):
+        return iter(get_logs())
+    def __len__(self):
+        return get_logs_count()
+    def __getitem__(self, key):
+        return get_logs()[key]
+    def append(self, item):
+        # Para compatibilidad con código que hace LOGS.append()
+        # Extraer el mensaje sin timestamp si ya lo tiene
+        if item.startswith('[') and '] ' in item:
+            parts = item.split('] ', 1)
+            if len(parts) == 2:
+                _log_impl(parts[1])
+            else:
+                _log_impl(item)
+        else:
+            _log_impl(item)
+
+class _PlaceholdersCompat:
+    def __iter__(self):
+        return iter(get_log_placeholders())
+    def __len__(self):
+        return len(get_log_placeholders())
+    def __contains__(self, item):
+        return has_log_placeholder(item)
+    def add(self, item):
+        add_log_placeholder(item)
+
+LOGS = _LogsCompat()
+LOG_PLACEHOLDERS = _PlaceholdersCompat()
 
 def log(msg: str):
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    s = f"[{ts}] {msg}"
-    print(s)
-    LOGS.append(s)
+    """
+    Wrapper de compatibilidad para función log.
+    IMPLEMENTACIÓN REAL: tz_core.logging_utils.log()
+    """
+    _log_impl(msg)
 
 
 # === NORMALIZADOR-1 (inicio) ==============================================
