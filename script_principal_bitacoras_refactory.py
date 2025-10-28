@@ -3217,7 +3217,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     Retorna la ruta del HTML generado.
     """
     # 🔧 MÓDULO EXTRAÍDO: HTML generator para generar_informe_html
-    from tz_core.html_generator import generate_html_header, generate_body_header, generate_metadata_section
+    from tz_core.html_generator import generate_html_header, generate_body_header, generate_metadata_section, generate_kpi_section
     
     # Validación defensiva de entrada
     if df is None:
@@ -3963,38 +3963,15 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     # 🔧 FASE 2.3: HTML Metadatos extraído a módulo independiente
     metadata_section = generate_metadata_section(nombre_bitacora, hoja, rango_str, ident_rows)
     
+    # 🔧 FASE 2.4: HTML KPIs/Indicadores extraído a módulo independiente
+    kpi_section = generate_kpi_section(total, coord_validas, coord_invalidas, ant_uniq, cel_uniq, cel_label, top_antena, top_count, top_pct)
+    
     html = f"""{html_header}
 {body_header}
 
 {metadata_section}
 
-  <section>
-    <h2>Indicadores</h2>
-    <div class="kpis">
-      <div class="card">
-        <div class="n">{total:,}</div>
-        <div class="label">Registros totales</div>
-      </div>
-      <div class="kpi">
-        <div class="num">{coord_validas:,}</div>
-        <div class="lbl">Con coordenadas válidas</div>
-        <div class="sub">({coord_invalidas:,} inválidas)</div>
-      </div>
-
-      <div class="card">
-        <div class="n">{ant_uniq:,}</div>
-        <div class="label">Antenas únicas</div>
-      </div>
-      <div class="card">
-        <div class="n">{cel_uniq:,}</div>
-        <div class="label">{cel_label}</div>
-      </div>
-      <div class="card">
-        <div class="n">{top_antena}</div>
-        <div class="label">Top antena ({top_count:,} — {top_pct:.1f}%)</div>
-      </div>
-    </div>
-  </section>
+{kpi_section}
 
     <section>
     <h2>Top antenas</h2>

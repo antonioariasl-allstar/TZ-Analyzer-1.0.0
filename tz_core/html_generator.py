@@ -234,3 +234,74 @@ def generate_metadata_section(nombre_bitacora: str | None, hoja: str | None, ran
     </table>
 
   </section>"""
+
+
+def generate_kpi_section(
+    total: int, 
+    coord_validas: int, 
+    coord_invalidas: int, 
+    ant_uniq: int, 
+    cel_uniq: int, 
+    cel_label: str,
+    top_antena: str, 
+    top_count: int, 
+    top_pct: float
+) -> str:
+    """
+    Genera la sección de KPIs/Indicadores del HTML con tarjetas de métricas clave.
+    
+    Extrae la sección HTML-INDICADORES-KPI que incluye:
+    - <section> container con título "Indicadores"
+    - Grid de tarjetas KPI con clase "kpis"
+    - Tarjeta de registros totales
+    - Tarjeta de coordenadas válidas/inválidas con subtotal
+    - Tarjeta de antenas únicas
+    - Tarjeta de celdas únicas con etiqueta dinámica
+    - Tarjeta de top antena con porcentaje
+    
+    Args:
+        total (int): Número total de registros en el dataset
+        coord_validas (int): Registros con coordenadas geográficas válidas
+        coord_invalidas (int): Registros con coordenadas inválidas o faltantes
+        ant_uniq (int): Cantidad única de antenas identificadas
+        cel_uniq (int): Cantidad única de celdas identificadas  
+        cel_label (str): Etiqueta descriptiva para el tipo de celda
+        top_antena (str): Identificador de la antena más frecuente
+        top_count (int): Número de registros de la antena top
+        top_pct (float): Porcentaje que representa la antena top del total
+        
+    Returns:
+        str: HTML completo de la sección de indicadores KPI
+        
+    Example:
+        >>> kpis = generate_kpi_section(1500, 1450, 50, 25, 40, "Celdas LTE", "ANT001", 300, 20.0)
+        >>> print("1,500" in kpis and "20.0%" in kpis)
+        True
+    """
+    return f"""  <section>
+    <h2>Indicadores</h2>
+    <div class="kpis">
+      <div class="card">
+        <div class="n">{total:,}</div>
+        <div class="label">Registros totales</div>
+      </div>
+      <div class="kpi">
+        <div class="num">{coord_validas:,}</div>
+        <div class="lbl">Con coordenadas válidas</div>
+        <div class="sub">({coord_invalidas:,} inválidas)</div>
+      </div>
+
+      <div class="card">
+        <div class="n">{ant_uniq:,}</div>
+        <div class="label">Antenas únicas</div>
+      </div>
+      <div class="card">
+        <div class="n">{cel_uniq:,}</div>
+        <div class="label">{cel_label}</div>
+      </div>
+      <div class="card">
+        <div class="n">{top_antena}</div>
+        <div class="label">Top antena ({top_count:,} — {top_pct:.1f}%)</div>
+      </div>
+    </div>
+  </section>"""
