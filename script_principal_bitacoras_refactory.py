@@ -74,6 +74,13 @@ from simplekml import Kml
 from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
 from kml_generador import generar_kml_puntos_libres
+# 🔧 MÓDULO EXTRAÍDO: HTML helpers para generar_informe_html
+from tz_core.html_helpers import (
+    fmt_datetime as fmt_dt, first_nonempty_in, 
+    nunique_in, unique_values_in,
+    fmt_imei_item, row_html, 
+    luhn_check, is_valid_imei
+)
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
@@ -3339,9 +3346,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     # rango de fechas/horas (visual dd/mm/aaaa HH:MM — dd/mm/aaaa HH:MM)
     rango_str = "Sin datos"
 
-    def _fmt_dt(ts):
-        return ts.strftime("%d/%m/%Y %H:%M")
-
+    # 🔧 EXTRAÍDO: Usando fmt_dt del módulo html_helpers
     if "fecha" in df.columns:
         # Preferir combinar fecha+hora si existe 'hora'
         dt = None
@@ -3357,7 +3362,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                 if not fechas.empty:
                     fmin = fechas.min().normalize()                        # 00:00
                     fmax = (fechas.max().normalize() + pd.Timedelta(hours=23, minutes=59))
-                    rango_str = f"{_fmt_dt(fmin)} — {_fmt_dt(fmax)}"
+                    rango_str = f"{fmt_dt(fmin)} — {fmt_dt(fmax)}"
                 else:
                     rango_str = "Sin datos"
         except Exception as e:
@@ -3366,7 +3371,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
         if dt is not None and not dt.empty:
             min_ts, max_ts = dt.min(), dt.max()
-            rango_str = f"{_fmt_dt(min_ts)} — {_fmt_dt(max_ts)}"
+            rango_str = f"{fmt_dt(min_ts)} — {fmt_dt(max_ts)}"
         elif dt is None:
             # ya se resolvió arriba (solo fecha) o quedó Sin datos
             rango_str = rango_str if 'rango_str' in locals() else "Sin datos"
@@ -3384,97 +3389,19 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     gen_dt = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     # --- Identificación del número analizado (se omite lo que no exista) ---
-    def _first_nonempty_in(df: pd.DataFrame, cols: list[str]):
-        for c in cols:
-            if c in df.columns:
-                s = df[c].dropna().astype(str).str.strip()
-                s = s[s != ""]
-                if not s.empty:
-                    return s.iloc[0]
-        return None
+    # 🔧 EXTRAÍDO: Usando first_nonempty_in del módulo html_helpers
 
-    def _nunique_in(df: pd.DataFrame, cols: list[str]) -> int:
-        n = 0
-        for c in cols:
-            if c in df.columns:
-                s = df[c].dropna().astype(str).str.strip()
-                s = s[s != ""]
-                n = max(n, int(s.nunique())) if not s.empty else n
-        return n
+    # 🔧 EXTRAÍDO: Usando nunique_in del módulo html_helpers
     
-    def _unique_values_in(df: pd.DataFrame, cols: list[str], max_items: int = 8):
-        vals = []
-        for c in cols:
-            if c in df.columns:
-                s = df[c].dropna().astype(str).str.strip()
-                s = s[s != ""]
-                if not s.empty:
-                    vals.extend(s.tolist())
+    # 🔧 EXTRAÍDO: Usando unique_values_in del módulo html_helpers
 
-        # de-duplicar manteniendo orden
-        seen = set()
-        uniq = []
-        for v in vals:
-            if v not in seen:
-                seen.add(v)
-                uniq.append(v)
-        if not uniq:
-            return [], 0
-        extra = max(0, len(uniq) - max_items)
-        return uniq[:max_items], extra
+    # 🔧 EXTRAÍDO: Usando fmt_imei_item del módulo html_helpers
 
-    def _fmt_imei_item(x: str) -> str:
-        try:
-            f = float(str(x))
-            if f.is_integer():
-                return str(int(f))
-        except Exception:
-            pass
-        return str(x)
-
-    def _row_html(label: str, single: str | None, n: int, lst: list[str], extra: int, mono: bool = False) -> str:
-        if n > 1 and lst:
-            cls = 'list mono' if mono else 'list'
-            items = "".join(f"<li>{v}</li>" for v in lst)
-            more  = f"<li>… y {extra} más</li>" if extra > 0 else ""
-            return f"<tr><td><b>{label}:</b></td><td><ul class=\"{cls}\">{items}{more}</ul></td></tr>\n"
-        elif single:
-            return f"<tr><td><b>{label}:</b></td><td>{single}</td></tr>\n"
-        else:
-            return ""
+    # 🔧 EXTRAÍDO: Usando row_html del módulo html_helpers
         
-    def _luhn_check(num: str) -> bool:
-        """Valida IMEI de 15 dígitos con Luhn."""
-        s = 0
-        parity = len(num) % 2
-        for i, ch in enumerate(num):
-            d = ord(ch) - 48  # int(ch)
-            if (i % 2) == parity:
-                d *= 2
-                if d > 9:
-                    d -= 9
-            s += d
-        return (s % 10) == 0
+    # 🔧 EXTRAÍDO: Usando luhn_check del módulo html_helpers
 
-    def _is_valid_imei(val: str) -> bool:
-        """
-        Acepta:
-          - IMEI de 15 dígitos (Luhn OK).
-          - IMEISV de 16 dígitos (sin checkdigit) si los primeros 14 no son todo ceros.
-        Rechaza: vacío, '0', 'null', 'none', 'nan', 'sin inf', 's/i', todos ceros, longitudes != 15/16 o no numérico.
-        """
-        raw = str(val).strip().lower()
-        if raw in {"", "0", "null", "none", "nan", "sin inf.", "sin inf", "s/i"}:
-            return False
-        # conservar solo dígitos
-        s = "".join(ch for ch in raw if ch.isdigit())
-        if not s or set(s) == {"0"}:
-            return False
-        if len(s) == 15:
-            return _luhn_check(s)
-        if len(s) == 16:  # IMEISV
-            return not set(s[:14]) == {"0"}
-        return False
+    # 🔧 EXTRAÍDO: Usando is_valid_imei del módulo html_helpers
 
     tel_cols    = ["tel","telefono","numero","msisdn","a_number","origen","from","callingnumber","num"]
     alias_cols  = ["alias","alias_usuario","apodo"]
@@ -3485,14 +3412,14 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     # [IMSI] columnas canónicas
     imsi_cols  = ["imsi","imsi1","imsi_1","imsi_origen"]
 
-    tel_val     = _first_nonempty_in(df, tel_cols)
-    alias_val   = _first_nonempty_in(df, alias_cols)
-    user_val    = _first_nonempty_in(df, user_cols)
-    abon_val    = _first_nonempty_in(df, abon_cols)
-    imei_raw    = _first_nonempty_in(df, imei_cols)
+    tel_val     = first_nonempty_in(df, tel_cols)
+    alias_val   = first_nonempty_in(df, alias_cols)
+    user_val    = first_nonempty_in(df, user_cols)
+    abon_val    = first_nonempty_in(df, abon_cols)
+    imei_raw    = first_nonempty_in(df, imei_cols)
 
     # [IMSI] obtener valor único (similar a IMEI)
-    imsi_raw = _first_nonempty_in(df, imsi_cols)
+    imsi_raw = first_nonempty_in(df, imsi_cols)
     if imsi_raw is not None:
         try:
             f = float(str(imsi_raw))
@@ -3545,13 +3472,13 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
         imei_val = None
 
     # Si hay múltiples valores en alguna columna, mostrar "múltiples (N)"
-    tel_n  = _nunique_in(df, tel_cols)
-    ali_n  = _nunique_in(df, alias_cols)
-    usr_n  = _nunique_in(df, user_cols)
-    abo_n  = _nunique_in(df, abon_cols)
-    ime_n  = _nunique_in(df, imei_cols)
+    tel_n  = nunique_in(df, tel_cols)
+    ali_n  = nunique_in(df, alias_cols)
+    usr_n  = nunique_in(df, user_cols)
+    abo_n  = nunique_in(df, abon_cols)
+    ime_n  = nunique_in(df, imei_cols)
     # [IMSI] conteo de valores únicos
-    imsi_n  = _nunique_in(df, imsi_cols)
+    imsi_n  = nunique_in(df, imsi_cols)
 
 
     def _fmt_uni(val, n):
@@ -3569,21 +3496,21 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
 
     # Listas de valores (para cuando hay múltiples)
-    tel_list,  tel_more  = _unique_values_in(df, tel_cols,  max_items=8)
-    ali_list,  ali_more  = _unique_values_in(df, alias_cols, max_items=8)
-    usr_list,  usr_more  = _unique_values_in(df, user_cols, max_items=8)
-    abo_list,  abo_more  = _unique_values_in(df, abon_cols, max_items=8)
-    imei_list, imei_more = _unique_values_in(df, imei_cols, max_items=20)
+    tel_list,  tel_more  = unique_values_in(df, tel_cols,  max_items=8)
+    ali_list,  ali_more  = unique_values_in(df, alias_cols, max_items=8)
+    usr_list,  usr_more  = unique_values_in(df, user_cols, max_items=8)
+    abo_list,  abo_more  = unique_values_in(df, abon_cols, max_items=8)
+    imei_list, imei_more = unique_values_in(df, imei_cols, max_items=20)
     
     # limpiar “.0” y filtrar inválidos (0, null/none/nan, todos ceros, Luhn malo, etc.)
-    imei_list = [_fmt_imei_item(x) for x in imei_list]
-    imei_list = [x for x in imei_list if _is_valid_imei(x)]
+    imei_list = [fmt_imei_item(x) for x in imei_list]
+    imei_list = [x for x in imei_list if is_valid_imei(x)]
     if not imei_list:
         imei_disp = None
         imei_more = 0
     
     # [IMSI] lista de valores (múltiples)
-    imsi_list, imsi_more = _unique_values_in(df, imsi_cols, max_items=20)
+    imsi_list, imsi_more = unique_values_in(df, imsi_cols, max_items=20)
 
     # limpieza ligera
     _tmp = []
@@ -3626,17 +3553,17 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                 tel_imsi.append(f"{tel} — IMSI: {', '.join(imsis)}")
             else:
                 tel_imsi.append(str(tel))
-        ident_rows += _row_html("Número telefónico", None, len(tel_imsi), tel_imsi, 0, mono=True)
+        ident_rows += row_html("Número telefónico", None, len(tel_imsi), tel_imsi, 0, mono=True)
     else:
-        ident_rows += _row_html("Número telefónico", tel_disp,  tel_n,  tel_list,  tel_more,  mono=True)
+        ident_rows += row_html("Número telefónico", tel_disp,  tel_n,  tel_list,  tel_more,  mono=True)
     # 2) IMEI (subimos esta fila para que quede inmediatamente debajo del número)
-    ident_rows += _row_html("IMEI",             imei_disp,  ime_n,  imei_list, imei_more, mono=True)
+    ident_rows += row_html("IMEI",             imei_disp,  ime_n,  imei_list, imei_more, mono=True)
     # 3) Alias
-    ident_rows += _row_html("Alias",            alias_disp, ali_n,  ali_list,  ali_more,  mono=False)
+    ident_rows += row_html("Alias",            alias_disp, ali_n,  ali_list,  ali_more,  mono=False)
     # 4) Usuario
-    ident_rows += _row_html("Usuario",          user_disp,  usr_n,  usr_list,  usr_more,  mono=False)
+    ident_rows += row_html("Usuario",          user_disp,  usr_n,  usr_list,  usr_more,  mono=False)
     # 5) Abonado
-    ident_rows += _row_html("Abonado",          abon_disp,  abo_n,  abo_list,  abo_more,  mono=False)
+    ident_rows += row_html("Abonado",          abon_disp,  abo_n,  abo_list,  abo_more,  mono=False)
 
 
     # --- Top contactos (por conteo y por duración) ---
