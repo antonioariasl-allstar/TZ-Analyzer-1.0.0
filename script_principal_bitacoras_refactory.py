@@ -106,7 +106,8 @@ from tz_core.ui_utils import (
 
 # 🔧 MÓDULO EXTRAÍDO: Utilidades de procesamiento de texto
 from tz_core.text_utils import (
-    _fix_mojibake_text
+    _fix_mojibake_text,
+    _aplicar_reemplazos_regex
 )
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
@@ -630,23 +631,12 @@ def _fix_mojibake_text(s):
     from tz_core.text_utils import _fix_mojibake_text as fix_modular
     return fix_modular(s)
 
-_DEFAULT_REEMPLAZOS_REGEX = [
-    (re.compile(r'\bNvo\.?\b', flags=re.IGNORECASE), 'Nuevo'),
-    (re.compile(r'\bNva\.?\b', flags=re.IGNORECASE), 'Nueva'),
-    (re.compile(r'\bSta\.?\b', flags=re.IGNORECASE), 'Santa'),
-    (re.compile(r'\bSto\.?\b', flags=re.IGNORECASE), 'Santo'),
-    (re.compile(r'\bSn\.?\b',  flags=re.IGNORECASE), 'San'),
-    # Toponimia frecuente:
-    (re.compile(r'\bV(?:alle)?\s+Nvo\.?\b', flags=re.IGNORECASE), 'Valle Nuevo'),
-]
-
+# Abreviaturas - MIGRADO A tz_core.text_utils
 def _aplicar_reemplazos_regex(s, reglas_regex=None):
-    if not isinstance(s, str) or not s:
-        return s
-    seq = reglas_regex or _DEFAULT_REEMPLAZOS_REGEX
-    for pat, repl in seq:
-        s = pat.sub(repl, s)
-    return s
+    """Wrapper de compatibilidad - usa tz_core.text_utils._aplicar_reemplazos_regex"""
+    from tz_core.text_utils import _aplicar_reemplazos_regex as regex_modular
+    return regex_modular(s, reglas_regex)
+
 
 def normalizar_texto(s, reglas=None):
     """MIGRADA A tz_core.text_utils - usar import desde allí"""

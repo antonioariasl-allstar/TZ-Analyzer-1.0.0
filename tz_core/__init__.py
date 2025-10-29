@@ -71,6 +71,7 @@ from .ui_utils import (
 # text_utils - Funciones de procesamiento de texto extraídas para modularización  
 from .text_utils import (
     _fix_mojibake_text,
+    _aplicar_reemplazos_regex,
     normalizar_texto,
     normalizar_columnas_texto
 )
