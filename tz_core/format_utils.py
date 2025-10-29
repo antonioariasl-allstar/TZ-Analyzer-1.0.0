@@ -8,7 +8,8 @@ tz_core.format_utils - UTILIDADES DE FORMATEO DE VALORES
 
 RESPONSABILIDADES ESPECÍFICAS:
 - _formatear_valor_para_burbuja(): Formateo específico para burbujas KML/HTML
-- armar_descripcion_compacta(): Construcción de descripciones HTML para KML (NUEVA - 29-oct-2025)
+- armar_descripcion_compacta(): Construcción de descripciones HTML para KML (29-oct-2025)
+- agregar_bloque(): Helper para construcción de bloques HTML formatados (29-oct-2025)
 - Reglas por tipo de columna: lat/long (decimales), azimut/lac (enteros), etc.
 - Manejo de casos especiales: IMEI (sin notación científica), duración (HH:MM:SS)
 
@@ -16,8 +17,8 @@ DEPENDENCIAS:
 - re: Expresiones regulares para validación y formateo
 - tz_core.validation_utils: Para función _a_float()
 
-MIGRADO DESDE: script_principal_bitacoras_refactory.py líneas 1311-1375, 933-1100  
-FECHA MIGRACIÓN: 27 octubre 2025 (formateo), 29 octubre 2025 (descripción compacta)
+MIGRADO DESDE: script_principal_bitacoras_refactory.py líneas 1311-1375, 933-1100, 938-974  
+FECHA MIGRACIÓN: 27 octubre 2025 (formateo), 29 octubre 2025 (descripción compacta, agregar_bloque)
 """
 
 import re
@@ -304,3 +305,53 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
 
 # Alias para compatibilidad
 _armar_descripcion_compacta = armar_descripcion_compacta
+
+
+def agregar_bloque(partes: list, fila: dict, pares: list) -> None:
+    """
+    Construye un bloque HTML para la burbuja descriptiva del KML a partir de
+    una lista de pares (etiqueta, columna) y los valores de la fila.
+    
+    MIGRADA DESDE: script_principal_bitacoras_refactory.py líneas 938-974
+    
+    Args:
+        partes: Lista donde se añadirán las líneas HTML generadas
+        fila: Diccionario con los datos de la fila (row.to_dict())
+        pares: Lista de tuplas (etiqueta_display, nombre_columna) a procesar
+    
+    Returns:
+        None (modifica partes in-place)
+    """
+    # Import de validation_utils
+    try:
+        from .validation_utils import tiene_valor
+    except ImportError:
+        def tiene_valor(v):
+            return v is not None and str(v).strip() not in ("", "nan", "None", "—")
+    
+    bloque = []
+    for etiqueta, col in pares:
+        val = fila.get(col, None)
+        if tiene_valor(val):
+            # Caso especial: Interacción + número de contacto en la misma línea (si existe)
+            if col == "interaccion":
+                val_fmt = _formatear_valor_para_burbuja(col, val)
+                extra = ""
+                telc = fila.get("tel_contacto", None)
+                if tiene_valor(telc):
+                    extra = f" — {str(telc).strip()}"
+                bloque.append(f"<b>{etiqueta}:</b> {val_fmt}{extra}<br>")
+                continue
+
+            # Resto de columnas (con formateo)
+            val_fmt = _formatear_valor_para_burbuja(col, val)
+            if val_fmt is None or (isinstance(val_fmt, str) and not val_fmt.strip()):
+                continue
+            bloque.append(f"<b>{etiqueta}:</b> {val_fmt}<br>")
+    if bloque:
+        partes.extend(bloque)
+        partes.append("<hr>")
+
+
+# Alias para compatibilidad
+_agregar_bloque = agregar_bloque

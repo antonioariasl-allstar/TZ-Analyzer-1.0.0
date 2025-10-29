@@ -936,40 +936,9 @@ def _armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcc
     return armar_descripcion_compacta(campos, count_azimut, suprimir_direccion_si_igual, CONFIG, HR_COMPACT)
 
 def _agregar_bloque(partes, fila, pares):
-    """
-    Construye un bloque HTML para la burbuja descriptiva del KML a partir de
-    una lista de pares (etiqueta, columna) y los valores de la fila.
-    
-    Args:
-        partes: Lista donde se añadirán las líneas HTML generadas
-        fila: Diccionario con los datos de la fila (row.to_dict())
-        pares: Lista de tuplas (etiqueta_display, nombre_columna) a procesar
-    
-    Returns:
-        None (modifica partes in-place)
-    """
-    bloque = []
-    for etiqueta, col in pares:
-        val = fila.get(col, None)
-        if _tiene_valor(val):
-            # Caso especial: Interacción + número de contacto en la misma línea (si existe)
-            if col == "interaccion":
-                val_fmt = _formatear_valor_para_burbuja(col, val)
-                extra = ""
-                telc = fila.get("tel_contacto", None)
-                if _tiene_valor(telc):
-                    extra = f" — {str(telc).strip()}"
-                bloque.append(f"<b>{etiqueta}:</b> {val_fmt}{extra}<br>")
-                continue
-
-            # Resto de columnas (con formateo)
-            val_fmt = _formatear_valor_para_burbuja(col, val)
-            if val_fmt is None or (isinstance(val_fmt, str) and not val_fmt.strip()):
-                continue
-            bloque.append(f"<b>{etiqueta}:</b> {val_fmt}<br>")
-    if bloque:
-        partes.extend(bloque)
-        partes.append("<hr>")
+    """Wrapper de compatibilidad - usa tz_core.format_utils.agregar_bloque"""
+    from tz_core.format_utils import agregar_bloque
+    return agregar_bloque(partes, fila, pares)
 
 # =========================
 # Generación de KML (usa CONFIG)

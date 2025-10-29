@@ -29,7 +29,8 @@ tz_core/
 
 ### 🔍 ANÁLISIS DE PROGRESO
 - **Base sólida:** 12 módulos funcionando (antes 6)
-- **Última extracción:** `_armar_descripcion_compacta()` → `format_utils.py` (29-oct-2025)
+- **Última extracción:** `_agregar_bloque()` → `format_utils.py` (29-oct-2025)
+- **Testing exhaustivo:** 7 tests pasados en última extracción
 - **Metodología:** Extracción modular incremental con wrappers de compatibilidad
 - **Tendencia:** Modularización progresiva y controlada
 - **Próximo objetivo:** Continuar extracción de funciones de bajo riesgo
