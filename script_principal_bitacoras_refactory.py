@@ -187,6 +187,11 @@ def bootstrap_config() -> None:
 # ⚡🚨🔴 FIN ZONA DE PELIGRO EXTREMO 🔴🚨⚡
 
 MANUAL_QC_MAPPING = True
+# pkg: tz_cli
+# layer: ui
+# TODO extract → tz_cli/wizard_mapper.py (Sprint 4 - ZONA PELIGROSA)
+# Status: REQUIRES SPECIAL HANDLING - DO NOT MOVE UNTIL SPRINT 4
+# ⚡ FUNCIÓN DE RIESGO EXTREMO ⚡
 def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
     """
     ⚡ FUNCIÓN DE RIESGO EXTREMO ⚡
@@ -659,9 +664,17 @@ except Exception:
     # Fallback mínimo (no rompe el flujo)
     from datetime import datetime
 
+    # pkg: tz_services
+    # layer: validation
+    # TODO extract → tz_services/data_validator.py (Sprint 1)
+    # Status: fallback validation functions
     def validar_columnas(dataframe, columnas_esperadas):
         return [col for col in columnas_esperadas if col not in dataframe.columns]
 
+    # pkg: tz_services
+    # layer: validation  
+    # TODO extract → tz_services/data_validator.py (Sprint 1)
+    # Status: fallback validation core function
     def validar_datos(df, columnas_esenciales):
         errores = []
         faltantes = validar_columnas(df, columnas_esenciales)
@@ -728,6 +741,10 @@ except Exception:
 # Configuración externa
 # =========================
 # --- ANTI-COLISIONES DE COLUMNAS (fusiona duplicadas por primer valor no vacío) ---
+# pkg: tz_services
+# layer: core
+# TODO extract → tz_services/dataframe_tools.py (Sprint 1)
+# Status: candidate for dedupe_columns() facade
 def _dedupe_columns(df):
     from collections import Counter
 
@@ -777,9 +794,18 @@ RANGOS_SV = RANGOS_SV_MODULAR
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 
+# pkg: tz_io
+# layer: io
+# TODO extract → tz_io/hash_utils.py (Sprint 1)  
+# Status: candidate for hash_outputs() facade
 def _escribe_hashes_txt(dest_path: str, pares: list[tuple[str, str]]):
     """Wrapper de compatibilidad - usa tz_core.file_utils.escribe_hashes_txt"""
     return escribe_hashes_txt(dest_path, pares)
+
+# pkg: tz_io
+# layer: io  
+# TODO extract → tz_io/branding_utils.py (Sprint 1)
+# Status: candidate for copy_branding() facade
 def _copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> str | None:
     """Wrapper de compatibilidad - usa tz_core.file_utils.copiar_logo_a_salida"""
     return copiar_logo_a_salida(logo_src, carpeta_salida)
@@ -923,6 +949,10 @@ def _agregar_bloque(partes, fila, pares):
 # =========================
 # Generación de KML (usa CONFIG)
 # =========================
+# pkg: tz_kml
+# layer: core
+# TODO extract → tz_kml/feature_creator.py (Sprint 2)
+# Status: candidate for build_kml() internal helper
 def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_float, CONFIG, azimuts_extra=None):
     # --- Sanitizar descripción: omitir campos vacíos o marcadores “sin valor” ---
     # Afecta todas las capas que llamen a _crear_feature_kml (por_rango_horario, top_3_*, etc.)
@@ -1139,6 +1169,10 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
                 pol2.style = _REUSABLE_STYLES["cone"]  # luego bajamos opacidad si querés
 
 # === SECCIÓN: GENERACIÓN KML/KMZ (placemarks, carpetas, top_n, estilos) ===
+# pkg: tz_kml
+# layer: core
+# TODO extract → tz_kml/generator.py (Sprint 2)
+# Status: candidate for build_kml() facade
 def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
     """Genera KML/KMZ a partir del DataFrame procesado según la configuración activa."""
     # Validación defensiva de entrada
@@ -2500,7 +2534,10 @@ def etiqueta_rango(hora, rangos_cfg: list[dict], default: str = "Sin rango") -> 
     return etiqueta_modular(hora, rangos_cfg, default)
 # === FIN RANGOS-UTILS ===
 
-
+# pkg: tz_services  
+# layer: presentation
+# TODO extract → tz_services/report_generator.py (Sprint 1)
+# Status: candidate for generate_html() facade
 def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str, nombre_salida: str, hoja: str | None = None, nombre_bitacora: str | None = None) -> str:
     """
     Genera un informe HTML sencillo (portada + KPIs + enlaces) en la misma carpeta del KML.
@@ -5446,6 +5483,10 @@ def run_tz_analysis(
 # === RUN_TZ_ANALYSIS (FIN) ====================================================
 
 # === SECCIÓN: MENÚ PRINCIPAL / ENTRYPOINT (opciones 1/2/3) ===
+# pkg: tz_cli
+# layer: orchestration
+# TODO extract → tz_cli/main_menu.py (Sprint 3)
+# Status: candidate for run_cli() facade
 def main():
     """Muestra el menú principal y orquesta el flujo de opciones (1: completo, 2: por tiempo, 3: manual)."""
     global CONFIG
@@ -7303,6 +7344,126 @@ def _solicitar_overrides_topn(config):
     """Wrapper de compatibilidad - usa tz_core.ui_utils.solicitar_overrides_topn"""
     from tz_core.ui_utils import solicitar_overrides_topn
     return solicitar_overrides_topn(config)
+
+# ===================================================================
+# === FACHADAS PARA ARQUITECTURA MODULAR COMPLETA (SPRINT 0) ===
+# ===================================================================
+# Estas fachadas preparan los puntos de corte para futura extracción
+# según el diagrama de arquitectura modular objetivo.
+# Status: Sprint 0 - preparación sin cambio de lógica
+
+def build_kml(df, cfg, out_dir, flat=False):
+    """
+    Fachada para generación KML/KMZ - destino tz_kml package (Sprint 2)
+    
+    Punto de entrada único para toda la funcionalidad KML:
+    - Generación de puntos y features
+    - Estilos y carpetas organizadas
+    - Exportación KML/KMZ
+    
+    Args:
+        df: DataFrame con datos procesados
+        cfg: CONFIG dictionary con configuración
+        out_dir: Directorio de salida
+        flat: Si True, estructura plana sin carpetas
+        
+    Returns:
+        tuple: (archivo_kml_path, puntos_procesados)
+    """
+    # Internamente usa la implementación actual
+    import os
+    archivo_kml = os.path.join(out_dir, "output.kml")
+    return generar_kml(df, archivo_kml, flat)
+
+def generate_html(df, cfg, out_dir, kml_file, sheet_name=None, bitacora_name=None):
+    """
+    Fachada para generación de reportes HTML - destino tz_services package (Sprint 1)
+    
+    Punto de entrada único para reportes HTML:
+    - KPIs y métricas
+    - Tablas de datos
+    - Enlaces a archivos KML/KMZ
+    
+    Args:
+        df: DataFrame con datos procesados
+        cfg: CONFIG dictionary con configuración  
+        out_dir: Directorio de salida
+        kml_file: Ruta al archivo KML generado
+        sheet_name: Nombre de la hoja Excel (opcional)
+        bitacora_name: Nombre de la bitácora (opcional)
+        
+    Returns:
+        str: Ruta del archivo HTML generado
+    """
+    # Internamente usa la implementación actual
+    return generar_informe_html(df, kml_file, out_dir, "reporte", sheet_name, bitacora_name)
+
+def hash_outputs(out_dir):
+    """
+    Fachada para generación de hashes - destino tz_io package (Sprint 1)
+    
+    Punto de entrada único para hashing de archivos:
+    - Calcula hashes de archivos generados
+    - Guarda archivo de checksums
+    - Verificación de integridad
+    
+    Args:
+        out_dir: Directorio con archivos a hashear
+        
+    Returns:
+        str: Ruta del archivo de hashes generado
+    """
+    # Internamente usa la implementación actual
+    import os
+    from tz_core.utils import sha256_de_archivo
+    
+    hash_file = os.path.join(out_dir, "hashes.txt")
+    pares = []
+    
+    # Buscar archivos típicos generados
+    for filename in ["output.html", "output.kml", "output.kmz"]:
+        filepath = os.path.join(out_dir, filename)
+        if os.path.exists(filepath):
+            hash_val = sha256_de_archivo(filepath)
+            pares.append((filename, hash_val))
+    
+    _escribe_hashes_txt(hash_file, pares)
+    return hash_file
+
+def dedupe_columns(df):
+    """
+    Fachada para deduplicación de columnas - destino tz_services package (Sprint 1)
+    
+    Punto de entrada único para limpieza de DataFrames:
+    - Eliminación de columnas duplicadas
+    - Sanitización de nombres
+    - Normalización de estructura
+    
+    Args:
+        df: DataFrame a procesar
+        
+    Returns:
+        DataFrame: DataFrame con columnas deduplicadas
+    """
+    # Internamente usa la implementación actual
+    return _dedupe_columns(df)
+
+def run_cli():
+    """
+    Fachada para interfaz CLI principal - destino tz_cli package (Sprint 3)
+    
+    Punto de entrada único para la interfaz de usuario:
+    - Menú principal de opciones
+    - Flujo de entrada de datos
+    - Orquestación de procesos
+    
+    Returns:
+        dict: Resultado de la ejecución con rutas de archivos generados
+    """
+    # Internamente usa la implementación actual
+    return main()
+
+# === FIN FACHADAS ===
 
 if __name__ == "__main__":
     bootstrap_config()
