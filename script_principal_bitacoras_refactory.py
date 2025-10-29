@@ -6242,19 +6242,28 @@ def main():
                                 # === METADATOS TÉCNICOS — FIN ===============================================
 
                                 # === COPIAR LOGO A CARPETA DE SALIDA (INICIO) ================================
+                                # FACADE Sprint 1.2: Consolidado (duplicado L771→tz_core)
                                 def _copiar_logo_a_salida(logo_path: str, dest_dir: str, dest_name: str = "logo_tz.png"):
-                                    """
-                                    Copia el logo a la carpeta de salida con nombre 'logo_tz.png'.
-                                    Si no existe o falla, no rompe nada.
-                                    """
+                                    """FACADE Sprint 1.2: Redirige a tz_core.file_utils con adaptación de signature"""
+                                    from tz_core.file_utils import copiar_logo_a_salida as _impl
                                     try:
                                         if not logo_path or not dest_dir:
                                             return
-                                        # Aceptamos rutas con / o con \\ (Windows)
-                                        if not os.path.exists(logo_path):
-                                            return
-                                        os.makedirs(dest_dir, exist_ok=True)
-                                        shutil.copyfile(logo_path, os.path.join(dest_dir, dest_name))
+                                        # Adaptar signature: el original retorna basename, este no retorna nada
+                                        # Crear archivo temporal con el nombre deseado si difiere del original
+                                        if dest_name != os.path.basename(logo_path):
+                                            import tempfile, shutil
+                                            with tempfile.NamedTemporaryFile(suffix=f".{dest_name.split('.')[-1]}", delete=False) as tmp:
+                                                shutil.copy2(logo_path, tmp.name)
+                                                _impl(tmp.name, dest_dir)
+                                                # Renombrar al nombre deseado
+                                                os.rename(
+                                                    os.path.join(dest_dir, os.path.basename(tmp.name)),
+                                                    os.path.join(dest_dir, dest_name)
+                                                )
+                                                os.unlink(tmp.name)
+                                        else:
+                                            _impl(logo_path, dest_dir)
                                     except Exception:
                                         pass
                                 # === COPIAR LOGO A CARPETA DE SALIDA (FIN) ===================================
