@@ -664,46 +664,17 @@ except Exception:
     # layer: validation
     # pkg: tz_core | rol: data_validation | cut: L668-L670 | todo: Extract to core validator
     def validar_columnas(dataframe, columnas_esperadas):
-        return [col for col in columnas_esperadas if col not in dataframe.columns]
+        # FACADE Sprint 1: Redirige a tz_services.validation
+        from tz_services.validation import validar_columnas as _impl
+        return _impl(dataframe, columnas_esperadas)
 
     # pkg: tz_services
     # pkg: tz_core | rol: data_validation | cut: L674-L700 | todo: Extract to core validator
     def validar_datos(df, columnas_esenciales):
-        errores = []
-        faltantes = validar_columnas(df, columnas_esenciales)
-        if faltantes:
-            errores.append(f"[FALLBACK] Faltan columnas esenciales: {', '.join(faltantes)}")
-
-        # Garantizar fecha/hora como texto tolerante (sin convertir si no hay)
-        if 'fecha' in df.columns:
-            try:
-                df['fecha'] = pd.to_datetime(df['fecha'], errors='coerce', dayfirst=True)
-                mask = df['fecha'].isna()
-                df.loc[~mask, 'fecha'] = df.loc[~mask, 'fecha'].dt.strftime("%d/%m/%Y")
-                df.loc[mask, 'fecha'] = "Sin Inf."
-            except Exception:
-                df['fecha'] = "Sin Inf."
-
-        if 'hora' in df.columns:
-            try:
-                horas = pd.to_datetime(df['hora'].astype(str).str[:8], format="%H:%M:%S", errors="coerce")
-                maskh = horas.isna()
-                df.loc[~maskh, 'hora'] = horas.dt.strftime("%H:%M:%S")
-                df.loc[maskh, 'hora'] = "Sin Inf."
-            except Exception:
-                df['hora'] = "Sin Inf."
-
-        # Coordenadas tolerantes
-        for c in ('lat', 'long'):
-            if c in df.columns:
-                df[c] = pd.to_numeric(df[c], errors='coerce')
-        if 'lat' in df.columns and 'long' in df.columns:
-            maskc = df['lat'].isna() | df['long'].isna()
-            if maskc.any():
-                errores.append(f"[FALLBACK] {maskc.sum()} filas con coordenadas inválidas.")
-                df[['lat', 'long']] = df[['lat', 'long']].astype(object)
-                df.loc[maskc, ['lat', 'long']] = "Sin Inf."
-        return df, errores
+        # FACADE Sprint 1: Redirige a tz_services.validation  
+        # Preserva signature original: (df, errores)
+        from tz_services.validation import validar_datos as _impl
+        return _impl(df, columnas_esenciales)
 
     def guardar_errores(errores, carpeta_salida, nombre_base):
         os.makedirs(carpeta_salida, exist_ok=True)
@@ -1809,16 +1780,9 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
         _bbox_cfg = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
 
     def _valid_latlon_vals(lt, lg):
-        """True si lat/lon son numéricas, no NaN, no (0,0) y dentro del bbox SV."""
-        try:
-            lt = float(lt); lg = float(lg)
-            if np.isnan(lt) or np.isnan(lg):
-                return False
-            if abs(lt) < 1e-9 and abs(lg) < 1e-9:
-                return False
-            return (_bbox_cfg["lat_min"] <= lt <= _bbox_cfg["lat_max"]) and (_bbox_cfg["lon_min"] <= lg <= _bbox_cfg["lon_max"])
-        except Exception:
-            return False
+        """FACADE Sprint 1: Redirige a tz_services.validation"""
+        from tz_services.validation import valid_latlon_vals as _impl
+        return _impl(lt, lg)
 
     def _es_valida_latlon_row(row):
         """Versión por fila: usa nombres de columnas detectados arriba."""
