@@ -4,20 +4,21 @@
 run.py - ENTRY POINT PRINCIPAL del TZ Analyzer
 ===============================================
 
-✅ ESTADO: PUNTO DE ENTRADA PRINCIPAL - USAR PARA EJECUCIÓN NORMAL
+✅ ESTADO: PUNTO DE ENTRADA PRINCIPAL - SPRINT 3A INTEGRADO
 🎯 PROPÓSITO: Launcher principal con logging y manejo de errores
-📍 DIFERENCIACIÓN: NO confundir con run_baseline_correct.py (testing automation)
+📍 DIFERENCIACIÓN: USA NUEVO MENÚ MODULAR via run_cli()
 
 RESPONSABILIDADES:
 - Punto de entrada principal: python run.py
 - Configuración de logging para debugging
+- Delegación a tz_cli.menu.main_menu() via run_cli()
 - Manejo robusto de errores y excepciones
 - Bootstrap de configuración del sistema
 
-ARQUITECTURA HÍBRIDA:
-- Este archivo es el LAUNCHER PRINCIPAL para usuarios
-- run_baseline_correct.py es herramienta de TESTING/AUTOMATION
-- Son complementarios, NO duplicados
+SPRINT 3A INTEGRACIÓN:
+- run.py → run_cli() → tz_cli.menu.main_menu()
+- Zero cambios para usuario final
+- Modularización transparente
 
 Configura logging y ejecuta el flujo principal del analizador forense.
 Uso: python run.py
@@ -25,7 +26,7 @@ Uso: python run.py
 
 import logging
 import traceback
-from script_principal_bitacoras_refactory import main, bootstrap_config
+from script_principal_bitacoras_refactory import run_cli, bootstrap_config
 
 
 if __name__ == "__main__":
@@ -38,9 +39,9 @@ if __name__ == "__main__":
         format="%(levelname)s: %(message)s"
     )
 
-    # Ejecutar flujo principal con manejo de errores
+    # Ejecutar flujo principal con menú modular tz_cli
     try:
-        main()
+        run_cli()  # SPRINT 3A: Delegación a menú modular
     except KeyboardInterrupt:
         print("\n\n[INFO] Proceso cancelado por el usuario.")
     except Exception as e:

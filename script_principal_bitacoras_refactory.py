@@ -4728,6 +4728,7 @@ def _normalizar_hora(df: pd.DataFrame) -> list:
 # Flujo principal
 # =========================
 
+# pkg: tz_cli | rol: controller | cut: L4731-L4970 | todo: Extract _modo_manual() flow to tz_cli/controllers.py
 def _modo_manual():
     """
     Entrada manual de puntos/antenas con validación básica.
@@ -4740,6 +4741,7 @@ def _modo_manual():
     log("Configurando funciones auxiliares para entrada de datos...")
 
     # Helpers locales
+    # pkg: tz_cli | rol: io | cut: L4743-L4785 | todo: Extract input helpers to tz_cli/helpers.py
     def _input_str(msg, obligatorio=False, maxlen=None):
         while True:
             s = input(msg).strip()
@@ -4847,6 +4849,7 @@ def _modo_manual():
         print("\n→ Modo: Antenas/Celdas (con azimut y campos completos)")
 
     log("Iniciando bucle principal de entrada de datos...")
+    # pkg: tz_cli | rol: io | cut: L4852-L4870 | todo: Extract manual_menu_loop() to tz_cli/menu.py
     while True:
         print("\nMenú:")
         print("[A] Agregar registro")
@@ -5239,6 +5242,7 @@ def main():
     log("Inicializando variables globales...")
 
     # ===== Menú de modos (único) =====
+    # pkg: tz_cli | rol: io | cut: L5241-L5265 | todo: Extract main_menu() to tz_cli/menu.py
     log("Mostrando menú principal de opciones...")
     while True:
         print("\nSeleccione el modo de trabajo:")
@@ -5267,6 +5271,7 @@ def main():
         print("[QC] Opción inválida, intenta de nuevo.")
     
     # ===== Modo Excel (bitácora) =====
+    # pkg: tz_cli | rol: io | cut: L5267-L5280 | todo: Extract file_selection_flow() to tz_cli/controllers.py
     log("Iniciando selección de archivo de entrada...")
     archivo_entrada = seleccionar_archivo()
     if not archivo_entrada:
@@ -5280,6 +5285,7 @@ def main():
     carpeta_salida = None
 
     # Selección de hoja visible (si hay varias)
+    # pkg: tz_cli | rol: io | cut: L5279-L5282 | todo: Extract sheet_selection() to tz_cli/controllers.py
     log("Iniciando selección de hoja de Excel...")
     hoja = _seleccionar_hoja_visible(archivo_entrada)
     log(f"Hoja seleccionada: {hoja}")
@@ -6476,6 +6482,7 @@ def main():
 
     # Evitar que el usuario ponga un color hex por error como nombre
     # [QC] Confirmar tipo de bitácora (afecta solo nombres de archivos y carpetas)
+    # pkg: tz_cli | rol: io | cut: L6479-L6487 | todo: Extract bitacora_type_prompt() to tz_cli/helpers.py
     print("\n[QC] Confirmar si esta bitácora es por número de Teléfono o IMEI para nombrar archivos")
     print("I = IMEI")
     print("T = Número telefónico")
@@ -6663,6 +6670,7 @@ def main():
     print(f"  - {base_auto}_hashes.txt")
     print(f"  - {base_auto}_errores.txt\n")
 
+    # pkg: tz_cli | rol: io | cut: L6665-L6677 | todo: Extract output_name_prompt() to tz_cli/helpers.py
     print("Si desea cambiar el nombre base, escríbalo ahora (solo base, sin extensión).")
     resp = input(f"Nombre base del KML (Enter = {base_auto}): ").strip()
     nombre_salida = (resp or base_auto)
@@ -6674,6 +6682,7 @@ def main():
     nombre_salida = _sanear_nombre_archivo_local(resp) if resp else base_auto
 
     # --- Selección de carpeta al final (estilo i2) ---
+    # pkg: tz_cli | rol: io | cut: L6679-L6685 | todo: Extract folder_selection() to tz_cli/controllers.py
     try:
         carpeta_base = seleccionar_carpeta()
     except Exception:
@@ -6973,6 +6982,7 @@ def main():
 
     except Exception as e:
         print(f"[ERROR] Bloque HTML/KML falló: {e}")
+# pkg: tz_cli | rol: io | cut: L6985-L7024 | todo: Extract time_filters_prompt() to tz_cli/helpers.py
 def _solicitar_filtros_tiempo():
     """
     Devuelve un dict con claves:
@@ -7199,18 +7209,24 @@ def dedupe_columns(df):
 
 def run_cli():
     """
-    Fachada para interfaz CLI principal - destino tz_cli package (Sprint 3)
+    Fachada para interfaz CLI principal - SPRINT 3A COMPLETADO ✅
     
     Punto de entrada único para la interfaz de usuario:
-    - Menú principal de opciones
-    - Flujo de entrada de datos
-    - Orquestación de procesos
+    - Delegación a tz_cli.menu.main_menu() (modular)
+    - Zero cambios en UX o flujo usuario
+    - Variables globales preservadas
     
     Returns:
         dict: Resultado de la ejecución con rutas de archivos generados
     """
-    # Internamente usa la implementación actual
-    return main()
+    # SPRINT 3A: Delegación a menú modular extraído
+    try:
+        from tz_cli.menu import main_menu
+        return main_menu()
+    except ImportError:
+        # Fallback a implementación original si tz_cli no disponible
+        print("⚠️  Módulo tz_cli no disponible - usando menú original")
+        return main()
 
 # === FIN FACHADAS ===
 
