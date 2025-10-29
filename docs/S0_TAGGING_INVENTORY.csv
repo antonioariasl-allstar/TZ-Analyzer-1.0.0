@@ -1,0 +1,28 @@
+func,paquete,rol,cut_start,cut_end,depende_de,afecta_a,notas
+_hex_to_kml_color,tz_kml,view,L901,L921,CONFIG,KML styles,Category: html_kml
+_crear_feature_kml,tz_kml,view,L956,L976,simplekml|CONFIG,KML features,Category: html_kml
+compactar_nombre_antena_kml,tz_kml,view,L962,L982,CONFIG,KML names,Category: html_kml
+_fix_id_line,tz_kml,view,L1011,L1031,regex,KML IDs,Category: html_kml
+generar_kml,tz_kml,view,L1172,L1192,pandas|simplekml,Main KML generator,Category: html_kml
+_wizard_qc_mapeo,tz_cli,view,L195,L215,pandas|CONFIG,Column mapping,Category: cli_menu
+_menu_horizontal,tz_cli,view,L207,L227,none,Menu display,Category: cli_menu
+_menu_principal_mock,tz_cli,view,L5357,L5377,builtins,Menu mocking,Category: cli_menu
+main,tz_cli,view,L5486,L5506,CONFIG|globals,Main entry point,Category: cli_menu
+_modo_manual,tz_cli,view,L5699,L5719,CONFIG,Manual input mode,Category: cli_menu
+obtener_carpeta_fecha,tz_services,core,L1348,L1368,datetime,Date folder logic,Category: time_services
+_to_datetime_series,tz_services,core,L1732,L1752,pandas,Datetime conversion,Category: time_services
+_fmt_hora,tz_services,core,L2038,L2058,pandas,Time formatting,Category: time_services
+_fmt_fecha,tz_services,core,L2095,L2115,pandas,Date formatting,Category: time_services
+_build_heatmap_data,tz_services,core,L2141,L2161,pandas,Heatmap data prep,Category: time_services
+guardar_errores,tz_utils,io,L715,L735,pandas|os,Error file output,Category: io_ops
+_file_hashes,tz_utils,io,L4870,L4890,hashlib|os,File hash calculation,Category: io_ops
+_snapshot,tz_utils,io,L5412,L5432,os|shutil,File snapshot,Category: io_ops
+_zip_output,tz_utils,io,L5447,L5467,zipfile,Archive creation,Category: io_ops
+_hhmmss_to_time_or_none,tz_legacy,wrapper,L115,L135,tz_core.time_utils,Time conversion wrapper,Category: wrappers
+_en_rango,tz_legacy,wrapper,L119,L139,tz_core.time_utils,Range check wrapper,Category: wrappers
+_clasificar_rango_sv,tz_legacy,wrapper,L123,L143,tz_core.time_utils,Range classification wrapper,Category: wrappers
+bootstrap_config,tz_core,core,L135,L155,tz_core.config_manager,Config initialization,Category: core_logic
+_elige_col,tz_core,core,L236,L256,pandas,Column selection,Category: core_logic
+__iter__,tz_core,core,L593,L613,none,Iterator method,Category: core_logic
+__len__,tz_core,core,L595,L615,none,Length method,Category: core_logic
+__getitem__,tz_core,core,L597,L617,none,Item getter method,Category: core_logic

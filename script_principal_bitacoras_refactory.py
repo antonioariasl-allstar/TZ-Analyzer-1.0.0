@@ -187,11 +187,7 @@ def bootstrap_config() -> None:
 # ⚡🚨🔴 FIN ZONA DE PELIGRO EXTREMO 🔴🚨⚡
 
 MANUAL_QC_MAPPING = True
-# pkg: tz_cli
-# layer: ui
-# TODO extract → tz_cli/wizard_mapper.py (Sprint 4 - ZONA PELIGROSA)
-# Status: REQUIRES SPECIAL HANDLING - DO NOT MOVE UNTIL SPRINT 4
-# ⚡ FUNCIÓN DE RIESGO EXTREMO ⚡
+# pkg: tz_cli | rol: wizard_interface | cut: L192-L577 | todo: Extract wizard mapper - DANGER ZONE
 def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
     """
     ⚡ FUNCIÓN DE RIESGO EXTREMO ⚡
@@ -666,15 +662,12 @@ except Exception:
 
     # pkg: tz_services
     # layer: validation
-    # TODO extract → tz_services/data_validator.py (Sprint 1)
-    # Status: fallback validation functions
+    # pkg: tz_core | rol: data_validation | cut: L668-L670 | todo: Extract to core validator
     def validar_columnas(dataframe, columnas_esperadas):
         return [col for col in columnas_esperadas if col not in dataframe.columns]
 
     # pkg: tz_services
-    # layer: validation  
-    # TODO extract → tz_services/data_validator.py (Sprint 1)
-    # Status: fallback validation core function
+    # pkg: tz_core | rol: data_validation | cut: L674-L700 | todo: Extract to core validator
     def validar_datos(df, columnas_esenciales):
         errores = []
         faltantes = validar_columnas(df, columnas_esenciales)
@@ -728,11 +721,12 @@ except Exception:
 try:
     from utilidades import seleccionar_archivo, seleccionar_carpeta
 except Exception:
-    # Fallback por consola (sin Tk)
+    # pkg: tz_io | rol: file_selector | cut: L725-L727 | todo: Extract file dialog fallback
     def seleccionar_archivo():
         ruta = input("Ruta del archivo Excel (.xlsx/.xls): ").strip('"').strip()
         return ruta if ruta else None
 
+    # pkg: tz_io | rol: file_selector | cut: L729-L731 | todo: Extract folder dialog fallback
     def seleccionar_carpeta():
         ruta = input("Ruta de la carpeta de salida (Enter = actual): ").strip('"').strip()
         return ruta if ruta else os.getcwd()
@@ -741,10 +735,7 @@ except Exception:
 # Configuración externa
 # =========================
 # --- ANTI-COLISIONES DE COLUMNAS (fusiona duplicadas por primer valor no vacío) ---
-# pkg: tz_services
-# layer: core
-# TODO extract → tz_services/dataframe_tools.py (Sprint 1)
-# Status: candidate for dedupe_columns() facade
+# pkg: tz_services | rol: core | cut: L744-L784 | todo: Extract dataframe deduplicator
 def _dedupe_columns(df):
     from collections import Counter
 
@@ -897,7 +888,7 @@ def _solicitar_color_tema(CONFIG):
 # =========================
 # Geometría / KML helpers
 # =========================
-# --- Helpers de color KML (aabbggrr) desde #RRGGBB ---
+# pkg: tz_kml | rol: style_generator | cut: L891-L895 | todo: Remove legacy wrapper
 def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
     """MIGRADA A tz_core.color_utils - usar import desde allí"""
     from tz_core.color_utils import hex_to_kml_color
@@ -949,16 +940,13 @@ def _agregar_bloque(partes, fila, pares):
 # =========================
 # Generación de KML (usa CONFIG)
 # =========================
-# pkg: tz_kml
-# layer: core
-# TODO extract → tz_kml/feature_creator.py (Sprint 2)
-# Status: candidate for build_kml() internal helper
+# pkg: tz_kml | rol: feature_builder | cut: L943-L1020 | todo: Extract KML feature creator
 def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_float, CONFIG, azimuts_extra=None):
     # --- Sanitizar descripción: omitir campos vacíos o marcadores “sin valor” ---
     # Afecta todas las capas que llamen a _crear_feature_kml (por_rango_horario, top_3_*, etc.)
     try:
 
-        # --- Compactación efectiva para el campo 'name' en KML/KMZ ---
+        # pkg: tz_kml | rol: name_formatter | cut: L949-L970 | todo: Extract name compactor
         def compactar_nombre_antena_kml(nombre: str) -> str:
             """
             Compacta el nombre de antena para el campo 'name' en KML/KMZ.
@@ -1169,10 +1157,7 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
                 pol2.style = _REUSABLE_STYLES["cone"]  # luego bajamos opacidad si querés
 
 # === SECCIÓN: GENERACIÓN KML/KMZ (placemarks, carpetas, top_n, estilos) ===
-# pkg: tz_kml
-# layer: core
-# TODO extract → tz_kml/generator.py (Sprint 2)
-# Status: candidate for build_kml() facade
+# pkg: tz_kml | rol: view | cut: L1172-L1313 | todo: Extract main KML generator
 def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
     """Genera KML/KMZ a partir del DataFrame procesado según la configuración activa."""
     # Validación defensiva de entrada
@@ -2014,6 +1999,7 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
             thead_cols.append("celda")
         out.append('<thead><tr>' + ''.join(f'<th>{c}</th>' for c in thead_cols) + '</tr></thead><tbody>')
 
+        # pkg: tz_kml | rol: coordinate_converter | cut: L2001-L2010 | todo: Extract coordinate formatter
         def _fmt_coord(val):
             try:
                 if val is None:
@@ -4867,6 +4853,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     try:
         import hashlib
 
+        # pkg: tz_io | rol: integrity_checker | cut: L4856-L4870 | todo: Extract file hasher
         def _file_hashes(path: str) -> tuple[str, str, int]:
             md5 = hashlib.md5()
             sha = hashlib.sha256()
@@ -5483,10 +5470,7 @@ def run_tz_analysis(
 # === RUN_TZ_ANALYSIS (FIN) ====================================================
 
 # === SECCIÓN: MENÚ PRINCIPAL / ENTRYPOINT (opciones 1/2/3) ===
-# pkg: tz_cli
-# layer: orchestration
-# TODO extract → tz_cli/main_menu.py (Sprint 3)
-# Status: candidate for run_cli() facade
+# pkg: tz_cli | rol: view | cut: L5481-L5553 | todo: Extract main CLI orchestrator
 def main():
     """Muestra el menú principal y orquesta el flujo de opciones (1: completo, 2: por tiempo, 3: manual)."""
     global CONFIG
