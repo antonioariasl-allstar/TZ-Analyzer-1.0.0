@@ -1941,7 +1941,6 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
         def _fmt_az(v):
             from tz_services.validation import fmt_azimuth as _impl
             return _impl(v)
-                return s if s else '—'
 
         def _fmt_hora(row):
             try:
