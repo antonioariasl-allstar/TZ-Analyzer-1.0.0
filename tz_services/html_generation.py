@@ -101,16 +101,25 @@ def build_logo_html(config: Optional[Dict[str, Any]] = None, script_dir: Optiona
 
 def render_heatmap_html_for_day(data: Dict[str, Any], config: Dict[str, Any]) -> str:
     """
-    Placeholder para render_heatmap_html_for_day.
+    Genera HTML de heatmap para un día específico.
     
-    Se implementará en Sprint 1 Fase 1.3
+    MIGRADO A: tz_services.heatmap.build_heatmap_html()
     
     Args:
-        data: Datos del heatmap
-        config: Configuración
+        data: Datos del heatmap con DataFrame
+        config: Configuración de columnas y parámetros
         
     Returns:
-        HTML del heatmap
+        HTML del heatmap con mapas Leaflet.js
+        
+    Migración Sprint 2B Fase 2B.2:
+    - Extracción completa de render_heatmap_html_for_day
+    - Fachada temporal build_heatmap_html()
+    - Template HTML modularizado
     """
-    # TODO: Implementar en Fase 1.3 (COMPLEX - 157 líneas)
-    return '<div class="heatmap-placeholder">Heatmap para día</div>'
+    from tz_services.heatmap import build_heatmap_html
+    
+    df_day = data.get("dataframe")
+    day_id = data.get("day_id", "unknown")
+    
+    return build_heatmap_html(df_day, day_id, config)

@@ -2111,140 +2111,33 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
 
             day_str = pd.to_datetime(d).strftime('%Y%m%d')
 
+            # pkg: tz_services | rol: view | cut: L2114-L2245 | todo: Extract heatmap generator
+            # DEPRECATED: Función extraída a tz_services.heatmap.build_heatmap_html()
+            # TODO Sprint 2B Fase 2B.4: Eliminar esta función después de validación
             def render_heatmap_html_for_day(df_day, day_id):
                 """
+                DEPRECATED: Migrado a tz_services.heatmap.build_heatmap_html()
+                
                 Genera un mapa que muestra TODAS las antenas únicas activadas en el día.
                 Cada antena se muestra como un marcador con su nombre y conteo de activaciones.
+                
+                DEPENDENCIES ANALYSIS:
+                - Variables de contexto: col_lat, col_long, col_antena, col_azimut, d
+                - Funciones externas: pd.to_datetime, json.dumps, log()
+                - Lógica crítica: agrupación de antenas, cálculo azimut principal
+                - Template HTML: Leaflet.js, estilos inline, scripts JS
+                
+                MIGRATED TO: tz_services.heatmap.build_heatmap_html()
                 """
-                antenas_dict = {}
-                total_filas = 0
-                if df_day is None or df_day.empty:
-                    return f"<div class='map-notice'>Sin datos de ubicación para {pd.to_datetime(d).strftime('%d/%m/%Y')}</div>"
-                
-                # Recolectar y agrupar TODAS las antenas únicas del día
-                for _, rr in df_day.iterrows():
-                    total_filas += 1
-                    try:
-                        lat = float(rr[col_lat])
-                        lon = float(rr[col_long])
-                    except Exception:
-                        continue
-                    
-                    # Agrupar por antena (usar lat/lon/nombre como clave única)
-                    if col_antena and col_antena in df_day.columns:
-                        name = str(rr.get(col_antena, ''))
-                        if name and name != 'nan' and name != '':
-                            # Usar coordenadas redondeadas para agrupar antenas muy cercanas
-                            lat_round = round(lat, 5)  # ~1 metro de precisión
-                            lon_round = round(lon, 5)
-                            key = (lat_round, lon_round, name)
-                            if key not in antenas_dict:
-                                antenas_dict[key] = {'lat': lat, 'lon': lon, 'name': name, 'count': 0, 'azs': {}}
-                            antenas_dict[key]['count'] += 1
-                            # Registrar azimut si existe
-                            if col_azimut and (col_azimut in df_day.columns):
-                                try:
-                                    azv = rr.get(col_azimut, None)
-                                    if azv is not None and str(azv).strip() != '':
-                                        azf = int(round(float(azv)))
-                                        antenas_dict[key]['azs'][azf] = antenas_dict[key]['azs'].get(azf, 0) + 1
-                                except Exception:
-                                    pass
+                # Redireccionar a función modular
+                from tz_services.heatmap import build_heatmap_html, create_heatmap_config
+                heatmap_config = create_heatmap_config(col_lat, col_long, col_antena, col_azimut, d)
+                return build_heatmap_html(df_day, day_id, heatmap_config, log)
 
-                if not antenas_dict:
-                    return f"<div class='map-notice'>Sin antenas válidas para mapear en {pd.to_datetime(d).strftime('%d/%m/%Y')} (se procesaron {total_filas} registros con coordenadas)</div>"
-
-                # Convertir TODAS las antenas a lista (sin limitar a top N)
-                # Convertir a lista y calcular azimut principal por antena
-                markers = []
-                for item in antenas_dict.values():
-                    azimut_principal = None
-                    if item.get('azs'):
-                        try:
-                            azimut_principal = max(item['azs'].items(), key=lambda t: t[1])[0]
-                        except Exception:
-                            azimut_principal = None
-                    markers.append({
-                        'lat': item['lat'], 'lon': item['lon'], 'name': item['name'], 'count': item['count'], 'azimut': azimut_principal
-                    })
-                num_antenas = len(markers)
-                
-                # Log para debugging
-                log(f"[DEBUG] Día {day_id}: {total_filas} registros procesados, {num_antenas} antenas únicas mapeadas")
-                for m in markers:
-                    log(f"  - {m['name']}: {m['count']} activaciones en ({m['lat']:.6f}, {m['lon']:.6f})")
-                
-                _markers_js = json.dumps(markers, ensure_ascii=False)
-                div_id = f"heatmap-{day_id}"
-
-                html = f'''<div style="margin:16px auto; max-width:95%; padding:0 20px;">
-    <p style="font-size:12px; color:#666; margin:4px 0 8px;">
-        Se muestran <strong>{num_antenas} antena(s)</strong> con coordenadas válidas de este día. 
-        Haz clic en los marcadores para ver detalles de cada ubicación.
-    </p>
-    <div id="wrap-{div_id}" class="tz-map-wrap" style="position:relative;">
-        <button class="tz-fs-btn" title="Pantalla completa" data-map-id="{div_id}" style="position:absolute; right:10px; top:10px; z-index:1000; background:#ffffffc9; border:1px solid #bbb; border-radius:6px; padding:6px 8px; cursor:pointer;">⛶</button>
-        <div id="{div_id}" style="height:clamp(420px, 70vh, 720px); width:100%; margin-bottom:12px; border:1px solid #ddd; border-radius:6px;"></div>
-    </div>
-</div>
-<script>
-    (function(){{
-        var markers = {_markers_js};
-        if (!Array.isArray(markers) || markers.length === 0) return;
-        try {{
-            var map = L.map('{div_id}', {{ scrollWheelZoom: false }});
-            L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ attribution: '&copy; OpenStreetMap' }}).addTo(map);
-      
-            // Crear bounds a partir de todos los marcadores
-            var latlngs = markers.map(function(m){{ return [m.lat, m.lon]; }});
-            var bounds = L.latLngBounds(latlngs);
-            
-            // Si solo hay 1 marcador, usar zoom 12; si hay varios, fitBounds con padding muy generoso
-            if (markers.length === 1) {{
-                map.setView([markers[0].lat, markers[0].lon], 12);
-            }} else {{
-                try {{ 
-                    map.fitBounds(bounds, {{ padding: [80, 80] }}); 
-                }} catch(e) {{ 
-                    map.setView(latlngs[0], 10); 
-                }}
-            }}
-      
-            // Agregar TODOS los marcadores de antenas
-            markers.forEach(function(m, idx) {{
-                var mk = L.marker([m.lat, m.lon]).addTo(map);
-        
-                // Log para verificar que se agregó
-                console.log('Marcador ' + (idx+1) + ': ' + m.name + ' en [' + m.lat + ', ' + m.lon + '] con ' + m.count + ' activaciones');
-        
-                var popupHtml = '' +
-                    '<div style="font-family:sans-serif;min-width:180px;">' +
-                    '<strong style="font-size:14px;">Antena #' + (idx+1) + '</strong><br>' +
-                    '<strong style="font-size:13px;color:#333;">' + (m.name || '') + '</strong><br>' +
-                    '<span style="font-size:12px;color:#666;">Activaciones: ' + (m.count || 0) + '</span><br>' +
-                    '<span style="font-size:11px;color:#999;">Coordenadas: ' + (typeof m.lat==='number'? m.lat.toFixed(6): m.lat) + ', ' + (typeof m.lon==='number'? m.lon.toFixed(6): m.lon) + '</span>' +
-                    ((m.azimut !== null && m.azimut !== undefined) ? "<br><span style=\'font-size:12px;color:#666;\'>Azimut principal: " + m.azimut + "°</span>" : '') +
-                    '</div>';
-                mk.bindPopup(popupHtml, {{ maxWidth: 250 }});
-            }});
-
-            // Registrar mapa y bounds para re-encuadre al cambiar de día
-            try {{
-                window.__tzDailyMaps = window.__tzDailyMaps || {{}};
-                window.__tzDailyMaps['{div_id}'] = {{
-                    map: map,
-                    bounds: bounds,
-                    markersCount: markers.length,
-                    center: (latlngs && latlngs.length>0) ? latlngs[0] : null,
-                    wrapperId: 'wrap-{div_id}'
-                }};
-            }} catch(e) {{}}
-        }} catch(err) {{ console.error('heatmap-day error', err); }}
-    }})();
-</script>'''
-                return html
-
-            sec_day_heatmap = render_heatmap_html_for_day(df_points, day_str)
+            # SPRINT 2B: Usar función modular extraída
+            from tz_services.heatmap import build_heatmap_html, create_heatmap_config
+            heatmap_config = create_heatmap_config(col_lat, col_long, col_antena, col_azimut, d)
+            sec_day_heatmap = build_heatmap_html(df_points, day_str, heatmap_config, log)
             out.append(sec_day_heatmap)
         except Exception as e:
             # no bloquear la generación por un fallo en el mapa
