@@ -7209,11 +7209,11 @@ def _solicitar_overrides_topn(config):
 
 def build_kml(df, cfg, out_dir, flat=False):
     """
-    Fachada para generación KML/KMZ - destino tz_kml package (Sprint 2)
+    FACADE Sprint 2.1: Redirige a tz_kml.builder.build_kml
     
     Punto de entrada único para toda la funcionalidad KML:
     - Generación de puntos y features
-    - Estilos y carpetas organizadas
+    - Estilos y carpetas organizadas  
     - Exportación KML/KMZ
     
     Args:
@@ -7225,10 +7225,11 @@ def build_kml(df, cfg, out_dir, flat=False):
     Returns:
         tuple: (archivo_kml_path, puntos_procesados)
     """
-    # Internamente usa la implementación actual
+    # FACADE Sprint 2.1: Usar paquete tz_kml
+    from tz_kml.builder import build_kml as _impl
     import os
-    archivo_kml = os.path.join(out_dir, "output.kml")
-    return generar_kml(df, archivo_kml, flat)
+    archivo_kml = os.path.join(out_dir, "output.kml") 
+    return _impl(df, cfg, archivo_kml, flat=flat)
 
 def generate_html(df, cfg, out_dir, kml_file, sheet_name=None, bitacora_name=None):
     """
