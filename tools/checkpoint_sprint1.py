@@ -39,7 +39,8 @@ def test_validacion_basica():
         
         # Test 2: validar_datos
         from tz_services.validation import validar_datos
-        errores = validar_datos(df_test, ['col1', 'col2'])
+        df_result, errores = validar_datos(df_test, ['col1', 'col2'])
+        assert isinstance(df_result, pd.DataFrame), f"Expected DataFrame, got {type(df_result)}"
         assert isinstance(errores, list), f"Expected list, got {type(errores)}"
         print("  ✓ validar_datos: OK")
         

@@ -265,6 +265,53 @@ def es_valida_latlon_row(row, col_lat: str = 'latitud', col_long: str = 'longitu
     return False
 
 
+def fmt_azimuth(v: Any) -> str:
+    """
+    Formatea azimuth a string limpio (consolidado de 3 implementaciones).
+    
+    Args:
+        v: Valor azimuth (float, int, string, o None)
+        
+    Returns:
+        String formateado del azimuth
+        
+    Origen: L1978 script_principal_bitacoras_refactory.py (mejor implementación)
+    Consolidación: L1448, L1566, L1978 → versión unificada
+    """
+    if v is None:
+        return '—'
+    try:
+        f = float(v)
+        return f"{int(round(f))}"
+    except Exception:
+        s = str(v).strip()
+        return s if s else '—'
+
+
+def fmt_coordinate(val: Any) -> str:
+    """
+    Formatea coordenada a string con 6 decimales (consolidado de 2 implementaciones).
+    
+    Args:
+        val: Valor coordenada (float, int, string, o None)
+        
+    Returns:
+        String formateado de la coordenada con 6 decimales
+        
+    Origen: L1936 script_principal_bitacoras_refactory.py (mejor implementación)
+    Consolidación: L1936, L6342 → versión unificada  
+    """
+    try:
+        if val is None:
+            return '—'
+        val_f = float(val)
+        if np.isnan(val_f):
+            return '—'
+        return f"{val_f:.6f}"
+    except Exception:
+        return '—'
+
+
 def es_columna_valida_para(df: pd.DataFrame, col_name: str, validation_type: str = "numeric") -> bool:
     """
     Valida si una columna es válida para un tipo específico de validación.

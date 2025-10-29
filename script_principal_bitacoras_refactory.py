@@ -1444,13 +1444,10 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
             celda    = getv_group('cod_celda_inicial','celda')
             direccion= getv_group('ubicacion_inicio','direccion')
 
-            # --- Formato limpio de azimuts (sin .0) ---
+            # FACADE Sprint 1.2: Consolidado de 3 implementaciones
             def _fmt_az(v):
-                try:
-                    f = float(v)
-                    return str(int(f)) if f.is_integer() else str(f).rstrip('0').rstrip('.')
-                except:
-                    return str(v)
+                from tz_services.validation import fmt_azimuth as _impl
+                return _impl(v)
 
             az_p_disp = _fmt_az(az_principal)
 
@@ -1563,12 +1560,10 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
                             return val
                 return "SinInf"
 
+            # FACADE Sprint 1.2: Consolidado (2/3 implementaciones)
             def _fmt_az(v):
-                try:
-                    f = float(v)
-                    return str(int(f)) if f.is_integer() else str(f).rstrip('0').rstrip('.')
-                except:
-                    return str(v)
+                from tz_services.validation import fmt_azimuth as _impl
+                return _impl(v)
 
             for (antena, lat, lon), datos in grupos.items():
                 total = sum(datos["azimuts"].values())
@@ -1785,10 +1780,9 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
         return _impl(lt, lg)
 
     def _es_valida_latlon_row(row):
-        """Versión por fila: usa nombres de columnas detectados arriba."""
-        if col_lat and col_long and (col_lat in row) and (col_long in row):
-            return _valid_latlon_vals(row[col_lat], row[col_long])
-        return False
+        """FACADE Sprint 1.2: Redirige a tz_services (ya implementada)"""
+        from tz_services.validation import es_valida_latlon_row as _impl
+        return _impl(row, col_lat, col_long)
     # === TOP-ANTENA-1A (fin) ===
 
     # Si no hay df razonable, retorna vacío (no rompe HTML)
@@ -1890,35 +1884,10 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
         total_dia = int(len(df_d))
         dur_total_dia = _fmt_hms(df_d['_dur_sec'].sum() if '_dur_sec' in df_d.columns else 0)
 
-        # Validador de coordenadas con bbox El Salvador
+        # FACADE Sprint 1.2: Consolidado de 2 implementaciones
         def _es_valida_latlon_row(row):
-            try:
-                lt = float(row[col_lat]) if (col_lat and col_lat in df_d.columns) else None
-                lg = float(row[col_long]) if (col_long and col_long in df_d.columns) else None
-                if lt is None or lg is None:
-                    return False
-                if np.isnan(lt) or np.isnan(lg):
-                    return False
-                if abs(lt) < 1e-9 and abs(lg) < 1e-9:
-                    return False
-                # BBOX El Salvador
-                try:
-                    if 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                        bbox = CONFIG.get("geografia", {}).get("sv_bbox", None)
-                        if bbox and isinstance(bbox, dict):
-                            lat_min = bbox.get("lat_min", 12.9)
-                            lat_max = bbox.get("lat_max", 14.5)
-                            lon_min = bbox.get("lon_min", -90.3)
-                            lon_max = bbox.get("lon_max", -87.6)
-                        else:
-                            lat_min, lat_max, lon_min, lon_max = 12.9, 14.5, -90.3, -87.6
-                    else:
-                        lat_min, lat_max, lon_min, lon_max = 12.9, 14.5, -90.3, -87.6
-                    return (lat_min <= lt <= lat_max) and (lon_min <= lg <= lon_max)
-                except Exception:
-                    return True  # si falla el bbox, al menos validamos que no sea 0,0
-            except Exception:
-                return False
+            from tz_services.validation import es_valida_latlon_row as _impl
+            return _impl(row, col_lat, col_long)
 
         if total_dia > 0:
             if col_antena and (col_antena in df_d.columns):
@@ -1963,26 +1932,15 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
             thead_cols.append("celda")
         out.append('<thead><tr>' + ''.join(f'<th>{c}</th>' for c in thead_cols) + '</tr></thead><tbody>')
 
-        # pkg: tz_kml | rol: coordinate_converter | cut: L2001-L2010 | todo: Extract coordinate formatter
+        # FACADE Sprint 1.2: Consolidado de 2 implementaciones
         def _fmt_coord(val):
-            try:
-                if val is None:
-                    return '—'
-                val_f = float(val)
-                if np.isnan(val_f):
-                    return '—'
-                return f"{val_f:.6f}"
-            except Exception:
-                return '—'
+            from tz_services.validation import fmt_coordinate as _impl
+            return _impl(val)
 
+        # FACADE Sprint 1.2: Consolidado (3/3 implementaciones) 
         def _fmt_az(v):
-            if v is None:
-                return '—'
-            try:
-                f = float(v)
-                return f"{int(round(f))}"
-            except Exception:
-                s = str(v).strip()
+            from tz_services.validation import fmt_azimuth as _impl
+            return _impl(v)
                 return s if s else '—'
 
         def _fmt_hora(row):
@@ -6374,11 +6332,10 @@ def main():
                     # ANTENA FALLBACK — autogenerar nombres si hay lat/long pero falta 'antena'
                     try:
                         if ("lat" in df.columns) and ("long" in df.columns) and ("antena" not in df.columns):
+                            # FACADE Sprint 1.2: Consolidado (2/2 implementaciones)
                             def _fmt_coord(x):
-                                try:
-                                    return f"{float(x):.6f}"
-                                except Exception:
-                                    return ""
+                                from tz_services.validation import fmt_coordinate as _impl
+                                return _impl(x)
 
                             lat_key = df["lat"].map(_fmt_coord)
                             lon_key = df["long"].map(_fmt_coord)
