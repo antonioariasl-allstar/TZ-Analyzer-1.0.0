@@ -98,6 +98,16 @@ from tz_core.logging_utils import (
     log_error,
     log_debug
 )
+
+# 🔧 MÓDULO EXTRAÍDO: Utilidades de interfaz de usuario
+from tz_core.ui_utils import (
+    solicitar_overrides_topn
+)
+
+# 🔧 MÓDULO EXTRAÍDO: Utilidades de procesamiento de texto
+from tz_core.text_utils import (
+    _fix_mojibake_text
+)
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
@@ -615,31 +625,11 @@ def log(msg: str):
 
 # === NORMALIZADOR-1 (inicio) ==============================================
 
-_MOJIBAKE_TOKENS = ('Ã', 'Â', '�')
-
 def _fix_mojibake_text(s):
-    """Corrige mojibake típico (UTF-8 mal decodificado como latin-1) y limpia espacios."""
-    if not isinstance(s, str) or not s:
-        return s
-    if any(t in s for t in _MOJIBAKE_TOKENS):
-        # Intento 1: recodificar latin1 -> utf-8
-        try:
-            s_try = s.encode('latin1', errors='strict').decode('utf-8', errors='strict')
-            s = s_try
-        except Exception:
-            # Intento 2: reemplazos comunes de emergencia
-            s = (s.replace('Ã¡','á').replace('Ã©','é').replace('Ãí','í')
-                   .replace('Ã³','ó').replace('Ãº','ú').replace('Ã±','ñ')
-                   .replace('Â','')
-                   .replace('ÃÁ','Á').replace('Ã‰','É').replace('ÃÍ','Í')
-                   .replace('Ã“','Ó').replace('Ãš','Ú').replace('Ã‘','Ñ')
-                   .replace('EstaciÃ³n', 'Estación').replace('MetapÃ¡n','Metapán'))
-    # Normaliza Unicode y espacios
-    s = unicodedata.normalize('NFKC', s)
-    s = re.sub(r'\s+', ' ', s).strip()
-    return s
+    """Wrapper de compatibilidad - usa tz_core.text_utils._fix_mojibake_text"""
+    from tz_core.text_utils import _fix_mojibake_text as fix_modular
+    return fix_modular(s)
 
-# Abreviaturas comunes (case-insensitive)
 _DEFAULT_REEMPLAZOS_REGEX = [
     (re.compile(r'\bNvo\.?\b', flags=re.IGNORECASE), 'Nuevo'),
     (re.compile(r'\bNva\.?\b', flags=re.IGNORECASE), 'Nueva'),
@@ -7320,41 +7310,9 @@ def _aplicar_filtros_tiempo(df, filtros):
     return df2, resumen
 
 def _solicitar_overrides_topn(config):
-    """Pide Top N de antenas y de contactos solo para esta ejecución (override).
-    Retorna dict como {'antenas': int?, 'contactos': int?} o None si no se cambia nada."""
-    try:
-        defA = int(config.get('html', {}).get('top_antenas_n', 3))
-        defC = int(config.get('html', {}).get('top_contactos_n', 10))
-    except Exception:
-        defA, defC = 3, 10
-
-    print("\n( Opcional ) Ajuste de Top N para esta ejecución:")
-    sa = input(f"Top N de ANTENAS (Enter={defA}): ").strip()
-    sc = input(f"Top N de CONTACTOS (Enter={defC}, escribe 'mismo' para usar el de antenas): ").strip()
-
-    ovr = {}
-
-    def _parse(x):
-        try:
-            v = int(x)
-            return v if v > 0 else None
-        except Exception:
-            return None
-
-    if sa:
-        va = _parse(sa)
-        if va:
-            ovr['antenas'] = va
-
-    if sc:
-        if sc.lower() == 'mismo' and 'antenas' in ovr:
-            ovr['contactos'] = ovr['antenas']
-        else:
-            vc = _parse(sc)
-            if vc:
-                ovr['contactos'] = vc
-
-    return ovr if ovr else None
+    """Wrapper de compatibilidad - usa tz_core.ui_utils.solicitar_overrides_topn"""
+    from tz_core.ui_utils import solicitar_overrides_topn
+    return solicitar_overrides_topn(config)
 
 if __name__ == "__main__":
     bootstrap_config()

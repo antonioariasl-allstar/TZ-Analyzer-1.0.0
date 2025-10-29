@@ -60,3 +60,17 @@ from .validation_utils import (
     _es_num,
     _a_float
 )
+
+# ui_utils - Funciones de interfaz de usuario extraídas para modularización
+from .ui_utils import (
+    solicitar_overrides_topn,
+    # Aliases para compatibilidad hacia atrás
+    _solicitar_overrides_topn
+)
+
+# text_utils - Funciones de procesamiento de texto extraídas para modularización  
+from .text_utils import (
+    _fix_mojibake_text,
+    normalizar_texto,
+    normalizar_columnas_texto
+)
