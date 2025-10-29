@@ -790,7 +790,7 @@ from tz_core.validation_utils import (
 )
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR, _hhmmss_to_time_or_none, _en_rango, _clasificar_rango_sv
 from tz_core.dataframe_utils import dedupe_columns, _dedupe_columns
-from tz_core.file_utils import escribe_hashes_txt, copiar_logo_a_salida, _escribe_hashes_txt, _copiar_logo_a_salida
+from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _escribe_hashes_txt, _copiar_logo_a_salida
 
 # Importar constantes desde tz_core para consistencia
 RANGOS_SV = RANGOS_SV_MODULAR

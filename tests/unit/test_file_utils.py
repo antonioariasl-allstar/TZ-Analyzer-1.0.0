@@ -15,7 +15,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, mock_open
 
-from tz_core.file_utils import (
+from tz_io.file_io import (
     escribe_hashes_txt, 
     copiar_logo_a_salida,
     _escribe_hashes_txt,  # alias
