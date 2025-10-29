@@ -10,22 +10,29 @@
 
 ## 🧩 MÓDULOS ACTIVOS EN tz_core/
 
-### ✅ CONFIRMADOS Y OPERACIONALES (6 módulos)
+### ✅ CONFIRMADOS Y OPERACIONALES (12 módulos)
 ```
 tz_core/
 ├── config_manager.py   ✅ ACTIVO - Gestión configuración
 ├── data_loader.py      ✅ ACTIVO - Carga de datos
-├── geo_utils.py        ✅ NUEVO - Utilidades geográficas  
-├── text_utils.py       ✅ NUEVO - Utilidades de texto
+├── geo_utils.py        ✅ ACTIVO - Utilidades geográficas  
+├── text_utils.py       ✅ ACTIVO - Utilidades de texto
 ├── utils.py           ✅ ACTIVO - Utilidades generales
+├── time_utils.py      ✅ ACTIVO - Utilidades de tiempo
+├── validation_utils.py ✅ ACTIVO - Validaciones de datos
+├── format_utils.py    ✅ EXPANDIDO - Formateo de valores + descripción compacta
+├── color_utils.py     ✅ ACTIVO - Manejo de colores
+├── html_utils.py      ✅ ACTIVO - Helpers HTML
+├── file_utils.py      ✅ ACTIVO - Operaciones de archivos
 └── __init__.py        ✅ ACTIVO - Inicialización módulos
 ```
 
 ### 🔍 ANÁLISIS DE PROGRESO
-- **Base sólida:** 6 módulos funcionando
-- **Nuevas utilidades:** geo_utils y text_utils recién agregados
+- **Base sólida:** 12 módulos funcionando (antes 6)
+- **Última extracción:** `_armar_descripcion_compacta()` → `format_utils.py` (29-oct-2025)
+- **Metodología:** Extracción modular incremental con wrappers de compatibilidad
 - **Tendencia:** Modularización progresiva y controlada
-- **Próximo objetivo:** HTML utils expansion (según otro chat)
+- **Próximo objetivo:** Continuar extracción de funciones de bajo riesgo
 
 ---
 
