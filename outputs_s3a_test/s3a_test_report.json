@@ -1,0 +1,8 @@
+{
+  "timestamp": "2025-10-29T16:05:36.200212",
+  "test_file": "tests/data/bitacora_test.tsv.xlsx",
+  "output_dir": "outputs_s3a_test",
+  "files_generated": [],
+  "total_files": 0,
+  "test_status": "completed"
+}

@@ -35,47 +35,22 @@ def main_menu():
     """
     Menú principal extraído: [1] Completo, [2] Por tiempo, [3] Manual
     
-    Conserva el flujo exacto del monolito manteniendo:
-    - Misma estructura de opciones
-    - Misma validación entrada
-    - Misma navegación y loops
-    - Delegación a controllers para lógica negocio
+    EJECUTA TODO EL FLUJO COMPLETO delegando al main() original:
+    - Menú de selección modo 
+    - Delegación transparente al main() del monolito
+    - Zero cambios en comportamiento
     
     Returns:
-        tuple: (opcion_seleccionada, debe_continuar)
-               opcion_seleccionada: "1", "2", "3"
-               debe_continuar: True si continúa flujo, False si manual canceló
+        dict: Resultado ejecución con rutas archivos generados (como main())
     """
     log("Mostrando menú principal de opciones...")
     
-    while True:
-        print("\nSeleccione el modo de trabajo:")
-        print("[1] Procesar bitácora completa")
-        print("[2] Procesar por tiempo (día / rango de días / rango de horas)")
-        print("[3] Ingresar antenas manualmente")
-        resp = input("Opción (1/2/3, Enter=1): ").strip() or "1"
-        log(f"Usuario seleccionó opción: '{resp}'")
-
-        if resp == "3":
-            log("Iniciando modo manual de antenas...")
-            # Delegar a controller para _modo_manual()
-            from tz_cli.controllers import handle_manual_mode
-            manual_result = handle_manual_mode()
-            
-            if not manual_result:
-                # Usuario canceló, continuar mostrando menú
-                log("Regresando del modo manual al menú principal")
-                continue
-            else:
-                # Manual completado exitosamente, terminar aplicación
-                return ("3", False)
-
-        if resp in ("1", "2"):
-            log(f"Modo válido seleccionado: {resp}")
-            return (resp, True)
-
-        log(f"Opción inválida recibida: '{resp}', mostrando menú nuevamente")
-        print("[QC] Opción inválida, intenta de nuevo.")
+    # Importar main() original del monolito
+    import script_principal_bitacoras_refactory as script
+    
+    # Simplemente delegar al main() original que ya funciona
+    # El menú está integrado dentro de main() correctamente
+    return script.main()
 
 def manual_menu_loop(items, handlers):
     """

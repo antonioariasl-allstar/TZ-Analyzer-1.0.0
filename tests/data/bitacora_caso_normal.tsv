@@ -1,0 +1,11 @@
+timestamp	imei	UBICACION_LATITUD	UBICACION_LONGITUD	id_antena	nombre_antena	comuna	region
+2024-10-20 08:15:23	356789012345678	-33.4489	-70.6693	1001	Torre Centro Santiago	Santiago Centro	Metropolitana
+2024-10-20 08:30:45	356789012345678	-33.4372	-70.6506	1002	Torre Providencia	Providencia	Metropolitana
+2024-10-20 09:00:12	356789012345678	-33.4158	-70.6117	1003	Torre Las Condes	Las Condes	Metropolitana
+2024-10-20 09:15:33	356789012345678	-33.4225	-70.6062	1004	Torre El Bosque	Las Condes	Metropolitana
+2024-10-20 09:45:18	356789012345678	-33.4489	-70.6693	1001	Torre Centro Santiago	Santiago Centro	Metropolitana
+2024-10-20 10:20:47	356789012345678	-33.4372	-70.6506	1002	Torre Providencia	Providencia	Metropolitana
+2024-10-20 11:05:22	356789012345678	-33.4158	-70.6117	1003	Torre Las Condes	Las Condes	Metropolitana
+2024-10-20 11:30:55	356789012345678	-33.4225	-70.6062	1004	Torre El Bosque	Las Condes	Metropolitana
+2024-10-20 12:15:40	356789012345678	-33.4489	-70.6693	1001	Torre Centro Santiago	Santiago Centro	Metropolitana
+2024-10-20 13:00:10	356789012345678	-33.4372	-70.6506	1002	Torre Providencia	Providencia	Metropolitana
