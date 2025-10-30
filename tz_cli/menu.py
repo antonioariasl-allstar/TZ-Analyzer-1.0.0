@@ -192,3 +192,12 @@ def confirm_action(message, default_yes=False):
 # Aliases para compatibilidad con monolito
 show_main_menu = main_menu
 manual_mode_menu = manual_menu_loop
+
+# Support para ejecución directa como módulo
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--help":
+        print("TZ CLI Menu - Interfaz interactivo")
+        print("Uso: python -m tz_cli.menu")
+        sys.exit(0)
+    main_menu()
