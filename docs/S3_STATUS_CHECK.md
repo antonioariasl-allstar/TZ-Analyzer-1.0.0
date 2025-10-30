@@ -31,4 +31,15 @@
 3. **Fase 4:** Smoke tests E2E
 4. **Fase 5:** Documentación final
 
-**Status:** ✅ Diagnóstico completo - Listo para corrección quirúrgica
+**Status:** ✅ Diagnóstico completo - Estado congelado para contención
+
+## 📋 REGISTRO DE TRABAJO
+
+**Rama activa:** `hotfix/s3b-cli-import`
+**Último commit:** `4df41b8` - S3A assessment functional  
+**Estado working tree:** Limpio (cambios problemáticos revertidos)
+
+**Hallazgos de complejidad:**
+- 3B requiere arquitectura adapter (tz_cli ↔ tz_cli_click)
+- Import contract roto: `cli` vive en tz_cli_click pero se busca en tz_cli
+- Dependencias cruzadas TZContext entre paquetes
