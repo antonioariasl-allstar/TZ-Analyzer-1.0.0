@@ -664,11 +664,13 @@ def generar_kml(
                 except Exception:
                     return str(s).strip().lower()
 
+            # En carpetas TOP: Mostrar "Antena:" siempre + "Dirección:" solo si es diferente
+            _ant_line = f"<b>Antena:</b> {antena}<br>"
             _dir_line = ""
             if direccion not in (None, "", "SinInf"):
-                # En TOPs SIEMPRE mostrar dirección (incluso si es igual a antena)
-                # Esto garantiza visibilidad completa de información crítica en análisis
-                _dir_line = f"<b>{_label_dir_top}:</b> {direccion}<br>"
+                # Mostrar dirección solo si es diferente de antena (evitar redundancia)
+                if _norm_text(direccion) != _norm_text(antena):
+                    _dir_line = f"<b>{_label_dir_top}:</b> {direccion}<br>"
 
             desc_core = f"""
 <b>Total de activaciones:</b> {total}<br>
@@ -679,7 +681,7 @@ def generar_kml(
 <b>Usuario:</b> {usuario}<br>
 <b>Abonado:</b> {abonado}<br>
 <hr>
-<b>Lat:</b> {lat} &nbsp; <b>Long:</b> {lon}<br>
+{_ant_line}<b>Lat:</b> {lat} &nbsp; <b>Long:</b> {lon}<br>
 <b>Celda:</b> {celda}<br>
 {_dir_line}
 <hr>
