@@ -109,6 +109,11 @@ from tz_core.text_utils import (
     _fix_mojibake_text,
     _aplicar_reemplazos_regex
 )
+# 🔧 MÓDULO EXTRAÍDO: Utilidades de formato y configuración
+from tz_core.format_utils import agregar_bloque, armar_descripcion_compacta
+from tz_core.config_manager import cfg_build_rename_map, add_user_synonym, solicitar_color_tema
+from tz_core.color_utils import hex_to_kml_color
+from tz_core.html_generator import generate_html_header, generate_body_header, generate_metadata_section, generate_kpi_section
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
@@ -148,8 +153,7 @@ def bootstrap_config() -> None:
     global CONFIG, RENAME_MAP
     CONFIG = get_config()  # Usa la función centralizada (ya modular)
     
-    # Importar cfg_build_rename_map desde el módulo
-    from tz_core.config_manager import cfg_build_rename_map
+    # Importar cfg_build_rename_map desde el módulo (ya en imports globales)
     RENAME_MAP = cfg_build_rename_map(CONFIG)
 
 # === SECCIÓN: WIZARD DE MAPEO DE COLUMNAS (detección, mapeo manual, QC) ===
@@ -757,7 +761,6 @@ def cfg_add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, rut
     Nota: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.
     Este wrapper preserva persistencia automática en config.json y memoria de mapeo manual.
     """
-    from tz_core.config_manager import add_user_synonym
     return add_user_synonym(CONFIG, canonico, encabezado_crudo, ruta_cfg)
 # === SINONIMOS: MERGE + PERSISTENCIA (fin) =================================
 
@@ -797,7 +800,6 @@ def _solicitar_color_tema(CONFIG):
     Nota: Función interactiva extraída al módulo config_manager.
     Este wrapper preserva la paleta de 60 colores para diferenciación de bitácoras.
     """
-    from tz_core.config_manager import solicitar_color_tema
     return solicitar_color_tema(CONFIG)
 
 # =========================
@@ -806,7 +808,6 @@ def _solicitar_color_tema(CONFIG):
 # --- Helpers de color KML (aabbggrr) desde #RRGGBB ---
 def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
     """MIGRADA A tz_core.color_utils - usar import desde allí"""
-    from tz_core.color_utils import hex_to_kml_color
     return hex_to_kml_color(hex_rgb, alpha)
 
 # =========================
@@ -1124,7 +1125,6 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
             azimut_int = None
 
         # Nombre y descripción
-        from tz_core.format_utils import agregar_bloque
         nombre_punto = row.get("antena", "Antena") if str(row.get("antena", "")).strip() else "Antena"
         partes = []
         for bloque in desc_spec:
@@ -1185,7 +1185,6 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
         # --- Modo plano: todo colgado de la raíz (sin subcarpetas) ---
         # NOTA: En modo plano, SIEMPRE mostrar "Dirección" (suprimir_direccion_si_igual=False)
         # para garantizar que la información esté visible en este contexto simplificado
-        from tz_core.format_utils import armar_descripcion_compacta
         for it in items:
             n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
             desc_comp = armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=False, config=CONFIG, hr_compact=HR_COMPACT)
@@ -1290,7 +1289,6 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     for fch in fechas_unicas:
         obtener_carpeta_fecha(fch)
 
-    from tz_core.format_utils import armar_descripcion_compacta
     for it in items:
         n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
         desc_comp = armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=True, config=CONFIG, hr_compact=HR_COMPACT)
@@ -2420,8 +2418,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     Genera un informe HTML sencillo (portada + KPIs + enlaces) en la misma carpeta del KML.
     Retorna la ruta del HTML generado.
     """
-    # 🔧 MÓDULO EXTRAÍDO: HTML generator para generar_informe_html
-    from tz_core.html_generator import generate_html_header, generate_body_header, generate_metadata_section, generate_kpi_section
+    # 🔧 MÓDULO EXTRAÍDO: HTML generator para generar_informe_html (ya en imports globales)
     
     # Validación defensiva de entrada
     if df is None:
@@ -4803,7 +4800,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
 # --- Anti-hojas: ignorar ocultas y elegir visible ---
 # 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader
-from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja
+from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja, cargar_excel_con_normalizacion
 
 def _seleccionar_hoja_visible(ruta_excel):
     """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja_visible"""
@@ -4826,7 +4823,6 @@ def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
     
     Preserva comportamiento exacto de líneas originales 6543-6557.
     """
-    from tz_core.data_loader import cargar_excel_con_normalizacion
     return cargar_excel_con_normalizacion(ruta_excel, hoja_elegida)
 
 # --- Fallback: listar TODAS las hojas con pandas y seleccionar una ---
@@ -5264,7 +5260,6 @@ def run_tz_analysis(
     # 7) Color tema: no preguntar; dejar CONFIG tal cual
     def _color_mock(cfg):
         """MIGRADA A tz_core.color_utils - usar import desde allí"""
-        from tz_core.color_utils import color_mock
         return color_mock(cfg)
     g["_solicitar_color_tema"] = _color_mock
 
@@ -7215,7 +7210,6 @@ def _aplicar_filtros_tiempo(df, filtros):
 
 def _solicitar_overrides_topn(config):
     """Wrapper de compatibilidad - usa tz_core.ui_utils.solicitar_overrides_topn"""
-    from tz_core.ui_utils import solicitar_overrides_topn
     return solicitar_overrides_topn(config)
 
 if __name__ == "__main__":

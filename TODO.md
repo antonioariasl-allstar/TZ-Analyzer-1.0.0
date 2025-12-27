@@ -1,38 +1,35 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
-## 🔥 EPIC 12 FASE 1 - LIMPIEZA ALIASES OBSOLETOS (26-DIC-2025) ✨ NUEVA
+## 🔥 EPIC 12 COMPLETADO - OPTIMIZACIÓN IMPORTS (26-DIC-2025) ✨ NUEVA
 
-**OPTIMIZACIÓN DE IMPORTS: ELIMINACIÓN DE ALIASES REDUNDANTES**
-- 🧹 **Aliases eliminados:** `_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_dedupe_columns`, `_tiene_valor`, `_a_float`, `_row_html`, `_fmt_imei_item`, `_luhn_check`, `_escribe_hashes_txt`
-- 📉 **Reducción quirúrgica:** 6,446 → 6,444 líneas (-2 líneas)
-- 🔍 **Análisis exhaustivo:** grep_search para verificar uso real antes de eliminar
-- ✅ **Validación exitosa:** 105/110 tests unitarios + 2/2 tests integración pasando
-- 🎯 **Imports conservados:** `_hex_to_kml_color`, `_color_mock`, `_copiar_logo_a_salida`, `_es_num` (wrappers locales activos)
+**FASE 1: LIMPIEZA ALIASES OBSOLETOS + FASE 2: CONSOLIDACIÓN IMPORTS LOCALES**
+- 🧹 **Fase 1 - Aliases eliminados (10):** `_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_dedupe_columns`, `_tiene_valor`, `_a_float`, `_row_html`, `_fmt_imei_item`, `_luhn_check`, `_escribe_hashes_txt`
+- 🎯 **Fase 2 - Imports locales consolidados (8):** `cfg_build_rename_map`, `add_user_synonym`, `solicitar_color_tema`, `hex_to_kml_color`, `generate_html_*`, `cargar_excel_con_normalizacion`, `color_mock`, `solicitar_overrides_topn`
+- 📉 **Reducción total:** 6,446 → 6,438 líneas (-8 líneas, -0.1%)
+- ✅ **Validación exitosa:** 107/114 tests pasando (5 fallos pre-existentes + 2 skipped)
+- 🎯 **Resultado:** Imports centralizados en bloque global, código más limpio y organizado
 
-**🛡️ ESTRATEGIA DE SEGURIDAD:**
-- Solo aliases sin uso eliminados (Epic 10+11 ya eliminaron los wrappers)
-- Verificación individual de cada alias antes de remover
-- Wrappers locales activos preservados intactos
-- Zero impacto en funcionalidad (solo limpieza de imports)
+**🛡️ ESTRATEGIA DE CONSOLIDACIÓN:**
+- Fase 1: Eliminar aliases huérfanos de Epic 10+11
+- Fase 2: Mover imports locales → bloque global (línea ~115)
+- Análisis exhaustivo: grep_search para detectar duplicados
+- Wrappers locales activos preservados (`_hex_to_kml_color`, `_color_mock`, `_copiar_logo_a_salida`, `_es_num`)
 
-**📊 MÉTRICAS ACUMULADAS (EPIC 10 + EPIC 11 + EPIC 12 FASE 1):**
+**📊 MÉTRICAS ACUMULADAS (EPIC 10 + EPIC 11 + EPIC 12):**
 - Monolito original (GitHub b71db42): 6,510 líneas
 - Después Epic 10: 6,486 líneas (-24 neto)
 - Después Epic 11: 6,446 líneas (-64 neto)
-- Después Epic 12 Fase 1: 6,444 líneas (-66 neto, -1.0% total)
-- Tests estables: 105/110 unitarios + 2/2 integración
+- Después Epic 12 Completo: 6,438 líneas (-72 neto, -1.1% total)
+- Wrappers eliminados: 14 funciones
+- Aliases eliminados: 10 imports
+- Imports consolidados: 8 locales → globales
+- Tests estables: 107/114 (5 fallos pre-existentes)
 
-**🎯 PRÓXIMO:** Epic 12 Fase 2 (consolidar imports locales), Epic 13+ (funciones grandes)
+**🎯 PRÓXIMO:** Epic 13 (funciones grandes: `_wizard_qc_mapeo`, `_crear_feature_kml`)
 
 ---
 
 ## 🔥 EPIC 11 - SEGUNDA OLEADA LIMPIEZA WRAPPERS (26-DIC-2025) ✨
-
-**ELIMINACIÓN EXITOSA DE 7 WRAPPERS ADICIONALES:**
-- 🗑️ **Wrappers eliminados:** `_tiene_valor`, `_a_float`, `_formatear_valor_para_burbuja`, `_dedupe_columns`, `_armar_descripcion_compacta`, `_agregar_bloque`, `_escribe_hashes_txt`
-- 📉 **Reducción incremental:** 6,486 → 6,446 líneas (-40 líneas, -0.6%)
-- 🔧 **7 usos actualizados:** 3 sin uso + 4 reemplazados con imports directos desde tz_core
-- ✅ **Validación rigurosa:** 105/110 tests unitarios + 2/2 tests integración pasando
 - 🎯 **Impacto acumulado Epic 10+11:** -64 líneas neto desde GitHub baseline (-1.0% total)
 
 **🧹 ESTRATEGIA DE LIMPIEZA:**

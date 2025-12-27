@@ -6,28 +6,24 @@
 ## 🏆 **LOGROS ALCANZADOS**
 
 ### **PROGRESO GENERAL:**
-- **Estado de completitud:** 100% wrappers + imports optimizados (Epic 10+11+12 F1) ✅
+- **Estado de completitud:** 100% wrappers + imports optimizados (Epic 10+11+12 completo) ✅
 - **Funciones migradas:** 40+ funciones en tz_core (todas modulares)
 - **Módulos tz_core activos:** 19 módulos funcionando
 - **Regresiones detectadas:** 0 (Zero regressions policy mantenida)
-- **Reducción acumulada:** 6,510 → 6,444 líneas (-66 líneas neto, -1.0% total)
+- **Reducción acumulada:** 6,510 → 6,438 líneas (-72 líneas neto, -1.1% total)
 
 ### **ÚLTIMAS EXTRACCIONES/LIMPIEZAS COMPLETADAS:**
 
-#### 🔥 **EPIC 12 FASE 1: Limpieza Aliases Obsoletos** - 26 diciembre 2025
-- **Tipo:** Optimización de imports - eliminación de aliases redundantes
-- **Aliases eliminados:** 10 aliases sin uso (`_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_dedupe_columns`, `_tiene_valor`, `_a_float`, `_row_html`, `_fmt_imei_item`, `_luhn_check`, `_escribe_hashes_txt`)
-- **Análisis exhaustivo:** Verificación individual de cada alias antes de remover
-- **Reducción:** 6,446 → 6,444 líneas (-2 líneas)
-- **Aliases conservados:** `_hex_to_kml_color`, `_color_mock`, `_copiar_logo_a_salida`, `_es_num` (wrappers locales activos)
-- **Validación:** 105/110 tests unitarios + 2/2 integración pasando
-- **Resultado:** Imports más limpios, sin aliases huérfanos de Epic 10+11
+#### 🔥 **EPIC 12 COMPLETO: Optimización de Imports** - 26 diciembre 2025
+- **Tipo:** Limpieza de aliases + consolidación de imports locales
+- **Fase 1 - Aliases eliminados:** 10 aliases obsoletos (`_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_dedupe_columns`, `_tiene_valor`, `_a_float`, `_row_html`, `_fmt_imei_item`, `_luhn_check`, `_escribe_hashes_txt`)
+- **Fase 2 - Imports consolidados:** 8 imports locales movidos al bloque global (`cfg_build_rename_map`, `add_user_synonym`, `solicitar_color_tema`, `hex_to_kml_color`, `generate_html_*`, `cargar_excel_con_normalizacion`, `color_mock`, `solicitar_overrides_topn`)
+- **Reducción:** 6,446 → 6,438 líneas (-8 líneas total, -0.1%)
+- **Análisis exhaustivo:** grep_search para detectar duplicados y usos
+- **Validación:** 107/114 tests pasando (5 fallos pre-existentes + 2 skipped)
+- **Resultado:** Imports centralizados en bloque global (~L115), código más organizado y mantenible
 
 #### 🔥 **EPIC 11: Segunda Oleada Limpieza Wrappers** - 26 diciembre 2025
-- **Tipo:** Eliminación quirúrgica de 7 wrappers adicionales
-- **Wrappers eliminados:** `_tiene_valor`, `_a_float`, `_formatear_valor_para_burbuja`, `_dedupe_columns`, `_armar_descripcion_compacta`, `_agregar_bloque`, `_escribe_hashes_txt`
-- **Análisis de uso:** 3 sin uso (eliminación directa) + 4 con 7 usos (reemplazo quirúrgico)
-- **Reducción:** 6,486 → 6,446 líneas (-40 líneas, -0.6%)
 - **Validación:** 105/110 tests unitarios + 2/2 integración pasando
 - **Fix técnico:** Corrección de firma `CONFIG`→`config`, `HR_COMPACT`→`hr_compact` en `armar_descripcion_compacta()`
 - **Resultado:** Imports directos desde tz_core.validation_utils, tz_core.dataframe_utils, tz_core.format_utils, tz_core.file_utils
@@ -61,7 +57,11 @@
 - **Estado actual:** 6,444 líneas
 - **Baseline GitHub (b71db42):** 6,510 líneas
 - **Reducción neta Epic 10+11+12 F1:** -66 líneas (-1.0%)
-- **Objetivo próximo:** Epic 12 Fase 2 (consolidar imports locales), Epic 13+ (funciones grandes)
+### **LÍNEAS DE CÓDIGO:**
+- **Estado actual:** 6,438 líneas
+- **Baseline GitHub (b71db42):** 6,510 líneas
+- **Reducción neta Epic 10+11+12:** -72 líneas (-1.1%)
+- **Objetivo próximo:** Epic 13+ (funciones grandes: `_wizard_qc_mapeo`, `_crear_feature_kml`)
 
 ### **FUNCIONES RESTANTES POR ANALIZAR:**
 
@@ -74,6 +74,7 @@
 - ~~**Wrappers file_utils**~~ ✅ Eliminados en Epic 11
 - ~~**Wrappers text_utils**~~ ✅ Eliminados en Epic 10
 - ~~**Aliases obsoletos imports**~~ ✅ Eliminados en Epic 12 Fase 1
+- ~~**Imports locales duplicados**~~ ✅ Consolidados en Epic 12 Fase 2
 
 #### 🟡 **RIESGO MEDIO (1 función):**
 1. **`cargar_config()`** (~20 líneas)
