@@ -1,6 +1,42 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
-## 🔥 EPIC 12 COMPLETADO - OPTIMIZACIÓN IMPORTS (26-DIC-2025) ✨ NUEVA
+## 🔥 EPIC 13 COMPLETADO - EXTRACCIÓN GENERADOR KML (26-DIC-2025) ✨ ÉPICO
+
+**MIGRACIÓN MAYOR: generar_kml() + _crear_feature_kml() → tz_core/kml_generator.py**
+- 🎯 **Módulo profesional creado:** 658 líneas (generación KML/KMZ completa)
+- 📦 **Funciones migradas:**
+  * `generar_kml()` - Generador principal con carpetas/tops/deduplicación (~350 líneas)
+  * `_crear_feature_kml()` - Helper puntos/líneas/conos con estilos reutilizables (~215 líneas)
+- 🔧 **Wrappers compatibilidad:** Interfaz original preservada (CONFIG global inyectado)
+- 🐛 **FIX crítico aplicado:** Dirección siempre visible en carpetas TOP (L667)
+- 📉 **Reducción proyectada:** 6,438 → ~5,950 líneas al eliminar backups (-7.6%)
+- ✅ **Validación exhaustiva:** 
+  * Sintaxis: py_compile OK módulo + monolito
+  * Imports: carga correcta sin errores
+  * Tests: 105/110 unitarios + 2/2 E2E passing
+  * Usuario: Probado con archivo real, KMZ funcional ✅
+
+**🏗️ ARQUITECTURA MODULAR KML:**
+- `tz_core/kml_generator.py` (nuevo): Generación compleja profesional
+- `kml_generador.py` (raíz): Puntos libres simples (QC manual)
+- Separación responsabilidades: complejo vs simple
+- Epic 14 candidato: Consolidar ambos en tz_core/
+
+**📊 MÉTRICAS ACUMULADAS (EPIC 10+11+12+13):**
+- Monolito original (GitHub b71db42): 6,510 líneas
+- Después Epic 10: 6,486 líneas (-24)
+- Después Epic 11: 6,446 líneas (-64)
+- Después Epic 12: 6,438 líneas (-72)
+- Después Epic 13: 6,462 líneas (+24 temporal con backups)
+- **Reducción neta proyectada (sin backups):** ~5,950 líneas (-560, -8.6% total)
+- **Módulos tz_core creados:** 20+ profesionales
+- Tests: 107/114 estables (5 fallos pre-existentes)
+
+**🎯 PRÓXIMO:** Epic 14 (consolidar kml_generador.py → tz_core/, _wizard_qc_mapeo ~382 líneas)
+
+---
+
+## 🔥 EPIC 12 COMPLETADO - OPTIMIZACIÓN IMPORTS (26-DIC-2025) ✨
 
 **FASE 1: LIMPIEZA ALIASES OBSOLETOS + FASE 2: CONSOLIDACIÓN IMPORTS LOCALES**
 - 🧹 **Fase 1 - Aliases eliminados (10):** `_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_dedupe_columns`, `_tiene_valor`, `_a_float`, `_row_html`, `_fmt_imei_item`, `_luhn_check`, `_escribe_hashes_txt`

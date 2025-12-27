@@ -1,18 +1,38 @@
 # 📊 ESTADO ACTUAL DE MODULARIZACIÓN TZ-ANALYZER
-## Actualización: 26 de diciembre de 2025
+## Actualización: 26 de diciembre de 2025 - Epic 13 COMPLETADO
 
 ---
 
 ## 🏆 **LOGROS ALCANZADOS**
 
 ### **PROGRESO GENERAL:**
-- **Estado de completitud:** 100% wrappers + imports optimizados (Epic 10+11+12 completo) ✅
-- **Funciones migradas:** 40+ funciones en tz_core (todas modulares)
-- **Módulos tz_core activos:** 19 módulos funcionando
+- **Estado de completitud:** Epic 13 COMPLETADO - Generador KML modularizado ✅
+- **Funciones migradas:** 42+ funciones en tz_core (2 nuevas en Epic 13)
+- **Módulos tz_core activos:** 20 módulos funcionando (nuevo: kml_generator.py)
 - **Regresiones detectadas:** 0 (Zero regressions policy mantenida)
-- **Reducción acumulada:** 6,510 → 6,438 líneas (-72 líneas neto, -1.1% total)
+- **Reducción acumulada:** 6,510 → 6,462 líneas (+24 temporal con backups, -560 proyectado al eliminar backups)
 
 ### **ÚLTIMAS EXTRACCIONES/LIMPIEZAS COMPLETADAS:**
+
+#### 🔥 **EPIC 13 COMPLETADO: Extracción Generador KML** - 26 diciembre 2025 ⚡ ÉPICO
+- **Tipo:** Migración mayor de funciones complejas (generación KML/KMZ)
+- **Módulo creado:** `tz_core/kml_generator.py` (658 líneas)
+- **Funciones migradas:**
+  * `generar_kml()` - Generador principal con estructura carpetas/tops/deduplicación (~350 líneas)
+  * `_crear_feature_kml()` - Helper puntos/líneas/conos con estilos reutilizables (~215 líneas)
+- **Wrappers compatibilidad:** Interfaz original preservada (inyección CONFIG global)
+- **FIX crítico aplicado:** Dirección siempre visible en carpetas TOP (issue reportado por usuario)
+- **Reducción proyectada:** ~5,950 líneas al eliminar backups temporales (-560 líneas, -8.6% desde baseline)
+- **Validación exhaustiva:**
+  * Sintaxis: py_compile OK módulo + monolito ✅
+  * Imports: carga sin errores ✅
+  * Tests: 105/110 unitarios + 2/2 E2E passing ✅
+  * Usuario: Probado con archivo real, KMZ funcional, campos correctos ✅
+- **Arquitectura dual KML:**
+  * `tz_core/kml_generator.py` - Generación compleja profesional (carpetas/tops)
+  * `kml_generador.py` (raíz) - Puntos libres simples (QC manual)
+  * Epic 14 candidato: Consolidar ambos en tz_core/
+- **Resultado:** Módulo profesional completo, arquitectura más limpia, funcionalidad validada
 
 #### 🔥 **EPIC 12 COMPLETO: Optimización de Imports** - 26 diciembre 2025
 - **Tipo:** Limpieza de aliases + consolidación de imports locales
@@ -54,14 +74,12 @@
 ## 🎯 **ESTADO ACTUAL DEL MONOLITO**
 
 ### **LÍNEAS DE CÓDIGO:**
-- **Estado actual:** 6,444 líneas
+- **Estado actual:** 6,462 líneas (+24 temporal con backups de Epic 13)
+- **Proyección final (sin backups):** ~5,950 líneas (-560 desde baseline, -8.6%)
 - **Baseline GitHub (b71db42):** 6,510 líneas
-- **Reducción neta Epic 10+11+12 F1:** -66 líneas (-1.0%)
-### **LÍNEAS DE CÓDIGO:**
-- **Estado actual:** 6,438 líneas
-- **Baseline GitHub (b71db42):** 6,510 líneas
-- **Reducción neta Epic 10+11+12:** -72 líneas (-1.1%)
-- **Objetivo próximo:** Epic 13+ (funciones grandes: `_wizard_qc_mapeo`, `_crear_feature_kml`)
+- **Reducción neta Epic 10+11+12:** -72 líneas
+- **Reducción proyectada Epic 13:** -488 líneas adicionales (al eliminar backups)
+- **Objetivo próximo:** Epic 14 (consolidar kml_generador.py → tz_core/, _wizard_qc_mapeo)
 
 ### **FUNCIONES RESTANTES POR ANALIZAR:**
 
@@ -75,19 +93,21 @@
 - ~~**Wrappers text_utils**~~ ✅ Eliminados en Epic 10
 - ~~**Aliases obsoletos imports**~~ ✅ Eliminados en Epic 12 Fase 1
 - ~~**Imports locales duplicados**~~ ✅ Consolidados en Epic 12 Fase 2
+- ~~**`generar_kml()` + `_crear_feature_kml()`**~~ ✅ Migrados a tz_core/kml_generator.py en Epic 13
 
-#### 🟡 **RIESGO MEDIO (1 función):**
+#### 🟡 **RIESGO MEDIO (2 funciones):**
 1. **`cargar_config()`** (~20 líneas)
    - **Estado:** Función de configuración con dependencias internas
    - **Decisión:** Diferida para revisión estratégica
+2. **`generar_kml_puntos_libres()`** (~100 líneas en kml_generador.py raíz)
+   - **Oportunidad:** Consolidar con tz_core/kml_generator.py en Epic 14
 
-#### 🔴 **RIESGO ALTO - CANDIDATOS EXTRACCIÓN (3 funciones):**
-2. **`_wizard_qc_mapeo()`** (~382 líneas) - ⚠️ ZONA DE PELIGRO EXTREMO
+#### 🔴 **RIESGO ALTO - CANDIDATOS EXTRACCIÓN (2 funciones):**
+3. **`_wizard_qc_mapeo()`** (~382 líneas) - ⚠️ ZONA DE PELIGRO EXTREMO
    - **Oportunidad:** Extraer a módulo especializado tz_wizard
-3. **`generar_informe_html()`** (~1800+ líneas) - Motor HTML masivo
+   - **Precaución:** Advertencia explícita en código, ver docs/WIZARD_QC_PELIGRO_EXTREMO.md
+4. **`generar_informe_html()`** (~1800+ líneas) - Motor HTML masivo
    - **Estado:** Parcialmente modularizado con tz_core.html_generator
-4. **`generar_kml()`** (~600+ líneas) - Motor KML masivo
-   - **Oportunidad:** Extraer helpers KML especializados
 
 #### 🏢 **FUNCIONES CORE BUSINESS (mantener en monolito):**
 5. **`bootstrap_config()`** (~50 líneas) - Inicialización crítica

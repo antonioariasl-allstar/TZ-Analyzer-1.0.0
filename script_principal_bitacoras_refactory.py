@@ -1051,8 +1051,34 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
                 pol2.style = _REUSABLE_STYLES["cone"]  # luego bajamos opacidad si querés
 
 # === SECCIÓN: GENERACIÓN KML/KMZ (placemarks, carpetas, top_n, estilos) ===
+# ⚡ EPIC 13: Función migrada a tz_core.kml_generator (26/12/2025)
+# Wrapper de compatibilidad - mantiene interfaz original del monolito
 def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
-    """Genera KML/KMZ a partir del DataFrame procesado según la configuración activa."""
+    """
+    Wrapper de compatibilidad para tz_core.kml_generator.generar_kml()
+    
+    MIGRADA EN EPIC 13 (26/12/2025): ~350 líneas extraídas a módulo profesional
+    IMPLEMENTACIÓN REAL: tz_core.kml_generator.generar_kml()
+    """
+    from tz_core.kml_generator import generar_kml as generar_kml_modular
+    
+    # Inyectar CONFIG global y OVERRIDE_TOPS si existen
+    config_param = CONFIG if 'CONFIG' in globals() else {}
+    override_param = OVERRIDE_TOPS if 'OVERRIDE_TOPS' in globals() else None
+    
+    return generar_kml_modular(
+        df=df,
+        archivo_salida_kml=archivo_salida_kml,
+        config=config_param,
+        flat=flat,
+        override_tops=override_param
+    )
+
+
+# === IMPLEMENTACIÓN ORIGINAL PRESERVADA TEMPORALMENTE (EPIC 13 - VALIDACIÓN) ===
+# Se eliminará en commit final si pasan todos los tests
+def _generar_kml_ORIGINAL_BACKUP(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
+    """[BACKUP] Implementación original - NO USAR (solo referencia temporal)"""
     # Validación defensiva de entrada
     if df is None:
         log("[ERROR] generar_kml: DataFrame es None, abortando")
