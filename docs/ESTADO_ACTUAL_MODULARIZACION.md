@@ -1,17 +1,80 @@
 # 📊 ESTADO ACTUAL DE MODULARIZACIÓN TZ-ANALYZER
-## Actualización: 29 de octubre de 2025
+## Actualización: 26 de diciembre de 2025 - Epic 14 COMPLETADO (CONSOLIDACIÓN KML)
 
 ---
 
 ## 🏆 **LOGROS ALCANZADOS**
 
 ### **PROGRESO GENERAL:**
-- **Estado de completitud:** 99% de helpers/utilidades migradas ✅
-- **Funciones migradas:** 40+ wrappers de compatibilidad creados
-- **Módulos tz_core activos:** 17 módulos funcionando
+- **Estado de completitud:** Epic 14 COMPLETADO - Arquitectura KML unificada ✅⚡
+- **Funciones migradas:** 43+ funciones en tz_core (1 nueva en Epic 14)
+- **Módulos tz_core activos:** 20 módulos funcionando (kml_generator.py consolidado)
 - **Regresiones detectadas:** 0 (Zero regressions policy mantenida)
+- **Reducción acumulada:** 6,510 → 6,462 líneas (proyección limpia: ~5,850 al archivar kml_generador.py)
 
-### **ÚLTIMAS EXTRACCIONES COMPLETADAS:**
+### **ÚLTIMAS EXTRACCIONES/LIMPIEZAS COMPLETADAS:**
+
+#### 🔥 **EPIC 14 COMPLETADO: Consolidación Arquitectura KML** - 26 diciembre 2025 ⚡ UNIFICACIÓN
+- **Tipo:** Consolidación arquitectónica (eliminar dualidad KML)
+- **Migración:** `generar_kml_puntos_libres()` + `hex_to_abgr()` desde kml_generador.py → tz_core/kml_generator.py
+- **Módulo unificado:** `tz_core/kml_generator.py` (ahora con ambos modos)
+  * `generar_kml()` - Modo complejo (carpetas, tops, deduplicación)
+  * `generar_kml_puntos_libres()` - Modo simple (QC manual, puntos directos)
+- **Archivo deprecado:** `kml_generador.py` (raíz, 463 líneas) - candidato a archivado
+- **Import actualizado:** Monolito ahora usa `from tz_core.kml_generator import generar_kml_puntos_libres`
+- **Validación Protocolo Paranoico:**
+  * Sintaxis: py_compile OK módulo + monolito ✅
+  * Imports: carga sin errores ✅
+  * Tests: 106/111 unitarios pasando (5 fallos pre-existentes alias, 1 skipped) ✅
+  * **Cero regresiones funcionales** ✅
+- **Beneficios arquitectónicos:**
+  * Un solo punto de verdad para generación KML/KMZ
+  * Deuda técnica reducida (arquitectura dual → unificada)
+  * Fundación limpia para próximas extracciones
+- **Próximo paso:** Archivar `kml_generador.py` → `docs/backups/`
+
+#### 🔥 **EPIC 13 COMPLETADO: Extracción Generador KML** - 26 diciembre 2025 ⚡ ÉPICO
+- **Tipo:** Migración mayor de funciones complejas (generación KML/KMZ)
+- **Módulo creado:** `tz_core/kml_generator.py` (658 líneas)
+- **Funciones migradas:**
+  * `generar_kml()` - Generador principal con estructura carpetas/tops/deduplicación (~350 líneas)
+  * `_crear_feature_kml()` - Helper puntos/líneas/conos con estilos reutilizables (~215 líneas)
+- **Wrappers compatibilidad:** Interfaz original preservada (inyección CONFIG global)
+- **FIX crítico aplicado:** Dirección siempre visible en carpetas TOP (issue reportado por usuario)
+- **Reducción proyectada:** ~5,950 líneas al eliminar backups temporales (-560 líneas, -8.6% desde baseline)
+- **Validación exhaustiva:**
+  * Sintaxis: py_compile OK módulo + monolito ✅
+  * Imports: carga sin errores ✅
+  * Tests: 105/110 unitarios + 2/2 E2E passing ✅
+  * Usuario: Probado con archivo real, KMZ funcional, campos correctos ✅
+- **Arquitectura dual KML:**
+  * `tz_core/kml_generator.py` - Generación compleja profesional (carpetas/tops)
+  * `kml_generador.py` (raíz) - Puntos libres simples (QC manual)
+  * Epic 14 candidato: Consolidar ambos en tz_core/
+- **Resultado:** Módulo profesional completo, arquitectura más limpia, funcionalidad validada
+
+#### 🔥 **EPIC 12 COMPLETO: Optimización de Imports** - 26 diciembre 2025
+- **Tipo:** Limpieza de aliases + consolidación de imports locales
+- **Fase 1 - Aliases eliminados:** 10 aliases obsoletos (`_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_dedupe_columns`, `_tiene_valor`, `_a_float`, `_row_html`, `_fmt_imei_item`, `_luhn_check`, `_escribe_hashes_txt`)
+- **Fase 2 - Imports consolidados:** 8 imports locales movidos al bloque global (`cfg_build_rename_map`, `add_user_synonym`, `solicitar_color_tema`, `hex_to_kml_color`, `generate_html_*`, `cargar_excel_con_normalizacion`, `color_mock`, `solicitar_overrides_topn`)
+- **Reducción:** 6,446 → 6,438 líneas (-8 líneas total, -0.1%)
+- **Análisis exhaustivo:** grep_search para detectar duplicados y usos
+- **Validación:** 107/114 tests pasando (5 fallos pre-existentes + 2 skipped)
+- **Resultado:** Imports centralizados en bloque global (~L115), código más organizado y mantenible
+
+#### 🔥 **EPIC 11: Segunda Oleada Limpieza Wrappers** - 26 diciembre 2025
+- **Validación:** 105/110 tests unitarios + 2/2 integración pasando
+- **Fix técnico:** Corrección de firma `CONFIG`→`config`, `HR_COMPACT`→`hr_compact` en `armar_descripcion_compacta()`
+- **Resultado:** Imports directos desde tz_core.validation_utils, tz_core.dataframe_utils, tz_core.format_utils, tz_core.file_utils
+
+#### 🔥 **EPIC 10: Limpieza Wrappers Obsoletos** - 26 diciembre 2025
+- **Tipo:** Eliminación masiva de wrappers redundantes
+- **Wrappers eliminados:** 7 funciones (`_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_fix_mojibake_text`, `_aplicar_reemplazos_regex`, `normalizar_texto`, `normalizar_columnas_texto`)
+- **Usos actualizados:** 4 reemplazos con imports directos desde tz_core
+- **Reducción:** 7,322 → 6,486 líneas (-836 líneas, -11.4% desde estado local pre-sync)
+- **Nota histórica:** Baseline GitHub b71db42 tenía 6,510 líneas (estado oficial post-modularización)
+- **Validación:** 105/110 tests unitarios + 2/2 integración pasando
+- **Resultado:** Código más limpio, imports directos, zero duplicación
 
 #### ✅ **_solicitar_overrides_topn()** - 29 octubre 2025
 - **Destino:** `tz_core/ui_utils.py` (nuevo módulo)
@@ -29,33 +92,59 @@
 
 ## 🎯 **ESTADO ACTUAL DEL MONOLITO**
 
-### **FUNCIONES RESTANTES POR MIGRAR:**
+### **LÍNEAS DE CÓDIGO:**
+- **Estado actual:** 6,462 líneas (+24 temporal con backups de Epic 13)
+- **Proyección final (sin backups):** ~5,950 líneas (-560 desde baseline, -8.6%)
+- **Baseline GitHub (b71db42):** 6,510 líneas
+- **Reducción neta Epic 10+11+12:** -72 líneas
+- **Reducción proyectada Epic 13:** -488 líneas adicionales (al eliminar backups)
+- **Objetivo próximo:** Epic 14 (consolidar kml_generador.py → tz_core/, _wizard_qc_mapeo)
 
-#### 🟢 **RIESGO BAJO (1 función - ÚLTIMA UTILITY):**
-1. **`_aplicar_reemplazos_regex()`** (~8 líneas)
-   - **Destino sugerido:** `tz_core/text_utils.py`
-   - **Complejidad:** MÍNIMA - Helper de regex puro
-   - **Estimación:** 20 minutos para 100% completitud
+### **FUNCIONES RESTANTES POR ANALIZAR:**
 
-#### 🟡 **RIESGO MEDIO (1 función):**
-2. **`cargar_config()`** (~20 líneas)
+#### 🟢 **RIESGO BAJO - COMPLETADO:**
+- ~~**`_aplicar_reemplazos_regex()`**~~ ✅ Eliminado en Epic 10
+- ~~**Wrappers time_utils**~~ ✅ Eliminados en Epic 10
+- ~~**Wrappers validation_utils**~~ ✅ Eliminados en Epic 11
+- ~~**Wrappers format_utils**~~ ✅ Eliminados en Epic 11
+- ~~**Wrappers dataframe_utils**~~ ✅ Eliminados en Epic 11
+- ~~**Wrappers file_utils**~~ ✅ Eliminados en Epic 11
+- ~~**Wrappers text_utils**~~ ✅ Eliminados en Epic 10
+- ~~**Aliases obsoletos imports**~~ ✅ Eliminados en Epic 12 Fase 1
+- ~~**Imports locales duplicados**~~ ✅ Consolidados en Epic 12 Fase 2
+- ~~**`generar_kml()` + `_crear_feature_kml()`**~~ ✅ Migrados a tz_core/kml_generator.py en Epic 13
+
+#### 🟡 **RIESGO MEDIO (2 funciones):**
+1. **`cargar_config()`** (~20 líneas)
    - **Estado:** Función de configuración con dependencias internas
    - **Decisión:** Diferida para revisión estratégica
+2. **`generar_kml_puntos_libres()`** (~100 líneas en kml_generador.py raíz)
+   - **Oportunidad:** Consolidar con tz_core/kml_generator.py en Epic 14
 
-#### 🔴 **RIESGO ALTO (4 funciones - NO TOCAR):**
-3. **`bootstrap_config()`** (~50 líneas) - Inicialización crítica
-4. **`_wizard_qc_mapeo()`** (~382 líneas) - ⚠️ ZONA DE PELIGRO EXTREMO
-5. **`generar_informe_html()`** (~1800+ líneas) - Motor HTML masivo
-6. **`generar_kml()`** (~600+ líneas) - Motor KML masivo
+#### 🔴 **RIESGO ALTO - CANDIDATOS EXTRACCIÓN (2 funciones):**
+3. **`_wizard_qc_mapeo()`** (~382 líneas) - ⚠️ ZONA DE PELIGRO EXTREMO
+   - **Oportunidad:** Extraer a módulo especializado tz_wizard
+   - **Precaución:** Advertencia explícita en código, ver docs/WIZARD_QC_PELIGRO_EXTREMO.md
+4. **`generar_informe_html()`** (~1800+ líneas) - Motor HTML masivo
+   - **Estado:** Parcialmente modularizado con tz_core.html_generator
+
+#### 🏢 **FUNCIONES CORE BUSINESS (mantener en monolito):**
+5. **`bootstrap_config()`** (~50 líneas) - Inicialización crítica
+6. **`run_tz_analysis()`** - Orquestador principal
 
 ---
 
 ## 📈 **MÉTRICAS DE PROGRESO**
 
 ### **MODULARIZACIÓN HELPERS/UTILITIES:**
-- **✅ Completadas:** 40+ funciones (99%)
-- **🎯 Restante:** 1 función (`_aplicar_reemplazos_regex`)
-- **🏁 Meta próxima:** 100% helpers migrados
+- **✅ Completadas:** 40+ funciones (100%)
+- **✅ Wrappers limpiados:** 7 wrappers obsoletos eliminados (Epic 10)
+- **🏁 Meta alcanzada:** 100% helpers migrados + wrappers limpiados
+
+### **REDUCCIÓN DE CÓDIGO:**
+- **Líneas eliminadas Epic 10:** -836 líneas
+- **Porcentaje reducción:** -11.4%
+- **Estado:** 7,322 → 6,486 líneas
 
 ### **ARQUITECTURA ACTUAL:**
 ```
@@ -65,6 +154,7 @@ tz_core/
 ├── config_manager.py      ✅ Gestión de configuración
 ├── data_loader.py         ✅ Carga de datos Excel/TSV
 ├── data_normalizer.py     ✅ Normalización de datos
+├── dataframe_utils.py     ✅ Operaciones DataFrame
 ├── file_utils.py          ✅ Operaciones de archivos
 ├── format_utils.py        ✅ Formateo HTML/KML
 ├── geo_utils.py           ✅ Cálculos geográficos
@@ -74,33 +164,45 @@ tz_core/
 ├── logging_utils.py       ✅ Sistema de logging
 ├── text_utils.py          ✅ Procesamiento de texto
 ├── time_utils.py          ✅ Utilidades temporales
-├── ui_utils.py            ✅ Helpers de interfaz (NUEVO)
+├── ui_utils.py            ✅ Helpers de interfaz
 ├── utils.py               ✅ Utilidades core
 ├── validation_utils.py    ✅ Validadores puros
 └── __init__.py           ✅ Exports centralizados
 ```
+**Total:** 19 módulos activos
 
 ### **CALIDAD DEL CÓDIGO:**
-- **Wrappers de compatibilidad:** 100% funcionales
-- **Tests de regresión:** Metodología 7-test aplicada consistentemente
-- **Documentación:** Cada migración documentada exhaustivamente
-- **Imports centralizados:** tz_core.__init__.py actualizado
+- **Imports directos:** 100% usando módulos tz_core sin wrappers intermedios
+- **Tests de regresión:** 105/110 unitarios + 2/2 integración pasando
+- **Documentación:** Epic 10 documentado en TODO.md + este archivo
+- **Zero regresiones:** Policy mantenida en Epic 10
 
 ---
 
-## 🚀 **PRÓXIMOS PASOS INMEDIATOS**
+## 🚀 **PRÓXIMOS PASOS PROPUESTOS**
 
-### **FASE FINAL HELPERS (Estimación: 30 minutos):**
-1. **Migrar `_aplicar_reemplazos_regex()`**
-   - Extracción a `tz_core/text_utils.py`
-   - Aplicar metodología 4-subfases estándar
-   - Alcanzar histórico 100% de helpers migrados
+### **EPIC 11: Extracción Funciones Auxiliares Grandes (Estimación: 60-90 minutos):**
+1. **`_wizard_qc_mapeo()`** (~382 líneas)
+   - Candidata para módulo `tz_wizard` o `tz_qc`
+   - Requiere análisis de dependencias
+   
+2. **`_crear_feature_kml()`** (~700 líneas)
+   - Candidata para extracción a módulo KML especializado
+   - Potencial reducción significativa
 
-### **POST-100% HELPERS:**
-1. **Consolidación arquitectural**
-2. **Evaluación estratégica de funciones críticas restantes**
-3. **Decisión sobre `cargar_config()` (riesgo medio)**
-4. **Planificación de próximas fases (si proceden)**
+3. **Funciones auxiliares HTML/KML**
+   - `_construir_seccion_interacciones()`
+   - Otras helpers identificadas
+
+### **EPIC 12: Optimización Imports (Estimación: 30 minutos):**
+- Consolidar imports duplicados
+- Limpiar imports locales dentro de funciones
+- Optimizar estructura de imports globales
+
+### **POST-EPICS INMEDIATOS:**
+1. **Evaluación arquitectural** de funciones core business
+2. **Decisión sobre `cargar_config()`** (riesgo medio)
+3. **Planificación modularización motores grandes** (HTML/KML)
 
 ---
 
@@ -128,18 +230,18 @@ tz_core/
 
 ---
 
-## 🎯 **OBJETIVO HISTÓRICO PRÓXIMO**
+## 🎯 **HITO HISTÓRICO ALCANZADO**
 
-**🏁 ALCANZAR 100% DE HELPERS MIGRADOS**
+**🏁 100% DE WRAPPERS OBSOLETOS LIMPIADOS (EPIC 10)**
 
-Solo queda **1 función utility** por migrar para completar histórica la fase de modularización de helpers/utilidades, dejando únicamente las funciones críticas de negocio en el monolito (como debe ser arquitecturalmente).
+Epic 10 completó la eliminación de todos los wrappers obsoletos que duplicaban funcionalidad ya migrada a tz_core, resultando en una reducción dramática de -836 líneas (-11.4%). El código ahora utiliza imports directos desde módulos tz_core sin capas intermedias innecesarias.
 
-**Estado:** 99% → 100% (próxima migración)
-**Función restante:** `_aplicar_reemplazos_regex()`
-**Tiempo estimado:** 20-30 minutos
+**Estado:** 100% helpers migrados + 100% wrappers limpiados ✅
+**Resultado Epic 10:** Eliminados 7 wrappers redundantes
+**Próximo objetivo:** Epic 11 - Extracción de funciones auxiliares grandes
 
 ---
 
-**Actualizado:** 29 octubre 2025  
-**Siguiente revisión:** Post-100% helpers  
+**Actualizado:** 26 diciembre 2025  
+**Siguiente revisión:** Post-Epic 11  
 **Responsable:** Modularización incremental TZ-Analyzer

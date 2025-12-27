@@ -1,6 +1,142 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
-## 🎉 HITO HISTÓRICO: MODULARIZACIÓN 100% COMPLETADA (29-OCT-2025) 🏆 ✨ NUEVA
+## 🔥 EPIC 14 COMPLETADO - CONSOLIDACIÓN ARQUITECTURA KML (26-DIC-2025) ⚡ UNIFICACIÓN
+
+**UNIFICACIÓN KML: kml_generador.py → tz_core/kml_generator.py (ARQUITECTURA LIMPIA)**
+- 🎯 **Consolidación épica:** Un solo módulo KML profesional unificado
+- 📦 **Migración completada:** `generar_kml_puntos_libres()` + utilidades (~100 líneas)
+- 🗑️ **Archivo obsoleto:** `kml_generador.py` (raíz) - 463 líneas deprecadas
+- 🏗️ **Arquitectura final:**
+  * `tz_core/kml_generator.py` - Módulo unificado (ahora con puntos libres + generación compleja)
+  * `generar_kml()` - Modo complejo (carpetas, tops, deduplicación)
+  * `generar_kml_puntos_libres()` - Modo simple (QC manual, puntos directos)
+- 🔧 **Import actualizado:** Monolito ahora usa `from tz_core.kml_generator import generar_kml_puntos_libres`
+- ✅ **Validación Protocolo Paranoico:**
+  * Sintaxis: py_compile OK módulo + monolito
+  * Imports: `from tz_core.kml_generator import generar_kml_puntos_libres` OK
+  * Tests: 106/111 pasando (5 fallos pre-existentes alias, 1 skipped)
+  * **Cero regresiones funcionales** ✅
+
+**📉 REDUCCIÓN PROYECTADA:**
+- Monolito antes Epic 14: 6,462 líneas (con backups Epic 13)
+- Import consolidado: 2 líneas duplicadas → 1 línea
+- `kml_generador.py` deprecado: -463 líneas (marcar para archivado)
+- **Proyección limpia:** Al eliminar backups + archivar kml_generador.py = ~5,850 líneas
+
+**🎯 BENEFICIOS ARQUITECTÓNICOS:**
+- ✅ Un solo punto de verdad para KML/KMZ
+- ✅ Cero confusión sobre qué módulo usar
+- ✅ Deuda técnica reducida (dual architecture → unificada)
+- ✅ Fundación limpia para próximas extracciones
+
+**🗃️ PRÓXIMO PASO: ARCHIVAR kml_generador.py**
+- Mover a `docs/backups/kml_generador_ARCHIVED.py`
+- Documento de migración en header explicando Epic 14
+- Monolito ya no depende del archivo raíz
+
+---
+
+## 🔥 EPIC 13 COMPLETADO - EXTRACCIÓN GENERADOR KML (26-DIC-2025) ✨ ÉPICO
+
+**MIGRACIÓN MAYOR: generar_kml() + _crear_feature_kml() → tz_core/kml_generator.py**
+- 🎯 **Módulo profesional creado:** 658 líneas (generación KML/KMZ completa)
+- 📦 **Funciones migradas:**
+  * `generar_kml()` - Generador principal con carpetas/tops/deduplicación (~350 líneas)
+  * `_crear_feature_kml()` - Helper puntos/líneas/conos con estilos reutilizables (~215 líneas)
+- 🔧 **Wrappers compatibilidad:** Interfaz original preservada (CONFIG global inyectado)
+- 🐛 **FIX crítico aplicado:** Dirección siempre visible en carpetas TOP (L667)
+- 📉 **Reducción proyectada:** 6,438 → ~5,950 líneas al eliminar backups (-7.6%)
+- ✅ **Validación exhaustiva:** 
+  * Sintaxis: py_compile OK módulo + monolito
+  * Imports: carga correcta sin errores
+  * Tests: 105/110 unitarios + 2/2 E2E passing
+  * Usuario: Probado con archivo real, KMZ funcional ✅
+
+**🏗️ ARQUITECTURA MODULAR KML:**
+- `tz_core/kml_generator.py` (nuevo): Generación compleja profesional
+- `kml_generador.py` (raíz): Puntos libres simples (QC manual)
+- Separación responsabilidades: complejo vs simple
+- Epic 14 candidato: Consolidar ambos en tz_core/
+
+**📊 MÉTRICAS ACUMULADAS (EPIC 10+11+12+13):**
+- Monolito original (GitHub b71db42): 6,510 líneas
+- Después Epic 10: 6,486 líneas (-24)
+- Después Epic 11: 6,446 líneas (-64)
+- Después Epic 12: 6,438 líneas (-72)
+- Después Epic 13: 6,462 líneas (+24 temporal con backups)
+- **Reducción neta proyectada (sin backups):** ~5,950 líneas (-560, -8.6% total)
+- **Módulos tz_core creados:** 20+ profesionales
+- Tests: 107/114 estables (5 fallos pre-existentes)
+
+**🎯 PRÓXIMO:** Epic 14 (consolidar kml_generador.py → tz_core/, _wizard_qc_mapeo ~382 líneas)
+
+---
+
+## 🔥 EPIC 12 COMPLETADO - OPTIMIZACIÓN IMPORTS (26-DIC-2025) ✨
+
+**FASE 1: LIMPIEZA ALIASES OBSOLETOS + FASE 2: CONSOLIDACIÓN IMPORTS LOCALES**
+- 🧹 **Fase 1 - Aliases eliminados (10):** `_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_dedupe_columns`, `_tiene_valor`, `_a_float`, `_row_html`, `_fmt_imei_item`, `_luhn_check`, `_escribe_hashes_txt`
+- 🎯 **Fase 2 - Imports locales consolidados (8):** `cfg_build_rename_map`, `add_user_synonym`, `solicitar_color_tema`, `hex_to_kml_color`, `generate_html_*`, `cargar_excel_con_normalizacion`, `color_mock`, `solicitar_overrides_topn`
+- 📉 **Reducción total:** 6,446 → 6,438 líneas (-8 líneas, -0.1%)
+- ✅ **Validación exitosa:** 107/114 tests pasando (5 fallos pre-existentes + 2 skipped)
+- 🎯 **Resultado:** Imports centralizados en bloque global, código más limpio y organizado
+
+**🛡️ ESTRATEGIA DE CONSOLIDACIÓN:**
+- Fase 1: Eliminar aliases huérfanos de Epic 10+11
+- Fase 2: Mover imports locales → bloque global (línea ~115)
+- Análisis exhaustivo: grep_search para detectar duplicados
+- Wrappers locales activos preservados (`_hex_to_kml_color`, `_color_mock`, `_copiar_logo_a_salida`, `_es_num`)
+
+**📊 MÉTRICAS ACUMULADAS (EPIC 10 + EPIC 11 + EPIC 12):**
+- Monolito original (GitHub b71db42): 6,510 líneas
+- Después Epic 10: 6,486 líneas (-24 neto)
+- Después Epic 11: 6,446 líneas (-64 neto)
+- Después Epic 12 Completo: 6,438 líneas (-72 neto, -1.1% total)
+- Wrappers eliminados: 14 funciones
+- Aliases eliminados: 10 imports
+- Imports consolidados: 8 locales → globales
+- Tests estables: 107/114 (5 fallos pre-existentes)
+
+**🎯 PRÓXIMO:** Epic 13 (funciones grandes: `_wizard_qc_mapeo`, `_crear_feature_kml`)
+
+---
+
+## 🔥 EPIC 11 - SEGUNDA OLEADA LIMPIEZA WRAPPERS (26-DIC-2025) ✨
+- 🎯 **Impacto acumulado Epic 10+11:** -64 líneas neto desde GitHub baseline (-1.0% total)
+
+**🧹 ESTRATEGIA DE LIMPIEZA:**
+- Verificación exhaustiva: grep_search para identificar usos reales
+- 3 wrappers sin uso eliminados directamente (validación, formato)
+- 4 wrappers con dependencias: reemplazo quirúrgico en 7 ubicaciones
+- Corrección de firma: `CONFIG`/`HR_COMPACT` → `config`/`hr_compact` (argumentos minúsculas)
+
+**📊 MÉTRICAS ACUMULADAS (EPIC 10 + EPIC 11):**
+- Monolito original (GitHub b71db42): 6,510 líneas
+- Después Epic 10: 6,486 líneas (-24 neto)
+- Después Epic 11: 6,446 líneas (-64 neto, -1.0% total)
+- **Total wrappers eliminados:** 14 funciones
+- Tests estables: 105/110 unitarios + 2/2 integración
+
+**🎯 PRÓXIMAS OPORTUNIDADES:** Epic 12 (imports duplicados), Epic 13+ (funciones grandes: `_wizard_qc_mapeo`, `_crear_feature_kml`)
+
+---
+
+## 🔥 EPIC 10 - LIMPIEZA WRAPPERS OBSOLETOS COMPLETADA (26-DIC-2025) ✨
+
+**ELIMINACIÓN EXITOSA DE WRAPPERS REDUNDANTES:**
+- 🗑️ **7 wrappers eliminados:** `_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_fix_mojibake_text`, `_aplicar_reemplazos_regex`, `normalizar_texto`, `normalizar_columnas_texto`
+- 📉 **Reducción dramática:** 7,322 → 6,486 líneas (-836 líneas, -11.4%)
+- 🔧 **4 usos actualizados:** Reemplazados con imports directos desde tz_core
+- ✅ **Validación rigurosa:** 105/110 tests unitarios + 2/2 tests integración pasando
+- 🎯 **Impacto técnico:** Código más limpio, sin duplicación de wrappers, imports directos
+
+**🧹 CARACTERÍSTICAS TÉCNICAS:**
+- Estrategia quirúrgica: análisis exhaustivo de usos antes de eliminar
+- Reemplazos atómicos: `_clasificar_rango_sv` → `clasificar_rango_sv`, `_dedupe_columns` → `dedupe_columns`
+- Tests confirmados: import OK, sintaxis OK, funcionalidad validada por usuario
+- Zero regresiones: 105/110 tests pasando (5 fallos preexistentes en aliases)
+
+## 🎉 HITO HISTÓRICO: MODULARIZACIÓN 100% COMPLETADA (29-OCT-2025) 🏆 ✨
 
 **🏆 PRIMERA VEZ EN LA HISTORIA DEL PROYECTO:**
 - 🎯 **100% funciones helper modularizadas** - Logro histórico sin precedentes

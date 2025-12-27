@@ -73,7 +73,8 @@ from simplekml import Kml
 # Módulos locales
 from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
-from kml_generador import generar_kml_puntos_libres
+# 🔧 MÓDULO EXTRAÍDO (Epic 14): KML puntos libres consolidado en tz_core
+from tz_core.kml_generator import generar_kml_puntos_libres
 # 🔧 MÓDULO EXTRAÍDO: HTML helpers para generar_informe_html
 from tz_core.html_helpers import (
     fmt_datetime as fmt_dt, first_nonempty_in, 
@@ -109,20 +110,13 @@ from tz_core.text_utils import (
     _fix_mojibake_text,
     _aplicar_reemplazos_regex
 )
+# 🔧 MÓDULO EXTRAÍDO: Utilidades de formato y configuración
+from tz_core.format_utils import agregar_bloque, armar_descripcion_compacta
+from tz_core.config_manager import cfg_build_rename_map, add_user_synonym, solicitar_color_tema
+from tz_core.color_utils import hex_to_kml_color
+from tz_core.html_generator import generate_html_header, generate_body_header, generate_metadata_section, generate_kpi_section
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
-
-def _hhmmss_to_time_or_none(hh):
-    """Wrapper de compatibilidad - usa tz_core.time_utils.hhmmss_to_time_or_none"""
-    return hhmmss_to_time_or_none(hh)
-
-def _en_rango(t: _time, ini: _time, fin: _time) -> bool:
-    """Wrapper de compatibilidad - usa tz_core.time_utils.en_rango_tiempo"""
-    return en_rango_tiempo(t, ini, fin)
-
-def _clasificar_rango_sv(hhmmss: str):
-    """Wrapper de compatibilidad - usa tz_core.time_utils.clasificar_rango_sv"""
-    return clasificar_rango_sv(hhmmss)
 
 # =========================
 # Generación de KML (usa CONFIG)
@@ -160,8 +154,7 @@ def bootstrap_config() -> None:
     global CONFIG, RENAME_MAP
     CONFIG = get_config()  # Usa la función centralizada (ya modular)
     
-    # Importar cfg_build_rename_map desde el módulo
-    from tz_core.config_manager import cfg_build_rename_map
+    # Importar cfg_build_rename_map desde el módulo (ya en imports globales)
     RENAME_MAP = cfg_build_rename_map(CONFIG)
 
 # === SECCIÓN: WIZARD DE MAPEO DE COLUMNAS (detección, mapeo manual, QC) ===
@@ -569,9 +562,6 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
 
     return df, asignadas
 
-from kml_generador import generar_kml_puntos_libres
-from collections import Counter
-
 # --- LOGS: helper para registrar degrade/mapas/omisiones ---
 from datetime import datetime
 from datetime import datetime
@@ -625,28 +615,8 @@ def log(msg: str):
 
 
 # === NORMALIZADOR-1 (inicio) ==============================================
-
-def _fix_mojibake_text(s):
-    """Wrapper de compatibilidad - usa tz_core.text_utils._fix_mojibake_text"""
-    from tz_core.text_utils import _fix_mojibake_text as fix_modular
-    return fix_modular(s)
-
-# Abreviaturas - MIGRADO A tz_core.text_utils
-def _aplicar_reemplazos_regex(s, reglas_regex=None):
-    """Wrapper de compatibilidad - usa tz_core.text_utils._aplicar_reemplazos_regex"""
-    from tz_core.text_utils import _aplicar_reemplazos_regex as regex_modular
-    return regex_modular(s, reglas_regex)
-
-
-def normalizar_texto(s, reglas=None):
-    """MIGRADA A tz_core.text_utils - usar import desde allí"""
-    from tz_core.text_utils import normalizar_texto as normalizar_modular
-    return normalizar_modular(s, reglas)
-
-def normalizar_columnas_texto(df, columnas=None, reglas=None):
-    """MIGRADA A tz_core.text_utils - usar import desde allí"""
-    from tz_core.text_utils import normalizar_columnas_texto as normalizar_cols_modular
-    return normalizar_cols_modular(df, columnas, reglas)
+# Todas las funciones de normalización de texto migradas a tz_core.text_utils
+# Usar imports directos desde línea 765: normalizar_texto, normalizar_columnas_texto
 # === NORMALIZADOR-1 (fin) ==================================================
 
 
@@ -728,58 +698,22 @@ except Exception:
 # Configuración externa
 # =========================
 # --- ANTI-COLISIONES DE COLUMNAS (fusiona duplicadas por primer valor no vacío) ---
-def _dedupe_columns(df):
-    from collections import Counter
-
-    cols = list(df.columns)
-    if not cols:
-        return df
-
-    counts = Counter(cols)
-    dup_names = [n for n, c in counts.items() if c > 1]
-    if not dup_names:
-        return df
-
-    for name in dup_names:
-        same = [c for c in df.columns if c == name]
-        if len(same) <= 1:
-            continue
-        base = df[same[0]].copy()
-
-        # Toma el primer valor NO vacío/NO blanco por fila
-        for extra in same[1:]:
-            s = df[extra]
-            # consideramos vacío: NaN o string en blanco
-            mask_blank = base.isna() | (base.astype(str).str.strip() == "")
-            base = base.where(~mask_blank, s)
-
-        # Sobrescribe la columna final y descarta las duplicadas extra
-        df[name] = base
-        df = df.drop(columns=same[1:])
-
-    return df
 # === IMPORTS MODULARES (gradual refactoring) ===
 from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
 from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR
 from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
 from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
-from tz_core.html_utils import row_html, fmt_imei_item, luhn_check, _row_html, _fmt_imei_item, _luhn_check
-from tz_core.validation_utils import (
-    tiene_valor, es_num, a_float, _tiene_valor, _es_num, _a_float
-)
-from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR, _hhmmss_to_time_or_none, _en_rango, _clasificar_rango_sv
-from tz_core.dataframe_utils import dedupe_columns, _dedupe_columns
-from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _escribe_hashes_txt, _copiar_logo_a_salida
+from tz_core.html_utils import row_html, fmt_imei_item, luhn_check
+from tz_core.validation_utils import tiene_valor, es_num, a_float
+from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
+from tz_core.dataframe_utils import dedupe_columns
+from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo_a_salida
 
 # Importar constantes desde tz_core para consistencia
 RANGOS_SV = RANGOS_SV_MODULAR
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
-
-def _escribe_hashes_txt(dest_path: str, pares: list[tuple[str, str]]):
-    """Wrapper de compatibilidad - usa tz_core.file_utils.escribe_hashes_txt"""
-    return escribe_hashes_txt(dest_path, pares)
 def _copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> str | None:
     """Wrapper de compatibilidad - usa tz_core.file_utils.copiar_logo_a_salida"""
     return copiar_logo_a_salida(logo_src, carpeta_salida)
@@ -825,7 +759,6 @@ def cfg_add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, rut
     Nota: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.
     Este wrapper preserva persistencia automática en config.json y memoria de mapeo manual.
     """
-    from tz_core.config_manager import add_user_synonym
     return add_user_synonym(CONFIG, canonico, encabezado_crudo, ruta_cfg)
 # === SINONIMOS: MERGE + PERSISTENCIA (fin) =================================
 
@@ -865,7 +798,6 @@ def _solicitar_color_tema(CONFIG):
     Nota: Función interactiva extraída al módulo config_manager.
     Este wrapper preserva la paleta de 60 colores para diferenciación de bitácoras.
     """
-    from tz_core.config_manager import solicitar_color_tema
     return solicitar_color_tema(CONFIG)
 
 # =========================
@@ -874,7 +806,6 @@ def _solicitar_color_tema(CONFIG):
 # --- Helpers de color KML (aabbggrr) desde #RRGGBB ---
 def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
     """MIGRADA A tz_core.color_utils - usar import desde allí"""
-    from tz_core.color_utils import hex_to_kml_color
     return hex_to_kml_color(hex_rgb, alpha)
 
 # =========================
@@ -888,10 +819,6 @@ def analizar_antenas(df: pd.DataFrame, archivo_salida: str):
 # =========================
 # Burbuja condicional
 # =========================
-def _tiene_valor(v):
-    """Wrapper de compatibilidad - usa tz_core.validation_utils.tiene_valor"""
-    return tiene_valor(v)
-
 def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100):
     """Wrapper de compatibilidad - usa tz_core.analytics.generar_historial_cambios_antena"""
     from tz_core.analytics import generar_historial_cambios_antena as historial_modular
@@ -899,27 +826,10 @@ def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100):
 
 HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
 
-# --- Formateo para burbuja (números, decimales, duración) ---
-def _a_float(v):
-    """Wrapper de compatibilidad - usa tz_core.validation_utils.a_float"""
-    return a_float(v)
-
-def _formatear_valor_para_burbuja(col, val):
-    """MIGRADA A tz_core.format_utils - usar import desde allí"""
-    from tz_core.format_utils import _formatear_valor_para_burbuja as formatear_modular
-    return formatear_modular(col, val)
-
-# --- Descripción compacta para la burbuja ---
-def _armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direccion_si_igual=True) -> str:
-    """Wrapper de compatibilidad - usa tz_core.format_utils.armar_descripcion_compacta"""
-    from tz_core.format_utils import armar_descripcion_compacta
-    return armar_descripcion_compacta(campos, count_azimut, suprimir_direccion_si_igual, CONFIG, HR_COMPACT)
-
-def _agregar_bloque(partes, fila, pares):
-    """Wrapper de compatibilidad - usa tz_core.format_utils.agregar_bloque"""
-    from tz_core.format_utils import agregar_bloque
-    return agregar_bloque(partes, fila, pares)
-
+# =========================
+# Funciones de formateo - usar imports directos desde tz_core.format_utils
+# - armar_descripcion_compacta()
+# - agregar_bloque()
 # =========================
 # Generación de KML (usa CONFIG)
 # =========================
@@ -1139,8 +1049,34 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
                 pol2.style = _REUSABLE_STYLES["cone"]  # luego bajamos opacidad si querés
 
 # === SECCIÓN: GENERACIÓN KML/KMZ (placemarks, carpetas, top_n, estilos) ===
+# ⚡ EPIC 13: Función migrada a tz_core.kml_generator (26/12/2025)
+# Wrapper de compatibilidad - mantiene interfaz original del monolito
 def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
-    """Genera KML/KMZ a partir del DataFrame procesado según la configuración activa."""
+    """
+    Wrapper de compatibilidad para tz_core.kml_generator.generar_kml()
+    
+    MIGRADA EN EPIC 13 (26/12/2025): ~350 líneas extraídas a módulo profesional
+    IMPLEMENTACIÓN REAL: tz_core.kml_generator.generar_kml()
+    """
+    from tz_core.kml_generator import generar_kml as generar_kml_modular
+    
+    # Inyectar CONFIG global y OVERRIDE_TOPS si existen
+    config_param = CONFIG if 'CONFIG' in globals() else {}
+    override_param = OVERRIDE_TOPS if 'OVERRIDE_TOPS' in globals() else None
+    
+    return generar_kml_modular(
+        df=df,
+        archivo_salida_kml=archivo_salida_kml,
+        config=config_param,
+        flat=flat,
+        override_tops=override_param
+    )
+
+
+# === IMPLEMENTACIÓN ORIGINAL PRESERVADA TEMPORALMENTE (EPIC 13 - VALIDACIÓN) ===
+# Se eliminará en commit final si pasan todos los tests
+def _generar_kml_ORIGINAL_BACKUP(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
+    """[BACKUP] Implementación original - NO USAR (solo referencia temporal)"""
     # Validación defensiva de entrada
     if df is None:
         log("[ERROR] generar_kml: DataFrame es None, abortando")
@@ -1216,13 +1152,13 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
         nombre_punto = row.get("antena", "Antena") if str(row.get("antena", "")).strip() else "Antena"
         partes = []
         for bloque in desc_spec:
-            _agregar_bloque(partes, row, [(etq, col) for etq, col in bloque])
+            agregar_bloque(partes, row, [(etq, col) for etq, col in bloque])
         if partes and partes[-1] == "<hr>":
             partes.pop()
         descripcion = "\n".join(partes) if partes else None
 
         # Clasificación por rango horario (Preset A SV)
-        rango = _clasificar_rango_sv(row.get("hora", None))
+        rango = clasificar_rango_sv(row.get("hora", None))
 
         items.append({
             "antena": nombre_punto,
@@ -1275,7 +1211,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
         # para garantizar que la información esté visible en este contexto simplificado
         for it in items:
             n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
-            desc_comp = _armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=False)
+            desc_comp = armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=False, config=CONFIG, hr_compact=HR_COMPACT)
             _crear_feature_kml(kml, it["antena"], it["lon"], it["lat"], desc_comp, it["azimut_f"], CONFIG)
 
         # === GUARDAR SALIDAS (KMZ en misma carpeta; KML opcional) — INICIO ===
@@ -1379,7 +1315,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
     for it in items:
         n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
-        desc_comp = _armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=True)
+        desc_comp = armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=True, config=CONFIG, hr_compact=HR_COMPACT)
         _crear_feature_kml(obtener_carpeta_fecha(it["fecha"]), it["antena"], it["lon"], it["lat"], desc_comp, it["azimut_f"], CONFIG)
 
     # 6) Preparar contadores para deduplicación por (antena, azimut ENTERO)
@@ -2506,8 +2442,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     Genera un informe HTML sencillo (portada + KPIs + enlaces) en la misma carpeta del KML.
     Retorna la ruta del HTML generado.
     """
-    # 🔧 MÓDULO EXTRAÍDO: HTML generator para generar_informe_html
-    from tz_core.html_generator import generate_html_header, generate_body_header, generate_metadata_section, generate_kpi_section
+    # 🔧 MÓDULO EXTRAÍDO: HTML generator para generar_informe_html (ya en imports globales)
     
     # Validación defensiva de entrada
     if df is None:
@@ -4889,7 +4824,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
 # --- Anti-hojas: ignorar ocultas y elegir visible ---
 # 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader
-from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja
+from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja, cargar_excel_con_normalizacion
 
 def _seleccionar_hoja_visible(ruta_excel):
     """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja_visible"""
@@ -4912,7 +4847,6 @@ def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
     
     Preserva comportamiento exacto de líneas originales 6543-6557.
     """
-    from tz_core.data_loader import cargar_excel_con_normalizacion
     return cargar_excel_con_normalizacion(ruta_excel, hoja_elegida)
 
 # --- Fallback: listar TODAS las hojas con pandas y seleccionar una ---
@@ -5350,7 +5284,6 @@ def run_tz_analysis(
     # 7) Color tema: no preguntar; dejar CONFIG tal cual
     def _color_mock(cfg):
         """MIGRADA A tz_core.color_utils - usar import desde allí"""
-        from tz_core.color_utils import color_mock
         return color_mock(cfg)
     g["_solicitar_color_tema"] = _color_mock
 
@@ -5952,7 +5885,7 @@ def main():
                 with open("config.json", "w", encoding="utf-8") as f:
                     json.dump(to_dump, f, ensure_ascii=False, indent=2)
                 print("[WIZARD] Validación completada. Config guardada (sin cambios de sinónimos).")
-                df = _dedupe_columns(df)
+                df = dedupe_columns(df)
                 
                 # === WIZARD: HELPERS DE VALIDACIÓN (inicio) ================================
                 def _muestras_columna(serie, n=5):
@@ -6354,7 +6287,7 @@ def main():
                         df = _ask_map_col(df, need)
 
                     # Quitar duplicadas si quedaron tras renombrar
-                    df = _dedupe_columns(df)
+                    df = dedupe_columns(df)
 
                     # Validación dura: sin lat/lon → en QC no abortamos, intentamos coalesce y seguimos
                     faltan_ub = [x for x in ("lat", "lon") if x not in df.columns]  # OJO: usamos 'lon' como canónica
@@ -6412,7 +6345,7 @@ def main():
                             )
 
                             # por si quedó alguna duplicación posterior
-                            df = _dedupe_columns(df)
+                            df = dedupe_columns(df)
 
                     except Exception:
                         pass
@@ -7158,7 +7091,7 @@ def main():
                 _dest_dir = os.getcwd()
 
             _hashes_path = os.path.join(_dest_dir, f"{nombre_salida}_hashes.txt")
-            _escribe_hashes_txt(_hashes_path, pares)
+            escribe_hashes_txt(_hashes_path, pares)
             try: log(f"[hashes] Generado {os.path.basename(_hashes_path)}")
             except Exception: pass
         except Exception as e:
@@ -7301,7 +7234,6 @@ def _aplicar_filtros_tiempo(df, filtros):
 
 def _solicitar_overrides_topn(config):
     """Wrapper de compatibilidad - usa tz_core.ui_utils.solicitar_overrides_topn"""
-    from tz_core.ui_utils import solicitar_overrides_topn
     return solicitar_overrides_topn(config)
 
 if __name__ == "__main__":
