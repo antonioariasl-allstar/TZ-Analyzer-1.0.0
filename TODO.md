@@ -1,6 +1,32 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
-## 🔥 EPIC 11 - SEGUNDA OLEADA LIMPIEZA WRAPPERS (26-DIC-2025) ✨ RECIENTE
+## 🔥 EPIC 12 FASE 1 - LIMPIEZA ALIASES OBSOLETOS (26-DIC-2025) ✨ NUEVA
+
+**OPTIMIZACIÓN DE IMPORTS: ELIMINACIÓN DE ALIASES REDUNDANTES**
+- 🧹 **Aliases eliminados:** `_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_dedupe_columns`, `_tiene_valor`, `_a_float`, `_row_html`, `_fmt_imei_item`, `_luhn_check`, `_escribe_hashes_txt`
+- 📉 **Reducción quirúrgica:** 6,446 → 6,444 líneas (-2 líneas)
+- 🔍 **Análisis exhaustivo:** grep_search para verificar uso real antes de eliminar
+- ✅ **Validación exitosa:** 105/110 tests unitarios + 2/2 tests integración pasando
+- 🎯 **Imports conservados:** `_hex_to_kml_color`, `_color_mock`, `_copiar_logo_a_salida`, `_es_num` (wrappers locales activos)
+
+**🛡️ ESTRATEGIA DE SEGURIDAD:**
+- Solo aliases sin uso eliminados (Epic 10+11 ya eliminaron los wrappers)
+- Verificación individual de cada alias antes de remover
+- Wrappers locales activos preservados intactos
+- Zero impacto en funcionalidad (solo limpieza de imports)
+
+**📊 MÉTRICAS ACUMULADAS (EPIC 10 + EPIC 11 + EPIC 12 FASE 1):**
+- Monolito original (GitHub b71db42): 6,510 líneas
+- Después Epic 10: 6,486 líneas (-24 neto)
+- Después Epic 11: 6,446 líneas (-64 neto)
+- Después Epic 12 Fase 1: 6,444 líneas (-66 neto, -1.0% total)
+- Tests estables: 105/110 unitarios + 2/2 integración
+
+**🎯 PRÓXIMO:** Epic 12 Fase 2 (consolidar imports locales), Epic 13+ (funciones grandes)
+
+---
+
+## 🔥 EPIC 11 - SEGUNDA OLEADA LIMPIEZA WRAPPERS (26-DIC-2025) ✨
 
 **ELIMINACIÓN EXITOSA DE 7 WRAPPERS ADICIONALES:**
 - 🗑️ **Wrappers eliminados:** `_tiene_valor`, `_a_float`, `_formatear_valor_para_burbuja`, `_dedupe_columns`, `_armar_descripcion_compacta`, `_agregar_bloque`, `_escribe_hashes_txt`

@@ -702,13 +702,11 @@ from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAU
 from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
 from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
-from tz_core.html_utils import row_html, fmt_imei_item, luhn_check, _row_html, _fmt_imei_item, _luhn_check
-from tz_core.validation_utils import (
-    tiene_valor, es_num, a_float, _tiene_valor, _es_num, _a_float
-)
-from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR, _hhmmss_to_time_or_none, _en_rango, _clasificar_rango_sv
-from tz_core.dataframe_utils import dedupe_columns, _dedupe_columns
-from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _escribe_hashes_txt, _copiar_logo_a_salida
+from tz_core.html_utils import row_html, fmt_imei_item, luhn_check
+from tz_core.validation_utils import tiene_valor, es_num, a_float
+from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
+from tz_core.dataframe_utils import dedupe_columns
+from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo_a_salida
 
 # Importar constantes desde tz_core para consistencia
 RANGOS_SV = RANGOS_SV_MODULAR

@@ -6,13 +6,22 @@
 ## 🏆 **LOGROS ALCANZADOS**
 
 ### **PROGRESO GENERAL:**
-- **Estado de completitud:** 100% de wrappers obsoletos limpiados (Epic 10+11) ✅
+- **Estado de completitud:** 100% wrappers + imports optimizados (Epic 10+11+12 F1) ✅
 - **Funciones migradas:** 40+ funciones en tz_core (todas modulares)
 - **Módulos tz_core activos:** 19 módulos funcionando
 - **Regresiones detectadas:** 0 (Zero regressions policy mantenida)
-- **Reducción acumulada:** 6,510 → 6,446 líneas (-64 líneas neto, -1.0% total)
+- **Reducción acumulada:** 6,510 → 6,444 líneas (-66 líneas neto, -1.0% total)
 
 ### **ÚLTIMAS EXTRACCIONES/LIMPIEZAS COMPLETADAS:**
+
+#### 🔥 **EPIC 12 FASE 1: Limpieza Aliases Obsoletos** - 26 diciembre 2025
+- **Tipo:** Optimización de imports - eliminación de aliases redundantes
+- **Aliases eliminados:** 10 aliases sin uso (`_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_dedupe_columns`, `_tiene_valor`, `_a_float`, `_row_html`, `_fmt_imei_item`, `_luhn_check`, `_escribe_hashes_txt`)
+- **Análisis exhaustivo:** Verificación individual de cada alias antes de remover
+- **Reducción:** 6,446 → 6,444 líneas (-2 líneas)
+- **Aliases conservados:** `_hex_to_kml_color`, `_color_mock`, `_copiar_logo_a_salida`, `_es_num` (wrappers locales activos)
+- **Validación:** 105/110 tests unitarios + 2/2 integración pasando
+- **Resultado:** Imports más limpios, sin aliases huérfanos de Epic 10+11
 
 #### 🔥 **EPIC 11: Segunda Oleada Limpieza Wrappers** - 26 diciembre 2025
 - **Tipo:** Eliminación quirúrgica de 7 wrappers adicionales
@@ -49,10 +58,10 @@
 ## 🎯 **ESTADO ACTUAL DEL MONOLITO**
 
 ### **LÍNEAS DE CÓDIGO:**
-- **Estado actual:** 6,446 líneas
+- **Estado actual:** 6,444 líneas
 - **Baseline GitHub (b71db42):** 6,510 líneas
-- **Reducción neta Epic 10+11:** -64 líneas (-1.0%)
-- **Objetivo próximo:** Epic 12 (imports duplicados), Epic 13+ (funciones grandes)
+- **Reducción neta Epic 10+11+12 F1:** -66 líneas (-1.0%)
+- **Objetivo próximo:** Epic 12 Fase 2 (consolidar imports locales), Epic 13+ (funciones grandes)
 
 ### **FUNCIONES RESTANTES POR ANALIZAR:**
 
@@ -64,6 +73,7 @@
 - ~~**Wrappers dataframe_utils**~~ ✅ Eliminados en Epic 11
 - ~~**Wrappers file_utils**~~ ✅ Eliminados en Epic 11
 - ~~**Wrappers text_utils**~~ ✅ Eliminados en Epic 10
+- ~~**Aliases obsoletos imports**~~ ✅ Eliminados en Epic 12 Fase 1
 
 #### 🟡 **RIESGO MEDIO (1 función):**
 1. **`cargar_config()`** (~20 líneas)
