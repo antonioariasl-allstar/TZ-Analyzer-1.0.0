@@ -1,18 +1,37 @@
 # 📊 ESTADO ACTUAL DE MODULARIZACIÓN TZ-ANALYZER
-## Actualización: 26 de diciembre de 2025 - Epic 13 COMPLETADO
+## Actualización: 26 de diciembre de 2025 - Epic 14 COMPLETADO (CONSOLIDACIÓN KML)
 
 ---
 
 ## 🏆 **LOGROS ALCANZADOS**
 
 ### **PROGRESO GENERAL:**
-- **Estado de completitud:** Epic 13 COMPLETADO - Generador KML modularizado ✅
-- **Funciones migradas:** 42+ funciones en tz_core (2 nuevas en Epic 13)
-- **Módulos tz_core activos:** 20 módulos funcionando (nuevo: kml_generator.py)
+- **Estado de completitud:** Epic 14 COMPLETADO - Arquitectura KML unificada ✅⚡
+- **Funciones migradas:** 43+ funciones en tz_core (1 nueva en Epic 14)
+- **Módulos tz_core activos:** 20 módulos funcionando (kml_generator.py consolidado)
 - **Regresiones detectadas:** 0 (Zero regressions policy mantenida)
-- **Reducción acumulada:** 6,510 → 6,462 líneas (+24 temporal con backups, -560 proyectado al eliminar backups)
+- **Reducción acumulada:** 6,510 → 6,462 líneas (proyección limpia: ~5,850 al archivar kml_generador.py)
 
 ### **ÚLTIMAS EXTRACCIONES/LIMPIEZAS COMPLETADAS:**
+
+#### 🔥 **EPIC 14 COMPLETADO: Consolidación Arquitectura KML** - 26 diciembre 2025 ⚡ UNIFICACIÓN
+- **Tipo:** Consolidación arquitectónica (eliminar dualidad KML)
+- **Migración:** `generar_kml_puntos_libres()` + `hex_to_abgr()` desde kml_generador.py → tz_core/kml_generator.py
+- **Módulo unificado:** `tz_core/kml_generator.py` (ahora con ambos modos)
+  * `generar_kml()` - Modo complejo (carpetas, tops, deduplicación)
+  * `generar_kml_puntos_libres()` - Modo simple (QC manual, puntos directos)
+- **Archivo deprecado:** `kml_generador.py` (raíz, 463 líneas) - candidato a archivado
+- **Import actualizado:** Monolito ahora usa `from tz_core.kml_generator import generar_kml_puntos_libres`
+- **Validación Protocolo Paranoico:**
+  * Sintaxis: py_compile OK módulo + monolito ✅
+  * Imports: carga sin errores ✅
+  * Tests: 106/111 unitarios pasando (5 fallos pre-existentes alias, 1 skipped) ✅
+  * **Cero regresiones funcionales** ✅
+- **Beneficios arquitectónicos:**
+  * Un solo punto de verdad para generación KML/KMZ
+  * Deuda técnica reducida (arquitectura dual → unificada)
+  * Fundación limpia para próximas extracciones
+- **Próximo paso:** Archivar `kml_generador.py` → `docs/backups/`
 
 #### 🔥 **EPIC 13 COMPLETADO: Extracción Generador KML** - 26 diciembre 2025 ⚡ ÉPICO
 - **Tipo:** Migración mayor de funciones complejas (generación KML/KMZ)

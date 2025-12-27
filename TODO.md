@@ -1,5 +1,41 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
+## 🔥 EPIC 14 COMPLETADO - CONSOLIDACIÓN ARQUITECTURA KML (26-DIC-2025) ⚡ UNIFICACIÓN
+
+**UNIFICACIÓN KML: kml_generador.py → tz_core/kml_generator.py (ARQUITECTURA LIMPIA)**
+- 🎯 **Consolidación épica:** Un solo módulo KML profesional unificado
+- 📦 **Migración completada:** `generar_kml_puntos_libres()` + utilidades (~100 líneas)
+- 🗑️ **Archivo obsoleto:** `kml_generador.py` (raíz) - 463 líneas deprecadas
+- 🏗️ **Arquitectura final:**
+  * `tz_core/kml_generator.py` - Módulo unificado (ahora con puntos libres + generación compleja)
+  * `generar_kml()` - Modo complejo (carpetas, tops, deduplicación)
+  * `generar_kml_puntos_libres()` - Modo simple (QC manual, puntos directos)
+- 🔧 **Import actualizado:** Monolito ahora usa `from tz_core.kml_generator import generar_kml_puntos_libres`
+- ✅ **Validación Protocolo Paranoico:**
+  * Sintaxis: py_compile OK módulo + monolito
+  * Imports: `from tz_core.kml_generator import generar_kml_puntos_libres` OK
+  * Tests: 106/111 pasando (5 fallos pre-existentes alias, 1 skipped)
+  * **Cero regresiones funcionales** ✅
+
+**📉 REDUCCIÓN PROYECTADA:**
+- Monolito antes Epic 14: 6,462 líneas (con backups Epic 13)
+- Import consolidado: 2 líneas duplicadas → 1 línea
+- `kml_generador.py` deprecado: -463 líneas (marcar para archivado)
+- **Proyección limpia:** Al eliminar backups + archivar kml_generador.py = ~5,850 líneas
+
+**🎯 BENEFICIOS ARQUITECTÓNICOS:**
+- ✅ Un solo punto de verdad para KML/KMZ
+- ✅ Cero confusión sobre qué módulo usar
+- ✅ Deuda técnica reducida (dual architecture → unificada)
+- ✅ Fundación limpia para próximas extracciones
+
+**🗃️ PRÓXIMO PASO: ARCHIVAR kml_generador.py**
+- Mover a `docs/backups/kml_generador_ARCHIVED.py`
+- Documento de migración en header explicando Epic 14
+- Monolito ya no depende del archivo raíz
+
+---
+
 ## 🔥 EPIC 13 COMPLETADO - EXTRACCIÓN GENERADOR KML (26-DIC-2025) ✨ ÉPICO
 
 **MIGRACIÓN MAYOR: generar_kml() + _crear_feature_kml() → tz_core/kml_generator.py**

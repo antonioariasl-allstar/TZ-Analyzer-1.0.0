@@ -734,3 +734,99 @@ def generar_kml(
         pass
 
     return archivo_salida_kml, descartadas
+
+
+# ============================================================================
+# GENERACIÓN KML MODO PUNTOS LIBRES (QC MANUAL)
+# ============================================================================
+def generar_kml_puntos_libres(df, archivo_salida_kml, config):
+    """
+    Genera un archivo KMZ con puntos libres (antenas) usando ícono blanco y color de etiqueta.
+    Filtra coordenadas inválidas y aplica estilos según config.
+    
+    MODO: QC Manual (puntos simples sin estructura de carpetas)
+    USO: Wizard QC manual en script_principal_bitacoras_refactory.py (L5149)
+    
+    MIGRADO DE: kml_generador.py (raíz) → Epic 14 Consolidación KML
+    FECHA: 26/12/2025
+    
+    Args:
+        df (pd.DataFrame): DataFrame con los puntos a graficar.
+        archivo_salida_kml (str): Ruta de salida para el archivo KML/KMZ.
+        config (dict): Diccionario de configuración global.
+        
+    Returns:
+        tuple: (ruta_kmz, descartadas) - Ruta del archivo KMZ generado y número de coordenadas descartadas
+        
+    CARACTERÍSTICAS:
+    - Ícono blanco (wht-blank.png) para todos los puntos
+    - Color de etiqueta según theme_hex de config
+    - Filtrado de coordenadas inválidas (S/I, None, fuera de rango)
+    - Descripción simple: detalle + direccion
+    - Solo genera KMZ (no KML por separado)
+    """
+    kml = Kml()
+    descartadas = 0
+    
+    # Obtener estilo del config
+    color_hex = config.get("style", {}).get("theme_hex", "#ff0000")
+    abgr_color = hex_to_kml_color(color_hex)
+    icon_url = "http://maps.google.com/mapfiles/kml/paddle/wht-blank.png"
+
+    for idx, row in df.iterrows():
+        lat = row.get("lat", None)
+        lon = row.get("long", None)
+        nombre = row.get("antena", "Punto")
+        detalle = row.get("detalle", "")
+        direccion = row.get("direccion", "")
+        
+        # Filtrar coordenadas inválidas
+        if lat in (None, "", "Sin Inf.", "S/I") or lon in (None, "", "Sin Inf.", "S/I"):
+            descartadas += 1
+            continue
+            
+        try:
+            lat = float(lat)
+            lon = float(lon)
+        except Exception:
+            descartadas += 1
+            continue
+            
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            descartadas += 1
+            continue
+
+        # Crear punto KML
+        pnt = kml.newpoint(name=nombre, coords=[(lon, lat)])
+        desc = f"{detalle}\n{direccion}".strip()
+        if desc:
+            pnt.description = desc
+            
+        # Estilo: ícono blanco y color solo para la etiqueta
+        pnt.style.iconstyle.icon.href = icon_url
+        pnt.style.iconstyle.scale = 1.2
+        pnt.style.labelstyle.color = abgr_color
+        pnt.style.labelstyle.scale = 1.2
+
+    # Solo guardar KMZ
+    try:
+        kmz_path = os.path.splitext(archivo_salida_kml)[0] + ".kmz"
+        kml.savekmz(kmz_path)
+        
+        # Opcional: copiar a carpeta separada kmz/
+        try:
+            import shutil
+            if bool((config or {}).get("salida", {}).get("separar_kml_kmz", False)):
+                parent = os.path.basename(os.path.dirname(archivo_salida_kml)).lower()
+                if parent == "kml":
+                    base_dir = os.path.dirname(os.path.dirname(archivo_salida_kml))
+                    kmz_dir = os.path.join(base_dir, "kmz")
+                    os.makedirs(kmz_dir, exist_ok=True)
+                    shutil.copy2(kmz_path, os.path.join(kmz_dir, os.path.basename(kmz_path)))
+        except Exception:
+            pass
+            
+    except Exception:
+        kmz_path = None
+        
+    return kmz_path, descartadas

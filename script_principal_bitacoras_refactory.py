@@ -73,7 +73,8 @@ from simplekml import Kml
 # Módulos locales
 from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
-from kml_generador import generar_kml_puntos_libres
+# 🔧 MÓDULO EXTRAÍDO (Epic 14): KML puntos libres consolidado en tz_core
+from tz_core.kml_generator import generar_kml_puntos_libres
 # 🔧 MÓDULO EXTRAÍDO: HTML helpers para generar_informe_html
 from tz_core.html_helpers import (
     fmt_datetime as fmt_dt, first_nonempty_in, 
@@ -560,9 +561,6 @@ def _wizard_qc_mapeo(df, esenciales=None, no_esenciales=None):
             print("[QC] Opción inválida. Escribí S, N o R.")
 
     return df, asignadas
-
-from kml_generador import generar_kml_puntos_libres
-from collections import Counter
 
 # --- LOGS: helper para registrar degrade/mapas/omisiones ---
 from datetime import datetime
