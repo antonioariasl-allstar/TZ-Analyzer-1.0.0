@@ -29,7 +29,7 @@ import simplekml as sk  # usado en funciones auxiliares
 # Módulos locales
 from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
-from kml_generador import generar_kml_puntos_libres
+from tz_core.kml_generator import generar_kml_puntos_libres
 from tz_core.config_manager import cfg_build_rename_map
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto
 ```
