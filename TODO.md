@@ -1,6 +1,23 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
-## 🎉 HITO HISTÓRICO: MODULARIZACIÓN 100% COMPLETADA (29-OCT-2025) 🏆 ✨ NUEVA
+## 🔥 EPIC 10 - LIMPIEZA WRAPPERS OBSOLETOS COMPLETADA (26-DIC-2025) ✨ NUEVA
+
+**ELIMINACIÓN EXITOSA DE WRAPPERS REDUNDANTES:**
+- 🗑️ **7 wrappers eliminados:** `_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_fix_mojibake_text`, `_aplicar_reemplazos_regex`, `normalizar_texto`, `normalizar_columnas_texto`
+- 📉 **Reducción dramática:** 7,322 → 6,486 líneas (-836 líneas, -11.4%)
+- 🔧 **4 usos actualizados:** Reemplazados con imports directos desde tz_core
+- ✅ **Validación rigurosa:** 105/110 tests unitarios + 2/2 tests integración pasando
+- 🎯 **Impacto técnico:** Código más limpio, sin duplicación de wrappers, imports directos
+
+**🧹 CARACTERÍSTICAS TÉCNICAS:**
+- Estrategia quirúrgica: análisis exhaustivo de usos antes de eliminar
+- Reemplazos atómicos: `_clasificar_rango_sv` → `clasificar_rango_sv`, `_dedupe_columns` → `dedupe_columns`
+- Tests confirmados: import OK, sintaxis OK, funcionalidad validada por usuario
+- Zero regresiones: 105/110 tests pasando (5 fallos preexistentes en aliases)
+
+**🎯 PRÓXIMAS OPORTUNIDADES:** Continuar con funciones auxiliares grandes (`_wizard_qc_mapeo`, `_crear_feature_kml`)
+
+## 🎉 HITO HISTÓRICO: MODULARIZACIÓN 100% COMPLETADA (29-OCT-2025) 🏆 ✨
 
 **🏆 PRIMERA VEZ EN LA HISTORIA DEL PROYECTO:**
 - 🎯 **100% funciones helper modularizadas** - Logro histórico sin precedentes

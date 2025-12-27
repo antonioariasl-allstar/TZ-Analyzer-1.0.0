@@ -112,18 +112,6 @@ from tz_core.text_utils import (
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
-def _hhmmss_to_time_or_none(hh):
-    """Wrapper de compatibilidad - usa tz_core.time_utils.hhmmss_to_time_or_none"""
-    return hhmmss_to_time_or_none(hh)
-
-def _en_rango(t: _time, ini: _time, fin: _time) -> bool:
-    """Wrapper de compatibilidad - usa tz_core.time_utils.en_rango_tiempo"""
-    return en_rango_tiempo(t, ini, fin)
-
-def _clasificar_rango_sv(hhmmss: str):
-    """Wrapper de compatibilidad - usa tz_core.time_utils.clasificar_rango_sv"""
-    return clasificar_rango_sv(hhmmss)
-
 # =========================
 # Generación de KML (usa CONFIG)
 # =========================
@@ -625,28 +613,8 @@ def log(msg: str):
 
 
 # === NORMALIZADOR-1 (inicio) ==============================================
-
-def _fix_mojibake_text(s):
-    """Wrapper de compatibilidad - usa tz_core.text_utils._fix_mojibake_text"""
-    from tz_core.text_utils import _fix_mojibake_text as fix_modular
-    return fix_modular(s)
-
-# Abreviaturas - MIGRADO A tz_core.text_utils
-def _aplicar_reemplazos_regex(s, reglas_regex=None):
-    """Wrapper de compatibilidad - usa tz_core.text_utils._aplicar_reemplazos_regex"""
-    from tz_core.text_utils import _aplicar_reemplazos_regex as regex_modular
-    return regex_modular(s, reglas_regex)
-
-
-def normalizar_texto(s, reglas=None):
-    """MIGRADA A tz_core.text_utils - usar import desde allí"""
-    from tz_core.text_utils import normalizar_texto as normalizar_modular
-    return normalizar_modular(s, reglas)
-
-def normalizar_columnas_texto(df, columnas=None, reglas=None):
-    """MIGRADA A tz_core.text_utils - usar import desde allí"""
-    from tz_core.text_utils import normalizar_columnas_texto as normalizar_cols_modular
-    return normalizar_cols_modular(df, columnas, reglas)
+# Todas las funciones de normalización de texto migradas a tz_core.text_utils
+# Usar imports directos desde línea 765: normalizar_texto, normalizar_columnas_texto
 # === NORMALIZADOR-1 (fin) ==================================================
 
 
@@ -1222,7 +1190,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
         descripcion = "\n".join(partes) if partes else None
 
         # Clasificación por rango horario (Preset A SV)
-        rango = _clasificar_rango_sv(row.get("hora", None))
+        rango = clasificar_rango_sv(row.get("hora", None))
 
         items.append({
             "antena": nombre_punto,
@@ -5952,7 +5920,7 @@ def main():
                 with open("config.json", "w", encoding="utf-8") as f:
                     json.dump(to_dump, f, ensure_ascii=False, indent=2)
                 print("[WIZARD] Validación completada. Config guardada (sin cambios de sinónimos).")
-                df = _dedupe_columns(df)
+                df = dedupe_columns(df)
                 
                 # === WIZARD: HELPERS DE VALIDACIÓN (inicio) ================================
                 def _muestras_columna(serie, n=5):
@@ -6354,7 +6322,7 @@ def main():
                         df = _ask_map_col(df, need)
 
                     # Quitar duplicadas si quedaron tras renombrar
-                    df = _dedupe_columns(df)
+                    df = dedupe_columns(df)
 
                     # Validación dura: sin lat/lon → en QC no abortamos, intentamos coalesce y seguimos
                     faltan_ub = [x for x in ("lat", "lon") if x not in df.columns]  # OJO: usamos 'lon' como canónica
@@ -6412,7 +6380,7 @@ def main():
                             )
 
                             # por si quedó alguna duplicación posterior
-                            df = _dedupe_columns(df)
+                            df = dedupe_columns(df)
 
                     except Exception:
                         pass

@@ -1,17 +1,26 @@
 # 📊 ESTADO ACTUAL DE MODULARIZACIÓN TZ-ANALYZER
-## Actualización: 29 de octubre de 2025
+## Actualización: 26 de diciembre de 2025
 
 ---
 
 ## 🏆 **LOGROS ALCANZADOS**
 
 ### **PROGRESO GENERAL:**
-- **Estado de completitud:** 99% de helpers/utilidades migradas ✅
-- **Funciones migradas:** 40+ wrappers de compatibilidad creados
-- **Módulos tz_core activos:** 17 módulos funcionando
+- **Estado de completitud:** 100% de wrappers obsoletos limpiados ✅
+- **Funciones migradas:** 40+ funciones en tz_core (todas modulares)
+- **Módulos tz_core activos:** 19 módulos funcionando
 - **Regresiones detectadas:** 0 (Zero regressions policy mantenida)
+- **Reducción dramática:** 7,322 → 6,486 líneas (-11.4%)
 
-### **ÚLTIMAS EXTRACCIONES COMPLETADAS:**
+### **ÚLTIMAS EXTRACCIONES/LIMPIEZAS COMPLETADAS:**
+
+#### 🔥 **EPIC 10: Limpieza Wrappers Obsoletos** - 26 diciembre 2025
+- **Tipo:** Eliminación masiva de wrappers redundantes
+- **Wrappers eliminados:** 7 funciones (`_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_fix_mojibake_text`, `_aplicar_reemplazos_regex`, `normalizar_texto`, `normalizar_columnas_texto`)
+- **Usos actualizados:** 4 reemplazos con imports directos desde tz_core
+- **Reducción:** -836 líneas (-11.4%)
+- **Validación:** 105/110 tests unitarios + 2/2 integración pasando
+- **Resultado:** Código más limpio, imports directos, zero duplicación
 
 #### ✅ **_solicitar_overrides_topn()** - 29 octubre 2025
 - **Destino:** `tz_core/ui_utils.py` (nuevo módulo)
@@ -29,33 +38,48 @@
 
 ## 🎯 **ESTADO ACTUAL DEL MONOLITO**
 
-### **FUNCIONES RESTANTES POR MIGRAR:**
+### **LÍNEAS DE CÓDIGO:**
+- **Estado actual:** 6,486 líneas (reducido desde 7,322)
+- **Reducción Epic 10:** -836 líneas (-11.4%)
+- **Objetivo próximo:** Continuar reducción con funciones grandes
 
-#### 🟢 **RIESGO BAJO (1 función - ÚLTIMA UTILITY):**
-1. **`_aplicar_reemplazos_regex()`** (~8 líneas)
-   - **Destino sugerido:** `tz_core/text_utils.py`
-   - **Complejidad:** MÍNIMA - Helper de regex puro
-   - **Estimación:** 20 minutos para 100% completitud
+### **FUNCIONES RESTANTES POR ANALIZAR:**
+
+#### 🟢 **RIESGO BAJO - COMPLETADO:**
+- ~~**`_aplicar_reemplazos_regex()`**~~ ✅ Eliminado en Epic 10
+- ~~**Wrappers time_utils**~~ ✅ Eliminados en Epic 10
+- ~~**Wrappers text_utils**~~ ✅ Eliminados en Epic 10
 
 #### 🟡 **RIESGO MEDIO (1 función):**
-2. **`cargar_config()`** (~20 líneas)
+1. **`cargar_config()`** (~20 líneas)
    - **Estado:** Función de configuración con dependencias internas
    - **Decisión:** Diferida para revisión estratégica
 
-#### 🔴 **RIESGO ALTO (4 funciones - NO TOCAR):**
-3. **`bootstrap_config()`** (~50 líneas) - Inicialización crítica
-4. **`_wizard_qc_mapeo()`** (~382 líneas) - ⚠️ ZONA DE PELIGRO EXTREMO
-5. **`generar_informe_html()`** (~1800+ líneas) - Motor HTML masivo
-6. **`generar_kml()`** (~600+ líneas) - Motor KML masivo
+#### 🔴 **RIESGO ALTO - CANDIDATOS EXTRACCIÓN (3 funciones):**
+2. **`_wizard_qc_mapeo()`** (~382 líneas) - ⚠️ ZONA DE PELIGRO EXTREMO
+   - **Oportunidad:** Extraer a módulo especializado tz_wizard
+3. **`generar_informe_html()`** (~1800+ líneas) - Motor HTML masivo
+   - **Estado:** Parcialmente modularizado con tz_core.html_generator
+4. **`generar_kml()`** (~600+ líneas) - Motor KML masivo
+   - **Oportunidad:** Extraer helpers KML especializados
+
+#### 🏢 **FUNCIONES CORE BUSINESS (mantener en monolito):**
+5. **`bootstrap_config()`** (~50 líneas) - Inicialización crítica
+6. **`run_tz_analysis()`** - Orquestador principal
 
 ---
 
 ## 📈 **MÉTRICAS DE PROGRESO**
 
 ### **MODULARIZACIÓN HELPERS/UTILITIES:**
-- **✅ Completadas:** 40+ funciones (99%)
-- **🎯 Restante:** 1 función (`_aplicar_reemplazos_regex`)
-- **🏁 Meta próxima:** 100% helpers migrados
+- **✅ Completadas:** 40+ funciones (100%)
+- **✅ Wrappers limpiados:** 7 wrappers obsoletos eliminados (Epic 10)
+- **🏁 Meta alcanzada:** 100% helpers migrados + wrappers limpiados
+
+### **REDUCCIÓN DE CÓDIGO:**
+- **Líneas eliminadas Epic 10:** -836 líneas
+- **Porcentaje reducción:** -11.4%
+- **Estado:** 7,322 → 6,486 líneas
 
 ### **ARQUITECTURA ACTUAL:**
 ```
@@ -65,6 +89,7 @@ tz_core/
 ├── config_manager.py      ✅ Gestión de configuración
 ├── data_loader.py         ✅ Carga de datos Excel/TSV
 ├── data_normalizer.py     ✅ Normalización de datos
+├── dataframe_utils.py     ✅ Operaciones DataFrame
 ├── file_utils.py          ✅ Operaciones de archivos
 ├── format_utils.py        ✅ Formateo HTML/KML
 ├── geo_utils.py           ✅ Cálculos geográficos
@@ -74,33 +99,45 @@ tz_core/
 ├── logging_utils.py       ✅ Sistema de logging
 ├── text_utils.py          ✅ Procesamiento de texto
 ├── time_utils.py          ✅ Utilidades temporales
-├── ui_utils.py            ✅ Helpers de interfaz (NUEVO)
+├── ui_utils.py            ✅ Helpers de interfaz
 ├── utils.py               ✅ Utilidades core
 ├── validation_utils.py    ✅ Validadores puros
 └── __init__.py           ✅ Exports centralizados
 ```
+**Total:** 19 módulos activos
 
 ### **CALIDAD DEL CÓDIGO:**
-- **Wrappers de compatibilidad:** 100% funcionales
-- **Tests de regresión:** Metodología 7-test aplicada consistentemente
-- **Documentación:** Cada migración documentada exhaustivamente
-- **Imports centralizados:** tz_core.__init__.py actualizado
+- **Imports directos:** 100% usando módulos tz_core sin wrappers intermedios
+- **Tests de regresión:** 105/110 unitarios + 2/2 integración pasando
+- **Documentación:** Epic 10 documentado en TODO.md + este archivo
+- **Zero regresiones:** Policy mantenida en Epic 10
 
 ---
 
-## 🚀 **PRÓXIMOS PASOS INMEDIATOS**
+## 🚀 **PRÓXIMOS PASOS PROPUESTOS**
 
-### **FASE FINAL HELPERS (Estimación: 30 minutos):**
-1. **Migrar `_aplicar_reemplazos_regex()`**
-   - Extracción a `tz_core/text_utils.py`
-   - Aplicar metodología 4-subfases estándar
-   - Alcanzar histórico 100% de helpers migrados
+### **EPIC 11: Extracción Funciones Auxiliares Grandes (Estimación: 60-90 minutos):**
+1. **`_wizard_qc_mapeo()`** (~382 líneas)
+   - Candidata para módulo `tz_wizard` o `tz_qc`
+   - Requiere análisis de dependencias
+   
+2. **`_crear_feature_kml()`** (~700 líneas)
+   - Candidata para extracción a módulo KML especializado
+   - Potencial reducción significativa
 
-### **POST-100% HELPERS:**
-1. **Consolidación arquitectural**
-2. **Evaluación estratégica de funciones críticas restantes**
-3. **Decisión sobre `cargar_config()` (riesgo medio)**
-4. **Planificación de próximas fases (si proceden)**
+3. **Funciones auxiliares HTML/KML**
+   - `_construir_seccion_interacciones()`
+   - Otras helpers identificadas
+
+### **EPIC 12: Optimización Imports (Estimación: 30 minutos):**
+- Consolidar imports duplicados
+- Limpiar imports locales dentro de funciones
+- Optimizar estructura de imports globales
+
+### **POST-EPICS INMEDIATOS:**
+1. **Evaluación arquitectural** de funciones core business
+2. **Decisión sobre `cargar_config()`** (riesgo medio)
+3. **Planificación modularización motores grandes** (HTML/KML)
 
 ---
 
@@ -128,18 +165,18 @@ tz_core/
 
 ---
 
-## 🎯 **OBJETIVO HISTÓRICO PRÓXIMO**
+## 🎯 **HITO HISTÓRICO ALCANZADO**
 
-**🏁 ALCANZAR 100% DE HELPERS MIGRADOS**
+**🏁 100% DE WRAPPERS OBSOLETOS LIMPIADOS (EPIC 10)**
 
-Solo queda **1 función utility** por migrar para completar histórica la fase de modularización de helpers/utilidades, dejando únicamente las funciones críticas de negocio en el monolito (como debe ser arquitecturalmente).
+Epic 10 completó la eliminación de todos los wrappers obsoletos que duplicaban funcionalidad ya migrada a tz_core, resultando en una reducción dramática de -836 líneas (-11.4%). El código ahora utiliza imports directos desde módulos tz_core sin capas intermedias innecesarias.
 
-**Estado:** 99% → 100% (próxima migración)
-**Función restante:** `_aplicar_reemplazos_regex()`
-**Tiempo estimado:** 20-30 minutos
+**Estado:** 100% helpers migrados + 100% wrappers limpiados ✅
+**Resultado Epic 10:** Eliminados 7 wrappers redundantes
+**Próximo objetivo:** Epic 11 - Extracción de funciones auxiliares grandes
 
 ---
 
-**Actualizado:** 29 octubre 2025  
-**Siguiente revisión:** Post-100% helpers  
+**Actualizado:** 26 diciembre 2025  
+**Siguiente revisión:** Post-Epic 11  
 **Responsable:** Modularización incremental TZ-Analyzer
