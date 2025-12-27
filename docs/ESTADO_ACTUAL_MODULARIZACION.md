@@ -6,19 +6,29 @@
 ## 🏆 **LOGROS ALCANZADOS**
 
 ### **PROGRESO GENERAL:**
-- **Estado de completitud:** 100% de wrappers obsoletos limpiados ✅
+- **Estado de completitud:** 100% de wrappers obsoletos limpiados (Epic 10+11) ✅
 - **Funciones migradas:** 40+ funciones en tz_core (todas modulares)
 - **Módulos tz_core activos:** 19 módulos funcionando
 - **Regresiones detectadas:** 0 (Zero regressions policy mantenida)
-- **Reducción dramática:** 7,322 → 6,486 líneas (-11.4%)
+- **Reducción acumulada:** 6,510 → 6,446 líneas (-64 líneas neto, -1.0% total)
 
 ### **ÚLTIMAS EXTRACCIONES/LIMPIEZAS COMPLETADAS:**
+
+#### 🔥 **EPIC 11: Segunda Oleada Limpieza Wrappers** - 26 diciembre 2025
+- **Tipo:** Eliminación quirúrgica de 7 wrappers adicionales
+- **Wrappers eliminados:** `_tiene_valor`, `_a_float`, `_formatear_valor_para_burbuja`, `_dedupe_columns`, `_armar_descripcion_compacta`, `_agregar_bloque`, `_escribe_hashes_txt`
+- **Análisis de uso:** 3 sin uso (eliminación directa) + 4 con 7 usos (reemplazo quirúrgico)
+- **Reducción:** 6,486 → 6,446 líneas (-40 líneas, -0.6%)
+- **Validación:** 105/110 tests unitarios + 2/2 integración pasando
+- **Fix técnico:** Corrección de firma `CONFIG`→`config`, `HR_COMPACT`→`hr_compact` en `armar_descripcion_compacta()`
+- **Resultado:** Imports directos desde tz_core.validation_utils, tz_core.dataframe_utils, tz_core.format_utils, tz_core.file_utils
 
 #### 🔥 **EPIC 10: Limpieza Wrappers Obsoletos** - 26 diciembre 2025
 - **Tipo:** Eliminación masiva de wrappers redundantes
 - **Wrappers eliminados:** 7 funciones (`_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_fix_mojibake_text`, `_aplicar_reemplazos_regex`, `normalizar_texto`, `normalizar_columnas_texto`)
 - **Usos actualizados:** 4 reemplazos con imports directos desde tz_core
-- **Reducción:** -836 líneas (-11.4%)
+- **Reducción:** 7,322 → 6,486 líneas (-836 líneas, -11.4% desde estado local pre-sync)
+- **Nota histórica:** Baseline GitHub b71db42 tenía 6,510 líneas (estado oficial post-modularización)
 - **Validación:** 105/110 tests unitarios + 2/2 integración pasando
 - **Resultado:** Código más limpio, imports directos, zero duplicación
 
@@ -39,15 +49,20 @@
 ## 🎯 **ESTADO ACTUAL DEL MONOLITO**
 
 ### **LÍNEAS DE CÓDIGO:**
-- **Estado actual:** 6,486 líneas (reducido desde 7,322)
-- **Reducción Epic 10:** -836 líneas (-11.4%)
-- **Objetivo próximo:** Continuar reducción con funciones grandes
+- **Estado actual:** 6,446 líneas
+- **Baseline GitHub (b71db42):** 6,510 líneas
+- **Reducción neta Epic 10+11:** -64 líneas (-1.0%)
+- **Objetivo próximo:** Epic 12 (imports duplicados), Epic 13+ (funciones grandes)
 
 ### **FUNCIONES RESTANTES POR ANALIZAR:**
 
 #### 🟢 **RIESGO BAJO - COMPLETADO:**
 - ~~**`_aplicar_reemplazos_regex()`**~~ ✅ Eliminado en Epic 10
 - ~~**Wrappers time_utils**~~ ✅ Eliminados en Epic 10
+- ~~**Wrappers validation_utils**~~ ✅ Eliminados en Epic 11
+- ~~**Wrappers format_utils**~~ ✅ Eliminados en Epic 11
+- ~~**Wrappers dataframe_utils**~~ ✅ Eliminados en Epic 11
+- ~~**Wrappers file_utils**~~ ✅ Eliminados en Epic 11
 - ~~**Wrappers text_utils**~~ ✅ Eliminados en Epic 10
 
 #### 🟡 **RIESGO MEDIO (1 función):**

@@ -696,36 +696,6 @@ except Exception:
 # Configuración externa
 # =========================
 # --- ANTI-COLISIONES DE COLUMNAS (fusiona duplicadas por primer valor no vacío) ---
-def _dedupe_columns(df):
-    from collections import Counter
-
-    cols = list(df.columns)
-    if not cols:
-        return df
-
-    counts = Counter(cols)
-    dup_names = [n for n, c in counts.items() if c > 1]
-    if not dup_names:
-        return df
-
-    for name in dup_names:
-        same = [c for c in df.columns if c == name]
-        if len(same) <= 1:
-            continue
-        base = df[same[0]].copy()
-
-        # Toma el primer valor NO vacío/NO blanco por fila
-        for extra in same[1:]:
-            s = df[extra]
-            # consideramos vacío: NaN o string en blanco
-            mask_blank = base.isna() | (base.astype(str).str.strip() == "")
-            base = base.where(~mask_blank, s)
-
-        # Sobrescribe la columna final y descarta las duplicadas extra
-        df[name] = base
-        df = df.drop(columns=same[1:])
-
-    return df
 # === IMPORTS MODULARES (gradual refactoring) ===
 from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
 from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR
@@ -744,10 +714,6 @@ from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _escribe_has
 RANGOS_SV = RANGOS_SV_MODULAR
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
-
-def _escribe_hashes_txt(dest_path: str, pares: list[tuple[str, str]]):
-    """Wrapper de compatibilidad - usa tz_core.file_utils.escribe_hashes_txt"""
-    return escribe_hashes_txt(dest_path, pares)
 def _copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> str | None:
     """Wrapper de compatibilidad - usa tz_core.file_utils.copiar_logo_a_salida"""
     return copiar_logo_a_salida(logo_src, carpeta_salida)
@@ -856,10 +822,6 @@ def analizar_antenas(df: pd.DataFrame, archivo_salida: str):
 # =========================
 # Burbuja condicional
 # =========================
-def _tiene_valor(v):
-    """Wrapper de compatibilidad - usa tz_core.validation_utils.tiene_valor"""
-    return tiene_valor(v)
-
 def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100):
     """Wrapper de compatibilidad - usa tz_core.analytics.generar_historial_cambios_antena"""
     from tz_core.analytics import generar_historial_cambios_antena as historial_modular
@@ -867,27 +829,10 @@ def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100):
 
 HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
 
-# --- Formateo para burbuja (números, decimales, duración) ---
-def _a_float(v):
-    """Wrapper de compatibilidad - usa tz_core.validation_utils.a_float"""
-    return a_float(v)
-
-def _formatear_valor_para_burbuja(col, val):
-    """MIGRADA A tz_core.format_utils - usar import desde allí"""
-    from tz_core.format_utils import _formatear_valor_para_burbuja as formatear_modular
-    return formatear_modular(col, val)
-
-# --- Descripción compacta para la burbuja ---
-def _armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direccion_si_igual=True) -> str:
-    """Wrapper de compatibilidad - usa tz_core.format_utils.armar_descripcion_compacta"""
-    from tz_core.format_utils import armar_descripcion_compacta
-    return armar_descripcion_compacta(campos, count_azimut, suprimir_direccion_si_igual, CONFIG, HR_COMPACT)
-
-def _agregar_bloque(partes, fila, pares):
-    """Wrapper de compatibilidad - usa tz_core.format_utils.agregar_bloque"""
-    from tz_core.format_utils import agregar_bloque
-    return agregar_bloque(partes, fila, pares)
-
+# =========================
+# Funciones de formateo - usar imports directos desde tz_core.format_utils
+# - armar_descripcion_compacta()
+# - agregar_bloque()
 # =========================
 # Generación de KML (usa CONFIG)
 # =========================
@@ -1181,10 +1126,11 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
             azimut_int = None
 
         # Nombre y descripción
+        from tz_core.format_utils import agregar_bloque
         nombre_punto = row.get("antena", "Antena") if str(row.get("antena", "")).strip() else "Antena"
         partes = []
         for bloque in desc_spec:
-            _agregar_bloque(partes, row, [(etq, col) for etq, col in bloque])
+            agregar_bloque(partes, row, [(etq, col) for etq, col in bloque])
         if partes and partes[-1] == "<hr>":
             partes.pop()
         descripcion = "\n".join(partes) if partes else None
@@ -1241,9 +1187,10 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
         # --- Modo plano: todo colgado de la raíz (sin subcarpetas) ---
         # NOTA: En modo plano, SIEMPRE mostrar "Dirección" (suprimir_direccion_si_igual=False)
         # para garantizar que la información esté visible en este contexto simplificado
+        from tz_core.format_utils import armar_descripcion_compacta
         for it in items:
             n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
-            desc_comp = _armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=False)
+            desc_comp = armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=False, config=CONFIG, hr_compact=HR_COMPACT)
             _crear_feature_kml(kml, it["antena"], it["lon"], it["lat"], desc_comp, it["azimut_f"], CONFIG)
 
         # === GUARDAR SALIDAS (KMZ en misma carpeta; KML opcional) — INICIO ===
@@ -1345,9 +1292,10 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
     for fch in fechas_unicas:
         obtener_carpeta_fecha(fch)
 
+    from tz_core.format_utils import armar_descripcion_compacta
     for it in items:
         n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
-        desc_comp = _armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=True)
+        desc_comp = armar_descripcion_compacta(it, n_all, suprimir_direccion_si_igual=True, config=CONFIG, hr_compact=HR_COMPACT)
         _crear_feature_kml(obtener_carpeta_fecha(it["fecha"]), it["antena"], it["lon"], it["lat"], desc_comp, it["azimut_f"], CONFIG)
 
     # 6) Preparar contadores para deduplicación por (antena, azimut ENTERO)
@@ -7126,7 +7074,7 @@ def main():
                 _dest_dir = os.getcwd()
 
             _hashes_path = os.path.join(_dest_dir, f"{nombre_salida}_hashes.txt")
-            _escribe_hashes_txt(_hashes_path, pares)
+            escribe_hashes_txt(_hashes_path, pares)
             try: log(f"[hashes] Generado {os.path.basename(_hashes_path)}")
             except Exception: pass
         except Exception as e:

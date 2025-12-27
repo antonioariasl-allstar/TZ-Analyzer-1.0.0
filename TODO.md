@@ -1,6 +1,32 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
-## 🔥 EPIC 10 - LIMPIEZA WRAPPERS OBSOLETOS COMPLETADA (26-DIC-2025) ✨ NUEVA
+## 🔥 EPIC 11 - SEGUNDA OLEADA LIMPIEZA WRAPPERS (26-DIC-2025) ✨ RECIENTE
+
+**ELIMINACIÓN EXITOSA DE 7 WRAPPERS ADICIONALES:**
+- 🗑️ **Wrappers eliminados:** `_tiene_valor`, `_a_float`, `_formatear_valor_para_burbuja`, `_dedupe_columns`, `_armar_descripcion_compacta`, `_agregar_bloque`, `_escribe_hashes_txt`
+- 📉 **Reducción incremental:** 6,486 → 6,446 líneas (-40 líneas, -0.6%)
+- 🔧 **7 usos actualizados:** 3 sin uso + 4 reemplazados con imports directos desde tz_core
+- ✅ **Validación rigurosa:** 105/110 tests unitarios + 2/2 tests integración pasando
+- 🎯 **Impacto acumulado Epic 10+11:** -64 líneas neto desde GitHub baseline (-1.0% total)
+
+**🧹 ESTRATEGIA DE LIMPIEZA:**
+- Verificación exhaustiva: grep_search para identificar usos reales
+- 3 wrappers sin uso eliminados directamente (validación, formato)
+- 4 wrappers con dependencias: reemplazo quirúrgico en 7 ubicaciones
+- Corrección de firma: `CONFIG`/`HR_COMPACT` → `config`/`hr_compact` (argumentos minúsculas)
+
+**📊 MÉTRICAS ACUMULADAS (EPIC 10 + EPIC 11):**
+- Monolito original (GitHub b71db42): 6,510 líneas
+- Después Epic 10: 6,486 líneas (-24 neto)
+- Después Epic 11: 6,446 líneas (-64 neto, -1.0% total)
+- **Total wrappers eliminados:** 14 funciones
+- Tests estables: 105/110 unitarios + 2/2 integración
+
+**🎯 PRÓXIMAS OPORTUNIDADES:** Epic 12 (imports duplicados), Epic 13+ (funciones grandes: `_wizard_qc_mapeo`, `_crear_feature_kml`)
+
+---
+
+## 🔥 EPIC 10 - LIMPIEZA WRAPPERS OBSOLETOS COMPLETADA (26-DIC-2025) ✨
 
 **ELIMINACIÓN EXITOSA DE WRAPPERS REDUNDANTES:**
 - 🗑️ **7 wrappers eliminados:** `_hhmmss_to_time_or_none`, `_en_rango`, `_clasificar_rango_sv`, `_fix_mojibake_text`, `_aplicar_reemplazos_regex`, `normalizar_texto`, `normalizar_columnas_texto`
@@ -14,8 +40,6 @@
 - Reemplazos atómicos: `_clasificar_rango_sv` → `clasificar_rango_sv`, `_dedupe_columns` → `dedupe_columns`
 - Tests confirmados: import OK, sintaxis OK, funcionalidad validada por usuario
 - Zero regresiones: 105/110 tests pasando (5 fallos preexistentes en aliases)
-
-**🎯 PRÓXIMAS OPORTUNIDADES:** Continuar con funciones auxiliares grandes (`_wizard_qc_mapeo`, `_crear_feature_kml`)
 
 ## 🎉 HITO HISTÓRICO: MODULARIZACIÓN 100% COMPLETADA (29-OCT-2025) 🏆 ✨
 
