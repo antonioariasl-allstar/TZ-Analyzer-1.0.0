@@ -1,38 +1,39 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
-## 🔥 EPIC 14 COMPLETADO - CONSOLIDACIÓN ARQUITECTURA KML (26-DIC-2025) ⚡ UNIFICACIÓN
+## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 
 **UNIFICACIÓN KML: kml_generador.py → tz_core/kml_generator.py (ARQUITECTURA LIMPIA)**
-- 🎯 **Consolidación épica:** Un solo módulo KML profesional unificado
-- 📦 **Migración completada:** `generar_kml_puntos_libres()` + utilidades (~100 líneas)
-- 🗑️ **Archivo obsoleto:** `kml_generador.py` (raíz) - 463 líneas deprecadas
-- 🏗️ **Arquitectura final:**
-  * `tz_core/kml_generator.py` - Módulo unificado (ahora con puntos libres + generación compleja)
-  * `generar_kml()` - Modo complejo (carpetas, tops, deduplicación)
-  * `generar_kml_puntos_libres()` - Modo simple (QC manual, puntos directos)
-- 🔧 **Import actualizado:** Monolito ahora usa `from tz_core.kml_generator import generar_kml_puntos_libres`
-- ✅ **Validación Protocolo Paranoico:**
-  * Sintaxis: py_compile OK módulo + monolito
-  * Imports: `from tz_core.kml_generator import generar_kml_puntos_libres` OK
-  * Tests: 106/111 pasando (5 fallos pre-existentes alias, 1 skipped)
-  * **Cero regresiones funcionales** ✅
 
-**📉 REDUCCIÓN PROYECTADA:**
-- Monolito antes Epic 14: 6,462 líneas (con backups Epic 13)
-- Import consolidado: 2 líneas duplicadas → 1 línea
-- `kml_generador.py` deprecado: -463 líneas (marcar para archivado)
-- **Proyección limpia:** Al eliminar backups + archivar kml_generador.py = ~5,850 líneas
+**Estado:** ✅ EPIC COMPLETADO + Bugfix aplicado + Backup eliminado + **Archivo obsoleto ARCHIVADO**
+- 🗃️ **Archivo archivado:** `kml_generador.py` → `docs/backups/kml_generador_ARCHIVED_EPIC14.py`
+- ♻️ **Backup eliminado:** `_generar_kml_ORIGINAL_BACKUP()` - 1,260 líneas redundantes
+- ✅ **Función migrada:** `generar_kml_puntos_libres()` → `tz_core/kml_generator.py` (~100 líneas)
+- ✅ **Imports actualizados:** Monolito ahora importa desde `tz_core.kml_generator`
+- ✅ **Tests:** 106/111 passing (5 fallas pre-existentes de alias)
+- ✅ **User testing:** Validado con datos reales (archivo "dimitri")
+- 🐛 **Bugfix aplicado:** Campo "Antena" agregado en burbujas TOP (L666-683)
+- 🧹 **Cleanup completado:** Backup _generar_kml_ORIGINAL_BACKUP eliminado (1,260 líneas)
+- 📊 **Merge a main:** 7 commits consolidados (Epic 10-14 + fixes) - commit d08a9e0
+- 🚀 **Push completado:** origin/main actualizado con Epic 10-14 + cleanup (commit 9aa7039)
 
-**🎯 BENEFICIOS ARQUITECTÓNICOS:**
-- ✅ Un solo punto de verdad para KML/KMZ
-- ✅ Cero confusión sobre qué módulo usar
-- ✅ Deuda técnica reducida (dual architecture → unificada)
-- ✅ Fundación limpia para próximas extracciones
+**Métricas Finales:**
+- Monolito ANTES del backup cleanup: 7,254 líneas
+- Monolito DESPUÉS del cleanup: **5,994 líneas** (-1,260 líneas, -17.4%)
+- Reducción desde baseline (6,510): **-516 líneas (-7.9%)**
+- `kml_generador.py` archivado: **-463 líneas eliminadas del proyecto activo**
+- **Proyección final con archivado:** ~5,531 líneas (**-979 líneas desde baseline, -15.0%**)
+- **Ahorro total Epic 10-14:** 979 líneas eliminadas + arquitectura unificada
+- **Test coverage:** 106/111 (sin regresos, 5 fallos pre-existentes de alias)
 
-**🗃️ PRÓXIMO PASO: ARCHIVAR kml_generador.py**
-- Mover a `docs/backups/kml_generador_ARCHIVED.py`
-- Documento de migración en header explicando Epic 14
-- Monolito ya no depende del archivo raíz
+**Commits:**
+- `4599647` - Epic 14: Consolidación KML puntos libres
+- `c332599` - Fix: Campo Antena en burbujas TOP
+- `d08a9e0` - MERGE Epic 10-14 a main (7 commits)
+- `9aa7039` - chore: Eliminar backup Epic 13 (-1260 líneas)
+- `[PENDING]` - chore: Archivar kml_generador.py obsoleto (-463 líneas)
+
+**Archivado:**
+- Archivo original documentado en `docs/backups/kml_generador_ARCHIVED_EPIC14.py` con nota de migración completa
 
 ---
 

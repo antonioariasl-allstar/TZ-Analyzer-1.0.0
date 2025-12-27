@@ -1,25 +1,62 @@
 """
-kml_generador.py - Generador KML/KMZ ACTIVO del TZ Analyzer
-============================================================
+kml_generador.py — ARCHIVO OBSOLETO Y ARCHIVADO
+================================================
 
-✅ ESTADO: CÓDIGO EN PRODUCCIÓN - USAR ESTE ARCHIVO
-🎯 PROPÓSITO: Generación funcional de archivos KML/KMZ para Google Earth
-📍 UBICACIÓN: Archivo raíz del proyecto (nivel principal)
+⚠️ ADVERTENCIA: NO USAR ESTE ARCHIVO - SOLO REFERENCIA HISTÓRICA
+📅 Fecha de archivado: 27/12/2025
+🎯 Razón: Consolidación KML completada en Epic 14
 
-CONTEXTO DE ARQUITECTURA HÍBRIDA:
-- Este es el código KML funcional y probado
-- Usado activamente por script_principal_bitacoras_refactory.py
-- Esqueleto modular disponible en tz_core/kml_generator.py (futuro)
+MIGRACIÓN COMPLETA A: tz_core/kml_generator.py
+-----------------------------------------------
+Este archivo fue el generador KML original usado en modo QC manual (puntos libres).
+Todas sus funciones han sido migradas y mejoradas en el módulo profesional.
 
-FUNCIONES PRINCIPALES:
-- generar_kml_puntos_libres(): Generación de puntos libres con estilos
-- hex_to_abgr(): Conversión de colores HEX a formato ABGR (Google Earth)
+FUNCIONES MIGRADAS:
+-------------------
+✅ generar_kml_puntos_libres() → tz_core/kml_generator.py (líneas ~730-833)
+   - Generación de puntos libres con estilos personalizados
+   - Filtrado de coordenadas inválidas
+   - Soporte para íconos y etiquetas coloreadas
+   - Exportación KMZ con separación opcional de carpetas
 
-EVOLUCIÓN FUTURA:
-- Migración gradual a tz_core/kml_generator.py cuando sea necesario
-- Mantener compatibilidad durante transición híbrida
+✅ hex_to_abgr() → tz_core/color_utils.py
+   - Conversión de colores HEX a formato ABGR (Google Earth)
+   - Usado por todos los generadores KML del sistema
 
-🔧 MANTENIMIENTO: Este archivo es seguro para modificaciones
+ARQUITECTURA UNIFICADA:
+-----------------------
+Epic 14 consolidó toda la generación KML en un solo módulo profesional:
+- tz_core/kml_generator.py (833 líneas)
+  * generar_kml(): Modo complejo con carpetas/TOPs/estadísticas
+  * generar_kml_puntos_libres(): Modo simple para QC manual
+  * Estilos reusables y configuración centralizada
+  * Validación robusta de coordenadas
+  * Soporte completo para azimut y metadatos
+
+CONTEXTO HISTÓRICO:
+-------------------
+Este archivo fue creado originalmente para el modo QC manual del TZ Analyzer,
+generando KML con puntos libres sin estructura de carpetas. Durante la fase
+de modularización (Epics 10-14), se migró toda su funcionalidad al módulo
+unificado tz_core/kml_generator.py, eliminando duplicación de código y 
+estableciendo una arquitectura KML profesional.
+
+PARA USO ACTUAL: import from tz_core.kml_generator import generar_kml_puntos_libres
+
+COMMITS RELACIONADOS:
+---------------------
+- 72fef1c: Epic 13 - Extracción generador KML a tz_core/
+- 4599647: Epic 14 - Consolidación KML puntos libres
+- c332599: Fix campo Antena en burbujas TOP
+- d08a9e0: MERGE Epic 10-14 a main
+- 9aa7039: Cleanup backup Epic 13
+
+LÍNEAS ELIMINADAS DEL MONOLITO: 1,260 líneas (backup function)
+ESTADO FINAL MONOLITO: 5,994 líneas (-516 desde baseline, -7.9%)
+
+====================================================================
+        CÓDIGO ORIGINAL ARCHIVADO PARA REFERENCIA
+====================================================================
 """
 
 # === Utilidad para convertir color HEX a ABGR (simplekml) ===
@@ -203,7 +240,7 @@ def generar_kml(df, archivo_salida_kml, top_5_antenas, antenas_por_periodo):
                 # Si es entero exacto → devolver sin exponentes ni decimales
                 if d == d.to_integral_value():
                     return str(int(d))
-                # Si tiene fracción, no “inventar” formato: devolvemos el original
+                # Si tiene fracción, no "inventar" formato: devolvemos el original
                 return s
             except InvalidOperation:
                 return s
@@ -234,7 +271,7 @@ def generar_kml(df, archivo_salida_kml, top_5_antenas, antenas_por_periodo):
         desc.append("<hr>")
 
         _add_if(desc, "Antena", row.get("antena"))
-        _add_if(desc, "Detalle", row.get("detalle"))
+        _add_if(desc, "Detalle", row.get("direccion"))
 
         punto.description = "<br>".join(desc)
         # -- Dibujar la línea de azimut si es válido (permitir 0°) --

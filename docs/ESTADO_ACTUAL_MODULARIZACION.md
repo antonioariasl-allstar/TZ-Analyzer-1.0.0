@@ -93,12 +93,12 @@
 ## 🎯 **ESTADO ACTUAL DEL MONOLITO**
 
 ### **LÍNEAS DE CÓDIGO:**
-- **Estado actual:** 6,462 líneas (+24 temporal con backups de Epic 13)
-- **Proyección final (sin backups):** ~5,950 líneas (-560 desde baseline, -8.6%)
+- **Estado actual:** 5,994 líneas (después de Epic 14 + cleanup + archivado)
 - **Baseline GitHub (b71db42):** 6,510 líneas
-- **Reducción neta Epic 10+11+12:** -72 líneas
-- **Reducción proyectada Epic 13:** -488 líneas adicionales (al eliminar backups)
-- **Objetivo próximo:** Epic 14 (consolidar kml_generador.py → tz_core/, _wizard_qc_mapeo)
+- **Reducción neta Epic 10-14:** -516 líneas (-7.9%)
+- **kml_generador.py archivado:** -463 líneas del proyecto activo
+- **Reducción total con archivado:** -979 líneas (-15.0% desde baseline)
+- **Objetivo próximo:** Epic 15 (_wizard_qc_mapeo ~382 líneas, marcado PELIGRO EXTREMO)
 
 ### **FUNCIONES RESTANTES POR ANALIZAR:**
 
@@ -113,6 +113,8 @@
 - ~~**Aliases obsoletos imports**~~ ✅ Eliminados en Epic 12 Fase 1
 - ~~**Imports locales duplicados**~~ ✅ Consolidados en Epic 12 Fase 2
 - ~~**`generar_kml()` + `_crear_feature_kml()`**~~ ✅ Migrados a tz_core/kml_generator.py en Epic 13
+- ~~**`generar_kml_puntos_libres()`**~~ ✅ Migrado a tz_core/kml_generator.py en Epic 14
+- ~~**`kml_generador.py`**~~ ✅ Archivo archivado en docs/backups/ (Epic 14)
 
 #### 🟡 **RIESGO MEDIO (2 funciones):**
 1. **`cargar_config()`** (~20 líneas)

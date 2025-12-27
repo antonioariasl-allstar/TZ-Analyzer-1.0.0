@@ -75,7 +75,6 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
   - `script_principal_bitacoras_refactory.py` → Flujo principal y orquestación.
   - `utilidades.py` → Selección de archivos/carpetas (Tkinter + fallback consola).
   - `validaciones.py` → Normalización defensiva de fecha/hora/coordenadas/azimut.
-  - `kml_generador.py` → Generador de puntos libres (modo manual).
   - `tests/test_e2e_regresion.py` → Tests E2E y validación de estructura KMZ.
 
 ---
@@ -89,7 +88,6 @@ TZ-Analyzer/
 ├── script_principal_bitacoras_refactory.py  # Flujo principal y orquestación
 ├── utilidades.py                          # Selección de archivos/carpetas
 ├── validaciones.py                        # Normalización y validación
-├── kml_generador.py                       # Generador de puntos libres
 ├── logo_tz.png                            # Logo para branding
 ├── README.md                              # Este archivo
 ├── TODO.md                                # Tareas y observaciones
