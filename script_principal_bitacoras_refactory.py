@@ -5277,35 +5277,10 @@ def main():
             HTML_SECCION_TODOS_CONTACTOS = ""
 
 
-        # 3) (Opcional) Sección Top N antenas para la portada del HTML
-        try:
-            global HTML_SECCION_ANTENAS
-
-            # Leer Top N antenas (override -> config -> 3)
-            try:
-                if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
-                    _topN = int(OVERRIDE_TOPS.get('antenas'))
-                elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                    _topN = int(CONFIG.get("html", {}).get("top_antenas_n", 3))
-                else:
-                    _topN = 3
-            except Exception:
-                _topN = 3
-
-
-            # Buscar la función si existe (con o sin guion bajo)
-            _func = globals().get("_construir_seccion_antenas") or globals().get("construir_seccion_antenas")
-            if callable(_func):
-                HTML_SECCION_ANTENAS = _func(df, top_n=_topN, columnas_config=_cols_cfg)
-            else:
-                # Si no existe la función, no pasa nada: el HTML ya arma su sección de antenas.
-                HTML_SECCION_ANTENAS = ""
-        except Exception:
-            HTML_SECCION_ANTENAS = ""
-
-            # Si no existe la función o algo falla, la sección queda vacía (no bloquea el HTML)
-            # print(f"[DEBUG] Antenas HTML error: {e}")
-            HTML_SECCION_ANTENAS = ""
+        # 3) Sección Top N antenas (deshabilitada: helper no disponible)
+        global HTML_SECCION_ANTENAS
+        HTML_SECCION_ANTENAS = ""
+        log("[INFO] Sección Top antenas no generada (helper ausente)")
 
         # 4) Generar el HTML
         print("[DEBUG] Llamando a generar_informe_html(...)")
