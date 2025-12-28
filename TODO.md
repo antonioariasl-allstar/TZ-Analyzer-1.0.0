@@ -7,6 +7,7 @@
 - Monolito delega la sección "Contactos con más comunicación" al helper; HTML idéntico validado por usuario (prueba manual OK).
 - Sintaxis verificada con `py_compile`; commit atómico: `refactor: extraer seccion top contactos a helper`.
 - Próximo paso: continuar con extracción de "Top antenas" y consolidar en HTML builder.
+- [29/12/2025] Config centralizada: nuevo helper `tz_core/config_loader.py` con `load_config/get_config` (ajuste PyInstaller para logo) y wrappers de sinónimos/color; monolito importa desde el helper y se eliminan duplicados locales; alias `_normalize_key_for_synonyms` preserva compatibilidad; usuario validó manualmente.
 
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 

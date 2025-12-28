@@ -335,7 +335,18 @@ except Exception:
 # --- ANTI-COLISIONES DE COLUMNAS (fusiona duplicadas por primer valor no vacío) ---
 # === IMPORTS MODULARES (gradual refactoring) ===
 from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
-from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR
+from tz_core.config_loader import (
+    load_config,
+    get_config as core_get_config,
+    cfg_build_rename_map,
+    cfg_add_user_synonym,
+    normalize_key_for_synonyms,
+    solicitar_color_tema,
+    DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR,
+)
+
+# Alias de compatibilidad para funciones de sinónimos usadas en el monolito
+_normalize_key_for_synonyms = normalize_key_for_synonyms
 from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
 from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
@@ -364,36 +375,8 @@ def cargar_config():
     NOTA: Preserva comportamiento exacto incluyendo DEFAULT_CONFIG y merge logic.
     El sistema de sinónimos legacy se mantiene intacto para evitar breaking changes.
     """
-    return cargar_config_modular()
+    return load_config()
 
-# === SINONIMOS: MERGE + PERSISTENCIA (inicio) ==============================
-import tempfile
-
-def _normalize_key_for_synonyms(s: str) -> str:
-    """
-    Wrapper para compatibilidad - usar _normalize_key_for_synonyms de tz_core.config_manager
-    """
-    from tz_core.config_manager import _normalize_key_for_synonyms as _normalize_modular
-    return _normalize_modular(s)
-
-def cfg_build_rename_map(CONFIG: dict) -> dict:
-    """
-    Wrapper para compatibilidad - usar cfg_build_rename_map de tz_core.config_manager
-    
-    Nota: Sistema de sinónimos extraído al módulo config_manager.
-    Este wrapper preserva el comportamiento exacto del mapeo de columnas legacy y dinámico.
-    """
-    from tz_core.config_manager import cfg_build_rename_map as cfg_build_modular
-    return cfg_build_modular(CONFIG)
-
-def cfg_add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cfg: str = None) -> dict:
-    """
-    🚨 WRAPPER DE COMPATIBILIDAD - usar add_user_synonym de tz_core.config_manager
-    
-    Nota: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.
-    Este wrapper preserva persistencia automática en config.json y memoria de mapeo manual.
-    """
-    return add_user_synonym(CONFIG, canonico, encabezado_crudo, ruta_cfg)
 # === SINONIMOS: MERGE + PERSISTENCIA (fin) =================================
 
 # CONFIG inicializado al nivel de módulo (se carga una sola vez)
@@ -411,18 +394,8 @@ def get_config():
     Returns:
         dict: Diccionario de configuración global.
     """
-    import sys, os
     global CONFIG
-    if CONFIG is None:
-        # cargar_config() ya maneja la detección de ruta correctamente
-        CONFIG = cargar_config()
-        
-        # Normaliza ruta de logo para PyInstaller si es necesario
-        if getattr(sys, 'frozen', False):
-            base_path = sys._MEIPASS
-            logo_path = CONFIG.get("branding", {}).get("logo_path")
-            if logo_path and not os.path.isabs(logo_path):
-                CONFIG["branding"]["logo_path"] = os.path.join(base_path, logo_path)
+    CONFIG = core_get_config()
     return CONFIG
 
 def _solicitar_color_tema(CONFIG):
