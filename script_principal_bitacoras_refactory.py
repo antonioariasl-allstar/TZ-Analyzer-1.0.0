@@ -156,7 +156,7 @@ def bootstrap_config() -> None:
     
     # Configuración y mapa de sinónimos usando funciones modulares
     global CONFIG, RENAME_MAP
-    CONFIG = get_config()  # Usa la función centralizada (ya modular)
+    CONFIG = core_get_config()  # Usa la función centralizada (ya modular)
     
     # Importar cfg_build_rename_map desde el módulo (ya en imports globales)
     RENAME_MAP = cfg_build_rename_map(CONFIG)
@@ -336,7 +336,6 @@ except Exception:
 # === IMPORTS MODULARES (gradual refactoring) ===
 from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
 from tz_core.config_loader import (
-    load_config,
     get_config as core_get_config,
     cfg_build_rename_map,
     cfg_add_user_synonym,
@@ -349,10 +348,11 @@ from tz_core.config_loader import (
 _normalize_key_for_synonyms = normalize_key_for_synonyms
 from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
-from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
+from tz_core.color_utils import hex_to_kml_color, color_mock, _color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
 from tz_core.dataframe_utils import dedupe_columns
+from tz_core.analytics import generar_historial_cambios_antena
 from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo_a_salida
 
 # Importar constantes desde tz_core para consistencia
@@ -367,69 +367,13 @@ def _copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> str | None:
 # Alias para compatibilidad - usar DEFAULT_CONFIG de tz_core.config_manager
 DEFAULT_CONFIG = DEFAULT_CONFIG_MODULAR
 
-# === SECCIÓN: CONFIGURACIÓN Y SINÓNIMOS (carga CONFIG, construye RENAME_MAP) ===
-def cargar_config():
-    """
-    Wrapper para compatibilidad - usar cargar_config de tz_core.config_manager
-    
-    NOTA: Preserva comportamiento exacto incluyendo DEFAULT_CONFIG y merge logic.
-    El sistema de sinónimos legacy se mantiene intacto para evitar breaking changes.
-    """
-    return load_config()
-
-# === SINONIMOS: MERGE + PERSISTENCIA (fin) =================================
-
 # CONFIG inicializado al nivel de módulo (se carga una sola vez)
 CONFIG = None
 OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejecución)
 
-def get_config():
-    """
-    Lazy-load de CONFIG: retorna el diccionario global de configuración, inicializándolo si es necesario.
-    Resuelve rutas absolutas para logo, compatible con PyInstaller.
-
-    Uso:
-        config = get_config()
-
-    Returns:
-        dict: Diccionario de configuración global.
-    """
-    global CONFIG
-    CONFIG = core_get_config()
-    return CONFIG
-
-def _solicitar_color_tema(CONFIG):
-    """
-    🚨 WRAPPER DE COMPATIBILIDAD - usar solicitar_color_tema de tz_core.config_manager
-    
-    Nota: Función interactiva extraída al módulo config_manager.
-    Este wrapper preserva la paleta de 60 colores para diferenciación de bitácoras.
-    """
-    return solicitar_color_tema(CONFIG)
-
 # =========================
 # Geometría / KML helpers
 # =========================
-# --- Helpers de color KML (aabbggrr) desde #RRGGBB ---
-def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
-    """MIGRADA A tz_core.color_utils - usar import desde allí"""
-    return hex_to_kml_color(hex_rgb, alpha)
-
-# =========================
-# Análisis de antenas (tolerante)
-# =========================
-def analizar_antenas(df: pd.DataFrame, archivo_salida: str):
-    """Wrapper de compatibilidad - usa tz_core.analytics.analizar_antenas"""
-    from tz_core.analytics import analizar_antenas as analizar_modular
-    return analizar_modular(df, archivo_salida)
-
-# =========================
-# Burbuja condicional
-# =========================
-def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100):
-    """Wrapper de compatibilidad - usa tz_core.analytics.generar_historial_cambios_antena"""
-    from tz_core.analytics import generar_historial_cambios_antena as historial_modular
-    return historial_modular(df, max_saltos)
 
 HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
 
@@ -551,10 +495,10 @@ def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_fl
         cone_opac = float(style_cfg.get("cone_opacity", 0.35))
 
         # Colores KML (AABBGGRR)
-        pin_color  = _hex_to_kml_color(theme_hex, 255)
+        pin_color  = hex_to_kml_color(theme_hex, 255)
         # Si line_abgr está en config, úsalo directamente; si no, convierte theme_hex
-        line_color = line_abgr if line_abgr else _hex_to_kml_color(theme_hex, 255)
-        cone_color = _hex_to_kml_color(theme_hex, int(max(0, min(1.0, cone_opac)) * 255))
+        line_color = line_abgr if line_abgr else hex_to_kml_color(theme_hex, 255)
+        cone_color = hex_to_kml_color(theme_hex, int(max(0, min(1.0, cone_opac)) * 255))
 
         # Estilo del PIN
         s_pin = sk.Style()
@@ -3894,7 +3838,7 @@ def main():
             log(f"Modo válido seleccionado: {opcion}")
             # Preguntar color SIEMPRE para modos 1/2
             log("Solicitando configuración de tema de colores...")
-            CONFIG = _solicitar_color_tema(CONFIG)
+            CONFIG = solicitar_color_tema(CONFIG)
             log("Configuración de colores completada")
             break
 
