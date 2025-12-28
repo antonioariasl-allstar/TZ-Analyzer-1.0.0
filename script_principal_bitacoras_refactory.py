@@ -1949,28 +1949,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     except Exception:
         _h1 = ""
 
-    # --- TÍTULO H1 desde config.brand (name + version) ---
-    try:
-        _brand = CONFIG.get("brand", {}) if isinstance(CONFIG, dict) else {}
-        _bname = str(_brand.get("name", "")).strip()
-        _bver  = str(_brand.get("version", "")).strip()
-        if _bname and _bver:
-            _title = f"{_bname} — {_bver}"
-        elif _bname:
-            _title = _bname
-        elif _bver:
-            _title = _bver
-        else:
-            _title = ""
-
-        # ⬇️ Dejar SOLO este if, con pass adentro
-        if _title:
-            # Desactivado: no inyectar el H1 centrado
-            pass
-
-    except Exception:
-        pass
-
         # === HTML-TOC-1: índice de navegación sticky (sin KML/KMZ) ===
     try:
         # 1) Asegurar IDs de secciones para poder enlazar
