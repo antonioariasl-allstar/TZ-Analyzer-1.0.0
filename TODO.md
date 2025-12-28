@@ -11,6 +11,7 @@
 - [29/12/2025] Limpieza de compatibilidad: monolito deja de duplicar wrappers (`get_config`, `_solicitar_color_tema`, `_hex_to_kml_color`, `analizar_antenas`); se usan helpers directos de `tz_core` y se mantiene monkeypatch de color en tests.
 - [29/12/2025] HTML limpio: se elimina el bloque H1 (brand/version) desactivado para reducir código muerto; TOC sigue igual.
 - [29/12/2025] Interacciones/contactos: se elimina el wrapper `_construir_seccion_todos_contactos` y utilidades de rangos sin uso; ahora se importa directo `construir_seccion_todos_contactos` desde `tz_core.analytics`.
+- [29/12/2025] Monkeypatch a helper: bloque de mocks para `run_tz_analysis` movido a `tests/helpers/monkeypatch_flow.py` y el monolito lo consume (fallback resiliente); smoke de pruebas: `pytest tests/unit/test_config_manager.py -q` OK (13 passed, warnings preexistentes).
 
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 

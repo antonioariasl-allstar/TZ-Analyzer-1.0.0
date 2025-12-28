@@ -3578,87 +3578,37 @@ def run_tz_analysis(
     }
 
     # --- Monkey-patch de funciones interactivas para evitar prompts ---
-    # Guardamos originales para restaurar luego
-    g = globals()
-    _orig = {}
-    def _keep(name, fallback=None):
-        if name in g:
-            _orig[name] = g[name]
-            return g[name]
-        _orig[name] = fallback
-        return fallback
-
-    _keep("_menu_principal")
-    _keep("seleccionar_archivo")
-    _keep("seleccionar_carpeta")
-    _keep("_input_str")
-    _keep("_seleccionar_hoja_visible")
-    _keep("_solicitar_overrides_topn")
-    _keep("_solicitar_color_tema")
-
-    # 1) Modo directo: "1" (bitácora Excel)
-    def _menu_principal_mock():
-        return "1"
-    g["_menu_principal"] = _menu_principal_mock
-
-    # 2) Archivo de entrada (sin diálogo)
-    def _sel_arch_mock():
-        return ruta_entrada
-    g["seleccionar_archivo"] = _sel_arch_mock
-
-    # 3) Carpeta de salida (sin diálogo)
-    def _sel_carp_mock():
-        return carpeta_salida or os.getcwd()
-    g["seleccionar_carpeta"] = _sel_carp_mock
-
-    # 4) Nombre sugerido / otros input_str: devolver vacío = aceptar por defecto
-    def _input_str_mock(msg, *args, **kwargs):
-        return ""
-    g["_input_str"] = _input_str_mock
-
-    # 5) Selección de hoja visible (si el script lo usa)
-    if hoja is not None:
-        def _hoja_mock(_archivo):
-            return hoja
-        g["_seleccionar_hoja_visible"] = _hoja_mock
-
-    # 6) Overrides TopN si el flujo intenta pedirlos
-    def _ovr_mock(_cfg):
-        return globals().get("OVERRIDE_TOPS", None)
-    g["_solicitar_overrides_topn"] = _ovr_mock
-
-    # 7) Color tema: no preguntar; dejar CONFIG tal cual
-    def _color_mock(cfg):
-        """MIGRADA A tz_core.color_utils - usar import desde allí"""
-        return color_mock(cfg)
-    g["_solicitar_color_tema"] = _color_mock
-
-    # --- Silenciar input() durante la ejecución ---
-    import builtins
-    _orig_input_builtin = getattr(builtins, "input", None)
-
-    def _input_mock(*args, **kwargs):
-        # Simula presionar Enter en cualquier prompt
-        return ""
-
     try:
-        builtins.input = _input_mock
+        from tests.helpers.monkeypatch_flow import apply_run_monkeypatch
+
+        mp_ctx = apply_run_monkeypatch(
+            globals_dict=globals(),
+            ruta_entrada=ruta_entrada,
+            hoja=hoja,
+            carpeta_salida=carpeta_salida,
+            override_tops=globals().get("OVERRIDE_TOPS"),
+            color_mock_fn=color_mock,
+        )
+        restore = mp_ctx.get("restore")
+        out_root = mp_ctx.get("out_root")
+        _snapshot = mp_ctx.get("snapshot")
     except Exception:
-        pass
+        def _snapshot(folder):
+            try:
+                return set(glob.glob(os.path.join(folder, "**/*"), recursive=True))
+            except Exception:
+                return set()
+
+        def restore():
+            pass
+
+        out_root = carpeta_salida or os.getcwd()
 
     # --- Capturar stdout/stderr como log en memoria ---
     buf = io.StringIO()
     html_path = kmz_path = hashes_path = log_path = None
 
     # --- Snapshot de archivos previos para detectar nuevos (HTML/KMZ/HASHES) ---
-    def _snapshot(folder):
-        try:
-            pat = "**/*"
-            return set(glob.glob(os.path.join(folder, pat), recursive=True))
-        except Exception:
-            return set()
-
-    out_root = _sel_carp_mock()
     before = _snapshot(out_root)
 
     try:
@@ -3703,16 +3653,7 @@ def run_tz_analysis(
 
     # --- Restaurar originales ---
     try:
-        for name, fn in _orig.items():
-            if fn is not None:
-                g[name] = fn
-    except Exception:
-        pass
-
-        # Restaurar input() original
-    try:
-        if _orig_input_builtin is not None:
-            builtins.input = _orig_input_builtin
+        restore()
     except Exception:
         pass
 
