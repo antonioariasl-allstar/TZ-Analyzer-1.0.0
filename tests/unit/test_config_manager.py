@@ -46,7 +46,6 @@ def test_cargar_config_default():
             assert config["kml"]["azimuth_km"] == 1.5, "Debe tener valor por defecto de azimuth_km"
             
             print("✅ PASS: DEFAULT_CONFIG retornado correctamente")
-            return True
             
         finally:
             os.chdir(original_dir)
@@ -73,7 +72,6 @@ def test_cargar_config_archivo_real():
         print("✅ Config real cargado - contiene synonyms_user")
     
     print("✅ PASS: Config.json real cargado correctamente")
-    return True
 
 
 def test_default_config_structure():
@@ -95,7 +93,6 @@ def test_default_config_structure():
     assert len(desc) >= 3, "description debe tener al menos 3 bloques"
     
     print("✅ PASS: DEFAULT_CONFIG tiene estructura correcta")
-    return True
 
 
 def test_normalize_key_for_synonyms():
@@ -117,7 +114,6 @@ def test_normalize_key_for_synonyms():
         assert result == expected, f"_normalize_key_for_synonyms({input_val!r}) = {result!r}, esperado {expected!r}"
     
     print("✅ PASS: Normalización de claves funciona correctamente")
-    return True
 
 
 def test_cfg_build_rename_map():
@@ -162,7 +158,6 @@ def test_cfg_build_rename_map():
     assert "mi_campo" in lat_synonyms, "lat debe incluir 'mi_campo' del synonyms_user"
     
     print("✅ PASS: cfg_build_rename_map funciona correctamente")
-    return True
 
 
 def test_log_function():
@@ -170,13 +165,8 @@ def test_log_function():
     print("🧪 Testing función log...")
     
     # Solo verificamos que no falla
-    try:
-        log("Test message desde unit test")
-        print("✅ PASS: Función log ejecuta sin errores")
-        return True
-    except Exception as e:
-        print(f"❌ FAIL: log() falló: {e}")
-        return False
+    log("Test message desde unit test")
+    print("✅ PASS: Función log ejecuta sin errores")
 
 
 def test_solicitar_color_tema_default():
@@ -203,7 +193,6 @@ def test_solicitar_color_tema_default():
     
     assert result_config["style"]["theme_hex"] == "#ff0000", "Debe mantener color default"
     print("✅ PASS: Default color preservado correctamente")
-    return True
 
 
 def test_solicitar_color_tema_palette_selection():
@@ -230,7 +219,6 @@ def test_solicitar_color_tema_palette_selection():
     
     assert result_config["style"]["theme_hex"] == "#00ff00", "Debe seleccionar verde (#00ff00)"
     print("✅ PASS: Selección de paleta funciona correctamente")
-    return True
 
 
 def test_solicitar_color_tema_hex_manual():
@@ -252,7 +240,6 @@ def test_solicitar_color_tema_hex_manual():
     
     assert result_config["style"]["theme_hex"] == "#123456", "Debe usar HEX manual"
     print("✅ PASS: HEX manual funciona correctamente")
-    return True
 
 
 def test_solicitar_color_tema_invalid_input():
@@ -274,7 +261,6 @@ def test_solicitar_color_tema_invalid_input():
     
     assert result_config["style"]["theme_hex"] == "#ff0000", "Debe usar default por entrada inválida"
     print("✅ PASS: Validación de entrada inválida funciona")
-    return True
 
 
 def test_atomic_write_json():
@@ -323,7 +309,6 @@ def test_atomic_write_json():
         assert updated_data == new_data, "Archivo debe estar actualizado"
     
     print("✅ PASS: atomic_write_json funciona correctamente")
-    return True
 
 
 def test_add_user_synonym():
@@ -378,7 +363,6 @@ def test_add_user_synonym():
         assert len(result_config2["synonyms_user"]) == original_size, "No debe duplicar sinónimos"
     
     print("✅ PASS: add_user_synonym funciona correctamente")
-    return True
 
 
 def test_add_user_synonym_invalid_inputs():
@@ -398,7 +382,6 @@ def test_add_user_synonym_invalid_inputs():
     assert len(result3["synonyms_user"]) == 0, "No debe agregar sinónimo con crudo vacío"
     
     print("✅ PASS: Validación de entradas inválidas funciona")
-    return True
 
 
 def main():
@@ -406,60 +389,33 @@ def main():
     print("🏗️  TESTS UNITARIOS - tz_core.config_manager")
     print("=" * 50)
     
+    test_functions = [
+        test_default_config_structure,
+        test_cargar_config_default,
+        test_cargar_config_archivo_real,
+        test_normalize_key_for_synonyms,
+        test_cfg_build_rename_map,
+        test_log_function,
+        test_solicitar_color_tema_default,
+        test_solicitar_color_tema_palette_selection,
+        test_solicitar_color_tema_hex_manual,
+        test_solicitar_color_tema_invalid_input,
+        test_atomic_write_json,
+        test_add_user_synonym,
+        test_add_user_synonym_invalid_inputs,
+    ]
+
     tests_passed = 0
-    total_tests = 13
-    
-    # Test 1: Estructura DEFAULT_CONFIG
-    if test_default_config_structure():
-        tests_passed += 1
-    
-    # Test 2: Config archivo inexistente
-    if test_cargar_config_default():
-        tests_passed += 1
-    
-    # Test 3: Config real
-    if test_cargar_config_archivo_real():
-        tests_passed += 1
-    
-    # Test 4: Normalización de claves
-    if test_normalize_key_for_synonyms():
-        tests_passed += 1
-    
-    # Test 5: Construcción de rename map
-    if test_cfg_build_rename_map():
-        tests_passed += 1
-    
-    # Test 6: Función log
-    if test_log_function():
-        tests_passed += 1
-    
-    # Test 7: Solicitar color tema - default
-    if test_solicitar_color_tema_default():
-        tests_passed += 1
-    
-    # Test 8: Solicitar color tema - selección paleta
-    if test_solicitar_color_tema_palette_selection():
-        tests_passed += 1
-    
-    # Test 9: Solicitar color tema - HEX manual
-    if test_solicitar_color_tema_hex_manual():
-        tests_passed += 1
-    
-    # Test 10: Solicitar color tema - entrada inválida
-    if test_solicitar_color_tema_invalid_input():
-        tests_passed += 1
-    
-    # Test 11: Escritura atómica JSON
-    if test_atomic_write_json():
-        tests_passed += 1
-    
-    # Test 12: Agregar sinónimo usuario
-    if test_add_user_synonym():
-        tests_passed += 1
-    
-    # Test 13: Sinónimo usuario - entradas inválidas
-    if test_add_user_synonym_invalid_inputs():
-        tests_passed += 1
+    total_tests = len(test_functions)
+
+    for test_fn in test_functions:
+        try:
+            test_fn()
+            tests_passed += 1
+        except AssertionError as err:
+            print(f"❌ {test_fn.__name__} falló: {err}")
+        except Exception as err:
+            print(f"❌ {test_fn.__name__} lanzó excepción: {err}")
     
     print("\n" + "=" * 50)
     print(f"📊 RESULTADOS: {tests_passed}/{total_tests} tests pasaron")
