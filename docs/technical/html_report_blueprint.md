@@ -1,5 +1,10 @@
 # HTML Report Generator Blueprint
 
+## Progress (28/12/2025)
+- Top contactos extraído a helper `build_top_contacts_sections` en `tz_core/html_generator.py`.
+- Monolito delega la sección "Contactos con más comunicación" al helper (conteo y duración) usando overrides/config.
+- Output HTML validado por usuario (prueba manual) sin regresiones visibles.
+
 ## 1. Scope
 
 ### 1.1 Objective

@@ -1,5 +1,13 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
+## ✅ EPIC 16A: EXTRACCIÓN TOP CONTACTOS (28/12/2025)
+
+**Log de avance:**
+- Helper `build_top_contacts_sections` creado en `tz_core/html_generator.py` (conteo y duración, respeta overrides y config).
+- Monolito delega la sección "Contactos con más comunicación" al helper; HTML idéntico validado por usuario (prueba manual OK).
+- Sintaxis verificada con `py_compile`; commit atómico: `refactor: extraer seccion top contactos a helper`.
+- Próximo paso: continuar con extracción de "Top antenas" y consolidar en HTML builder.
+
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 
 **UNIFICACIÓN KML: kml_generador.py → tz_core/kml_generator.py (ARQUITECTURA LIMPIA)**
