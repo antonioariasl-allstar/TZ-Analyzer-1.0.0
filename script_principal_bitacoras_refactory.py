@@ -348,7 +348,7 @@ from tz_core.config_loader import (
 _normalize_key_for_synonyms = normalize_key_for_synonyms
 from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
-from tz_core.color_utils import hex_to_kml_color, color_mock, _color_mock
+from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
 from tz_core.dataframe_utils import dedupe_columns
