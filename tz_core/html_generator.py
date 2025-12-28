@@ -17,10 +17,23 @@ Architecture: TZ-Analyzer Professional v1.0.0
 
 # Imports necesarios para construir_seccion_interacciones
 import json
+import re
+from typing import Optional
+
 import pandas as pd
 import numpy as np
+
 from tz_core.logging_utils import log
 from tz_core.config_manager import cargar_config
+from tz_core.html_helpers import (
+    first_nonempty_in,
+    unique_values_in,
+    fmt_imei_item,
+    row_html,
+    nunique_in,
+    luhn_check,
+    is_valid_imei,
+)
 
 def generate_html_header(theme_hex: str, nombre_salida: str) -> str:
     """
@@ -312,6 +325,145 @@ def generate_kpi_section(
       </div>
     </div>
   </section>"""
+
+
+def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -> str:
+    """Construye la tabla de identificación (número, IMEI, alias, usuario, abonado, IMSI).
+
+    La lógica se extrajo desde generar_informe_html() para mantener una sola fuente de verdad.
+    """
+    if df is None or df.empty:
+        return ""
+
+    tel_cols = ["tel","telefono","numero","msisdn","a_number","origen","from","callingnumber","num"]
+    alias_cols = ["alias","alias_usuario","apodo"]
+    user_cols = ["usuario","nombre_usuario","suscriptor","user_name"]
+    abon_cols = ["abonado","titular","owner","subscriber"]
+    imei_cols = ["imei","imei1","imei_1"]
+    imsi_cols = ["imsi","imsi1","imsi_1","imsi_origen"]
+
+    tel_val = first_nonempty_in(df, tel_cols)
+    alias_val = first_nonempty_in(df, alias_cols)
+    user_val = first_nonempty_in(df, user_cols)
+    abon_val = first_nonempty_in(df, abon_cols)
+    imei_raw = first_nonempty_in(df, imei_cols)
+    imsi_raw = first_nonempty_in(df, imsi_cols)
+
+    def _coerce_float_str(value):
+        if value is None:
+            return None
+        try:
+            f_val = float(str(value))
+            if f_val.is_integer():
+                return str(int(f_val))
+            return str(value)
+        except Exception:
+            return str(value)
+
+    imei_val = _coerce_float_str(imei_raw) if imei_raw is not None else None
+    imsi_val = _coerce_float_str(imsi_raw) if imsi_raw is not None else None
+
+    def _ask_if_missing(label_visible: str, current_value, col_name: str):
+        try:
+            val_actual = (str(current_value).strip() if current_value is not None else "")
+        except Exception:
+            val_actual = ""
+        if val_actual:
+            return current_value
+        try:
+            entrada = ""
+        except Exception:
+            entrada = ""
+        if entrada:
+            try:
+                df[col_name] = entrada
+            except Exception:
+                pass
+            return entrada
+        return current_value
+
+    alias_val = _ask_if_missing("alias", alias_val, "alias")
+    user_val = _ask_if_missing("nombre_usuario", user_val, "usuario")
+    abon_val = _ask_if_missing("abonado", abon_val, "abonado")
+
+    tel_n = nunique_in(df, tel_cols)
+    ali_n = nunique_in(df, alias_cols)
+    usr_n = nunique_in(df, user_cols)
+    abo_n = nunique_in(df, abon_cols)
+    ime_n = nunique_in(df, imei_cols)
+    imsi_n = nunique_in(df, imsi_cols)
+
+    def _fmt_uni(val, count):
+        if count > 1:
+            return f"múltiples ({count})"
+        if val:
+            return val
+        return None
+
+    tel_disp = _fmt_uni(tel_val, tel_n)
+    alias_disp = _fmt_uni(alias_val, ali_n)
+    user_disp = _fmt_uni(user_val, usr_n)
+    abon_disp = _fmt_uni(abon_val, abo_n)
+    imei_disp = _fmt_uni(imei_val, ime_n)
+    imsi_disp = _fmt_uni(imsi_val, imsi_n)
+
+    tel_list, tel_more = unique_values_in(df, tel_cols, max_items=8)
+    ali_list, ali_more = unique_values_in(df, alias_cols, max_items=8)
+    usr_list, usr_more = unique_values_in(df, user_cols, max_items=8)
+    abo_list, abo_more = unique_values_in(df, abon_cols, max_items=8)
+    imei_list, imei_more = unique_values_in(df, imei_cols, max_items=20)
+    imsi_list, imsi_more = unique_values_in(df, imsi_cols, max_items=20)
+
+    imei_list = [fmt_imei_item(x) for x in imei_list]
+    imei_list = [x for x in imei_list if is_valid_imei(x)]
+    if not imei_list:
+        imei_disp = None
+        imei_more = 0
+
+    cleaned_imsis = []
+    for item in imsi_list:
+        try:
+            s = str(item).strip()
+            try:
+                f = float(s)
+                if f.is_integer():
+                    s = str(int(f))
+            except Exception:
+                pass
+            s = re.sub(r"\D", "", s)
+            if 14 <= len(s) <= 16:
+                cleaned_imsis.append(s)
+        except Exception:
+            continue
+    imsi_list = cleaned_imsis
+    if not imsi_list:
+        imsi_disp = None
+        imsi_more = 0
+
+    ident_rows = ""
+    if tel_list and imsi_list:
+        tel_imsi = []
+        for tel in tel_list:
+            imsis = set()
+            for _, row in df.iterrows():
+                if str(row.get("tel", "")).strip() == str(tel):
+                    imsi_value = row.get("imsi", "")
+                    if imsi_value:
+                        imsis.add(str(imsi_value).strip())
+            if imsis:
+                tel_imsi.append(f"{tel} — IMSI: {', '.join(imsis)}")
+            else:
+                tel_imsi.append(str(tel))
+        ident_rows += row_html("Número telefónico", None, len(tel_imsi), tel_imsi, 0, mono=True)
+    else:
+        ident_rows += row_html("Número telefónico", tel_disp, tel_n, tel_list, tel_more, mono=True)
+
+    ident_rows += row_html("IMEI", imei_disp, ime_n, imei_list, imei_more, mono=True)
+    ident_rows += row_html("Alias", alias_disp, ali_n, ali_list, ali_more, mono=False)
+    ident_rows += row_html("Usuario", user_disp, usr_n, usr_list, usr_more, mono=False)
+    ident_rows += row_html("Abonado", abon_disp, abo_n, abo_list, abo_more, mono=False)
+
+    return ident_rows
 
 # ==============================================================================
 # EPIC 16A: Extracción de sección de interacciones (776 líneas)

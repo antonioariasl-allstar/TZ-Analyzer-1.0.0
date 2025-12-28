@@ -78,12 +78,7 @@ from tz_core.kml_generator import generar_kml_puntos_libres
 # 🔧 MÓDULO EXTRAÍDO (Epic 15): Wizard QC mapeo completo
 from tz_core.mapping_wizard import wizard_qc_mapeo as _wizard_qc_mapeo
 # 🔧 MÓDULO EXTRAÍDO: HTML helpers para generar_informe_html
-from tz_core.html_helpers import (
-    fmt_datetime as fmt_dt, first_nonempty_in, 
-    nunique_in, unique_values_in,
-    fmt_imei_item, row_html, 
-    luhn_check, is_valid_imei
-)
+from tz_core.html_helpers import fmt_datetime as fmt_dt
 # 🔧 MÓDULO EXTRAÍDO: Sistema de logging centralizado
 from tz_core.logging_utils import (
     log as _log_impl,
@@ -116,7 +111,13 @@ from tz_core.text_utils import (
 from tz_core.format_utils import agregar_bloque, armar_descripcion_compacta
 from tz_core.config_manager import cfg_build_rename_map, add_user_synonym, solicitar_color_tema
 from tz_core.color_utils import hex_to_kml_color
-from tz_core.html_generator import generate_html_header, generate_body_header, generate_metadata_section, generate_kpi_section
+from tz_core.html_generator import (
+    generate_html_header,
+    generate_body_header,
+    generate_metadata_section,
+    generate_kpi_section,
+    build_identification_rows,
+)
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
@@ -337,7 +338,6 @@ from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAU
 from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
 from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
-from tz_core.html_utils import row_html, fmt_imei_item, luhn_check
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
 from tz_core.dataframe_utils import dedupe_columns
@@ -1709,182 +1709,11 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     # fecha/hora generación
     gen_dt = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
-    # --- Identificación del número analizado (se omite lo que no exista) ---
-    # 🔧 EXTRAÍDO: Usando first_nonempty_in del módulo html_helpers
-
-    # 🔧 EXTRAÍDO: Usando nunique_in del módulo html_helpers
-    
-    # 🔧 EXTRAÍDO: Usando unique_values_in del módulo html_helpers
-
-    # 🔧 EXTRAÍDO: Usando fmt_imei_item del módulo html_helpers
-
-    # 🔧 EXTRAÍDO: Usando row_html del módulo html_helpers
-        
-    # 🔧 EXTRAÍDO: Usando luhn_check del módulo html_helpers
-
-    # 🔧 EXTRAÍDO: Usando is_valid_imei del módulo html_helpers
-
-    tel_cols    = ["tel","telefono","numero","msisdn","a_number","origen","from","callingnumber","num"]
-    alias_cols  = ["alias","alias_usuario","apodo"]
-    user_cols   = ["usuario","nombre_usuario","suscriptor","user_name"]
-    abon_cols   = ["abonado","titular","owner","subscriber"]
-    imei_cols   = ["imei","imei1","imei_1"]
-
-    # [IMSI] columnas canónicas
-    imsi_cols  = ["imsi","imsi1","imsi_1","imsi_origen"]
-
-    tel_val     = first_nonempty_in(df, tel_cols)
-    alias_val   = first_nonempty_in(df, alias_cols)
-    user_val    = first_nonempty_in(df, user_cols)
-    abon_val    = first_nonempty_in(df, abon_cols)
-    imei_raw    = first_nonempty_in(df, imei_cols)
-
-    # [IMSI] obtener valor único (similar a IMEI)
-    imsi_raw = first_nonempty_in(df, imsi_cols)
-    if imsi_raw is not None:
-        try:
-            f = float(str(imsi_raw))
-            if f.is_integer():
-                imsi_val = str(int(f))
-            else:
-                imsi_val = str(imsi_raw)
-        except Exception:
-            imsi_val = str(imsi_raw)
-    else:
-        imsi_val = None
-
-
-    # Si faltan alias/usuario/abonado, pedir un valor único y aplicarlo a toda la hoja
-    def _ask_if_missing(label_visible: str, current_value, col_name: str):
-        try:
-            val_actual = (str(current_value).strip() if current_value is not None else "")
-        except Exception:
-            val_actual = ""
-        if val_actual:
-            return current_value  # ya había algo
-        try:
-            entrada = ""
-        except Exception:
-            entrada = ""
-        if entrada:
-            # crear/llenar la columna para que figure en HTML/KML
-            try:
-                df[col_name] = entrada
-            except Exception:
-                pass
-            return entrada
-        return current_value
-
-    alias_val = _ask_if_missing("alias", alias_val, "alias")
-    user_val  = _ask_if_missing("nombre_usuario", user_val, "usuario")
-    abon_val  = _ask_if_missing("abonado", abon_val, "abonado")
-
-    # IMEI: quitar .0 si vino como float
-    if imei_raw is not None:
-        try:
-            f = float(str(imei_raw))
-            if f.is_integer():
-                imei_val = str(int(f))
-            else:
-                imei_val = str(imei_raw)
-        except Exception:
-            imei_val = str(imei_raw)
-    else:
-        imei_val = None
-
-    # Si hay múltiples valores en alguna columna, mostrar "múltiples (N)"
-    tel_n  = nunique_in(df, tel_cols)
-    ali_n  = nunique_in(df, alias_cols)
-    usr_n  = nunique_in(df, user_cols)
-    abo_n  = nunique_in(df, abon_cols)
-    ime_n  = nunique_in(df, imei_cols)
-    # [IMSI] conteo de valores únicos
-    imsi_n  = nunique_in(df, imsi_cols)
-
-
-    def _fmt_uni(val, n):
-        if n > 1:   return f"múltiples ({n})"
-        if val:     return val
-        return None
-
-    tel_disp   = _fmt_uni(tel_val,  tel_n)
-    alias_disp = _fmt_uni(alias_val, ali_n)
-    user_disp  = _fmt_uni(user_val, usr_n)
-    abon_disp  = _fmt_uni(abon_val, abo_n)
-    imei_disp  = _fmt_uni(imei_val,  ime_n)
-    # [IMSI] display único
-    imsi_disp = _fmt_uni(imsi_val, imsi_n)
-
-
-    # Listas de valores (para cuando hay múltiples)
-    tel_list,  tel_more  = unique_values_in(df, tel_cols,  max_items=8)
-    ali_list,  ali_more  = unique_values_in(df, alias_cols, max_items=8)
-    usr_list,  usr_more  = unique_values_in(df, user_cols, max_items=8)
-    abo_list,  abo_more  = unique_values_in(df, abon_cols, max_items=8)
-    imei_list, imei_more = unique_values_in(df, imei_cols, max_items=20)
-    
-    # limpiar “.0” y filtrar inválidos (0, null/none/nan, todos ceros, Luhn malo, etc.)
-    imei_list = [fmt_imei_item(x) for x in imei_list]
-    imei_list = [x for x in imei_list if is_valid_imei(x)]
-    if not imei_list:
-        imei_disp = None
-        imei_more = 0
-    
-    # [IMSI] lista de valores (múltiples)
-    imsi_list, imsi_more = unique_values_in(df, imsi_cols, max_items=20)
-
-    # limpieza ligera
-    _tmp = []
-    for x in imsi_list:
-        try:
-            s = str(x).strip()
-            try:
-                f = float(s)
-                if f.is_integer():
-                    s = str(int(f))
-            except Exception:
-                pass
-            s = re.sub(r"\D", "", s)
-            if 14 <= len(s) <= 16:
-                _tmp.append(s)
-        except Exception:
-            continue
-    imsi_list = _tmp
-    if not imsi_list:
-        imsi_disp = None
-        imsi_more = 0
-
-
-    ident_rows = ""
-    ident_rows = ""
-    # 1) Número telefónico (antes decía "Número analizado")
-    # Asociar IMSI a cada número telefónico si existen
-    if tel_list and imsi_list:
-        # Si hay varios números, asociar IMSI por número si posible
-        tel_imsi = []
-        for tel in tel_list:
-            # Buscar IMSI asociados a ese número (si hay relación en el DataFrame)
-            imsis = set()
-            for idx, row in df.iterrows():
-                if str(row.get('tel','')).strip() == str(tel):
-                    imsi_val = row.get('imsi','')
-                    if imsi_val:
-                        imsis.add(str(imsi_val).strip())
-            if imsis:
-                tel_imsi.append(f"{tel} — IMSI: {', '.join(imsis)}")
-            else:
-                tel_imsi.append(str(tel))
-        ident_rows += row_html("Número telefónico", None, len(tel_imsi), tel_imsi, 0, mono=True)
-    else:
-        ident_rows += row_html("Número telefónico", tel_disp,  tel_n,  tel_list,  tel_more,  mono=True)
-    # 2) IMEI (subimos esta fila para que quede inmediatamente debajo del número)
-    ident_rows += row_html("IMEI",             imei_disp,  ime_n,  imei_list, imei_more, mono=True)
-    # 3) Alias
-    ident_rows += row_html("Alias",            alias_disp, ali_n,  ali_list,  ali_more,  mono=False)
-    # 4) Usuario
-    ident_rows += row_html("Usuario",          user_disp,  usr_n,  usr_list,  usr_more,  mono=False)
-    # 5) Abonado
-    ident_rows += row_html("Abonado",          abon_disp,  abo_n,  abo_list,  abo_more,  mono=False)
+    # --- Identificación del número analizado (delegada a tz_core.html_generator) ---
+    ident_rows = build_identification_rows(
+        df,
+        CONFIG if 'CONFIG' in globals() and isinstance(CONFIG, dict) else None,
+    )
 
 
     # --- Top contactos (por conteo y por duración) ---
