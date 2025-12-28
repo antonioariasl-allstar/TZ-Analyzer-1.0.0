@@ -352,7 +352,7 @@ from tz_core.color_utils import hex_to_kml_color, color_mock, _color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
 from tz_core.dataframe_utils import dedupe_columns
-from tz_core.analytics import generar_historial_cambios_antena
+from tz_core.analytics import construir_seccion_todos_contactos, generar_historial_cambios_antena
 from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo_a_salida
 
 # Importar constantes desde tz_core para consistencia
@@ -1387,65 +1387,6 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
 
     out.append('</section>')
     return "".join(out)
-def _construir_seccion_todos_contactos(df, columnas_config=None):
-    """Wrapper de compatibilidad - usa tz_core.analytics.construir_seccion_todos_contactos"""
-    from tz_core.analytics import construir_seccion_todos_contactos as contactos_modular
-    return contactos_modular(df, columnas_config)
-
-
-# === HTML-INTERACCIONES-1 (fin) ===========================================
-# === RANGOS-UTILS (desde config, soporta cruces de medianoche) ===
-from datetime import time as _time, datetime as _dt
-
-def _parse_hhmmss_to_minutes(s: str | None) -> int | None:
-    """Convierte 'HH:MM' o 'HH:MM:SS' a minutos desde 00:00. Devuelve None si no se puede."""
-    if s is None:
-        return None
-    s = str(s).strip()
-    if not s:
-        return None
-    try:
-        parts = s.split(":")
-        hh = int(parts[0])
-        mm = int(parts[1]) if len(parts) > 1 else 0
-        # ignorar segundos si vienen
-        return hh * 60 + mm
-    except Exception:
-        return None
-
-def _minutes_from_any(hora) -> int | None:
-    """
-    Acepta: datetime.time, datetime.datetime, pandas.Timestamp, str 'HH:MM(:SS)'.
-    Devuelve minutos desde 00:00 o None.
-    """
-    try:
-        # pandas.Timestamp o datetime
-        if hasattr(hora, "hour") and hasattr(hora, "minute"):
-            return int(hora.hour) * 60 + int(hora.minute)
-        if isinstance(hora, _time):
-            return hora.hour * 60 + hora.minute
-        # string
-        return _parse_hhmmss_to_minutes(str(hora))
-    except Exception:
-        return None
-
-def _construir_rangos_cfg(rangos_cfg: list[dict]) -> list[tuple[str, int, int]]:
-    """Wrapper de compatibilidad - usa tz_core.analytics.construir_rangos_cfg"""
-    from tz_core.analytics import construir_rangos_cfg as rangos_modular
-    return rangos_modular(rangos_cfg)
-
-def _en_rango_minutos_local(minutos: int, ini: int, fin: int) -> bool:
-    """
-    True si 'minutos' cae dentro del rango [ini..fin] en minutos.
-    Soporta cruce de medianoche: si ini > fin, el rango pasa por 00:00.
-    """
-    return en_rango_minutos(minutos, ini, fin)
-
-def etiqueta_rango(hora, rangos_cfg: list[dict], default: str = "Sin rango") -> str:
-    """Wrapper de compatibilidad - usa tz_core.analytics.etiqueta_rango"""
-    from tz_core.analytics import etiqueta_rango as etiqueta_modular
-    return etiqueta_modular(hora, rangos_cfg, default)
-# === FIN RANGOS-UTILS ===
 
 
 def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str, nombre_salida: str, hoja: str | None = None, nombre_bitacora: str | None = None) -> str:
@@ -5388,7 +5329,7 @@ def main():
         # 2b) Construir sección "Todos los contactos"
         try:
             global HTML_SECCION_TODOS_CONTACTOS
-            HTML_SECCION_TODOS_CONTACTOS = _construir_seccion_todos_contactos(
+            HTML_SECCION_TODOS_CONTACTOS = construir_seccion_todos_contactos(
                 df, columnas_config=_cols_cfg
             )
         except Exception:

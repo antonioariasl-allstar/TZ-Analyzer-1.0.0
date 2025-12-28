@@ -10,6 +10,7 @@
 - [29/12/2025] Config centralizada: nuevo helper `tz_core/config_loader.py` con `load_config/get_config` (ajuste PyInstaller para logo) y wrappers de sinónimos/color; monolito importa desde el helper y se eliminan duplicados locales; alias `_normalize_key_for_synonyms` preserva compatibilidad; usuario validó manualmente.
 - [29/12/2025] Limpieza de compatibilidad: monolito deja de duplicar wrappers (`get_config`, `_solicitar_color_tema`, `_hex_to_kml_color`, `analizar_antenas`); se usan helpers directos de `tz_core` y se mantiene monkeypatch de color en tests.
 - [29/12/2025] HTML limpio: se elimina el bloque H1 (brand/version) desactivado para reducir código muerto; TOC sigue igual.
+- [29/12/2025] Interacciones/contactos: se elimina el wrapper `_construir_seccion_todos_contactos` y utilidades de rangos sin uso; ahora se importa directo `construir_seccion_todos_contactos` desde `tz_core.analytics`.
 
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 
