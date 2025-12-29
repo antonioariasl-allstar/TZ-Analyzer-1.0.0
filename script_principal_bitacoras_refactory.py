@@ -249,12 +249,6 @@ def log(msg: str):
     _log_impl(msg)
 
 
-# === NORMALIZADOR-1 (inicio) ==============================================
-# Todas las funciones de normalización de texto migradas a tz_core.text_utils
-# Usar imports directos desde línea 765: normalizar_texto, normalizar_columnas_texto
-# === NORMALIZADOR-1 (fin) ==================================================
-
-
 # =========================
 # Fallbacks de importación
 # =========================
@@ -357,26 +351,16 @@ from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo
 # Importar constantes desde tz_core para consistencia
 RANGOS_SV = RANGOS_SV_MODULAR
 
-# === HASHES + ENTORNO (helpers) — INICIO ====================================
-# (copiar_logo_a_salida ya disponible desde tz_core.file_utils)
+# === CONFIG & GLOBALS ===
 
 # CONFIG inicializado al nivel de módulo (se carga una sola vez)
 CONFIG = None
 OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejecución)
 
 # =========================
-# Geometría / KML helpers
-# =========================
-# Funciones de formateo - usar imports directos desde tz_core.format_utils
-# - armar_descripcion_compacta()
-# - agregar_bloque()
-# =========================
 # Generación de KML (usa CONFIG)
+# ⚡ EPIC 13: Wrapper para tz_core.kml_generator
 # =========================
-
-# === SECCIÓN: GENERACIÓN KML/KMZ (placemarks, carpetas, top_n, estilos) ===
-# ⚡ EPIC 13: Función migrada a tz_core.kml_generator (26/12/2025)
-# Wrapper de compatibilidad - mantiene interfaz original del monolito
 def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
     """
     Wrapper de compatibilidad para tz_core.kml_generator.generar_kml()
@@ -1180,12 +1164,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     
     from datetime import datetime
     
-    # =============================================================
-    # === Generación de salidas: HTML, KML, KMZ, TXT ===
-    # Aquí se construyen los archivos de salida principales.
-    # Los metadatos de alias/usuario/abonado se incluyen si existen.
-    # =============================================================
-    kml_name = os.path.basename(archivo_kml)  # nombre base, p.ej. "caso.kml"
+    kml_name = os.path.basename(archivo_kml)
     kmz_name = os.path.splitext(kml_name)[0] + ".kmz"
 
     # Integración de campos canónicos no esenciales en resultados
