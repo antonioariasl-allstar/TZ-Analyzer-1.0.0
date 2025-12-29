@@ -41,7 +41,6 @@ def test_sha256_de_archivo():
         assert all(c in '0123456789abcdef' for c in result_hash), "Hash should be hex"
         
         print(f"✅ PASS: Hash correcto {result_hash[:16]}...")
-        return True
         
     finally:
         # Limpiar archivo temporal
@@ -67,7 +66,6 @@ def test_sha256_archivo_vacio():
         
         assert result_hash == expected_empty_hash, f"Empty file hash incorrect"
         print(f"✅ PASS: Archivo vacío hash OK")
-        return True
         
     finally:
         try:
@@ -121,7 +119,6 @@ def test_escribe_hashes_txt():
             assert parts[2].startswith("test_file_"), f"Archivo debe empezar con 'test_file_'"
         
         print(f"✅ PASS: Archivo de hashes generado correctamente")
-        return True
         
     finally:
         # Limpiar archivos temporales
@@ -168,8 +165,6 @@ def test_compactar_ruta():
     assert "\\" not in resultado, "No debe contener \\"
     assert "/" not in resultado, "No debe contener /"
     print(f"✅ PASS: Separadores reemplazados: {resultado}")
-    
-    return True
 
 
 def test_sanear_nombre_archivo():
@@ -233,8 +228,6 @@ def test_sanear_nombre_archivo():
     resultado = sanear_nombre_archivo("", "antenas_manual")
     assert resultado == "antenas_manual", "Debe preservar fallback antenas_manual"
     print(f"✅ PASS: Compatibilidad _sanear_nombre_archivo: {resultado}")
-    
-    return True
 
 
 def main():
@@ -242,28 +235,25 @@ def main():
     print("🏗️  TESTS UNITARIOS - tz_core.utils")
     print("=" * 40)
     
+    test_functions = [
+        test_sha256_de_archivo,
+        test_sha256_archivo_vacio,
+        test_escribe_hashes_txt,
+        test_compactar_ruta,
+        test_sanear_nombre_archivo,
+    ]
+    
     tests_passed = 0
-    total_tests = 5
+    total_tests = len(test_functions)
     
-    # Test 1
-    if test_sha256_de_archivo():
-        tests_passed += 1
-    
-    # Test 2
-    if test_sha256_archivo_vacio():
-        tests_passed += 1
-    
-    # Test 3
-    if test_escribe_hashes_txt():
-        tests_passed += 1
-    
-    # Test 4
-    if test_compactar_ruta():
-        tests_passed += 1
-    
-    # Test 5 - NUEVO
-    if test_sanear_nombre_archivo():
-        tests_passed += 1
+    for test_fn in test_functions:
+        try:
+            test_fn()
+            tests_passed += 1
+        except AssertionError as err:
+            print(f"❌ {test_fn.__name__} falló: {err}")
+        except Exception as err:
+            print(f"❌ {test_fn.__name__} lanzó excepción: {err}")
     
     print("\n" + "=" * 40)
     print(f"📊 RESULTADOS: {tests_passed}/{total_tests} tests pasaron")

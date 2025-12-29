@@ -117,6 +117,7 @@ from tz_core.html_generator import (
     generate_metadata_section,
     generate_kpi_section,
     build_identification_rows,
+    build_top_contacts_sections,
 )
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
@@ -155,7 +156,7 @@ def bootstrap_config() -> None:
     
     # Configuración y mapa de sinónimos usando funciones modulares
     global CONFIG, RENAME_MAP
-    CONFIG = get_config()  # Usa la función centralizada (ya modular)
+    CONFIG = core_get_config()  # Usa la función centralizada (ya modular)
     
     # Importar cfg_build_rename_map desde el módulo (ya en imports globales)
     RENAME_MAP = cfg_build_rename_map(CONFIG)
@@ -248,12 +249,6 @@ def log(msg: str):
     _log_impl(msg)
 
 
-# === NORMALIZADOR-1 (inicio) ==============================================
-# Todas las funciones de normalización de texto migradas a tz_core.text_utils
-# Usar imports directos desde línea 765: normalizar_texto, normalizar_columnas_texto
-# === NORMALIZADOR-1 (fin) ==================================================
-
-
 # =========================
 # Fallbacks de importación
 # =========================
@@ -334,356 +329,38 @@ except Exception:
 # --- ANTI-COLISIONES DE COLUMNAS (fusiona duplicadas por primer valor no vacío) ---
 # === IMPORTS MODULARES (gradual refactoring) ===
 from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
-from tz_core.config_manager import cargar_config as cargar_config_modular, DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR
+from tz_core.config_loader import (
+    get_config as core_get_config,
+    cfg_build_rename_map,
+    cfg_add_user_synonym,
+    normalize_key_for_synonyms,
+    solicitar_color_tema,
+)
+
+# Alias de compatibilidad para funciones de sinónimos usadas en el monolito
+_normalize_key_for_synonyms = normalize_key_for_synonyms
 from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
 from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
-from tz_core.color_utils import hex_to_kml_color, color_mock, _hex_to_kml_color, _color_mock
+from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
 from tz_core.dataframe_utils import dedupe_columns
+from tz_core.analytics import construir_seccion_todos_contactos, generar_historial_cambios_antena
 from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo_a_salida
 
 # Importar constantes desde tz_core para consistencia
 RANGOS_SV = RANGOS_SV_MODULAR
 
-# === HASHES + ENTORNO (helpers) — INICIO ====================================
-def _copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> str | None:
-    """Wrapper de compatibilidad - usa tz_core.file_utils.copiar_logo_a_salida"""
-    return copiar_logo_a_salida(logo_src, carpeta_salida)
-
-
-# Alias para compatibilidad - usar DEFAULT_CONFIG de tz_core.config_manager
-DEFAULT_CONFIG = DEFAULT_CONFIG_MODULAR
-
-# === SECCIÓN: CONFIGURACIÓN Y SINÓNIMOS (carga CONFIG, construye RENAME_MAP) ===
-def cargar_config():
-    """
-    Wrapper para compatibilidad - usar cargar_config de tz_core.config_manager
-    
-    NOTA: Preserva comportamiento exacto incluyendo DEFAULT_CONFIG y merge logic.
-    El sistema de sinónimos legacy se mantiene intacto para evitar breaking changes.
-    """
-    return cargar_config_modular()
-
-# === SINONIMOS: MERGE + PERSISTENCIA (inicio) ==============================
-import tempfile
-
-def _normalize_key_for_synonyms(s: str) -> str:
-    """
-    Wrapper para compatibilidad - usar _normalize_key_for_synonyms de tz_core.config_manager
-    """
-    from tz_core.config_manager import _normalize_key_for_synonyms as _normalize_modular
-    return _normalize_modular(s)
-
-def cfg_build_rename_map(CONFIG: dict) -> dict:
-    """
-    Wrapper para compatibilidad - usar cfg_build_rename_map de tz_core.config_manager
-    
-    Nota: Sistema de sinónimos extraído al módulo config_manager.
-    Este wrapper preserva el comportamiento exacto del mapeo de columnas legacy y dinámico.
-    """
-    from tz_core.config_manager import cfg_build_rename_map as cfg_build_modular
-    return cfg_build_modular(CONFIG)
-
-def cfg_add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cfg: str = None) -> dict:
-    """
-    🚨 WRAPPER DE COMPATIBILIDAD - usar add_user_synonym de tz_core.config_manager
-    
-    Nota: Función de gestión de sinónimos dinámicos extraída al módulo config_manager.
-    Este wrapper preserva persistencia automática en config.json y memoria de mapeo manual.
-    """
-    return add_user_synonym(CONFIG, canonico, encabezado_crudo, ruta_cfg)
-# === SINONIMOS: MERGE + PERSISTENCIA (fin) =================================
+# === CONFIG & GLOBALS ===
 
 # CONFIG inicializado al nivel de módulo (se carga una sola vez)
 CONFIG = None
 OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejecución)
 
-def get_config():
-    """
-    Lazy-load de CONFIG: retorna el diccionario global de configuración, inicializándolo si es necesario.
-    Resuelve rutas absolutas para logo, compatible con PyInstaller.
-
-    Uso:
-        config = get_config()
-
-    Returns:
-        dict: Diccionario de configuración global.
-    """
-    import sys, os
-    global CONFIG
-    if CONFIG is None:
-        # cargar_config() ya maneja la detección de ruta correctamente
-        CONFIG = cargar_config()
-        
-        # Normaliza ruta de logo para PyInstaller si es necesario
-        if getattr(sys, 'frozen', False):
-            base_path = sys._MEIPASS
-            logo_path = CONFIG.get("branding", {}).get("logo_path")
-            if logo_path and not os.path.isabs(logo_path):
-                CONFIG["branding"]["logo_path"] = os.path.join(base_path, logo_path)
-    return CONFIG
-
-def _solicitar_color_tema(CONFIG):
-    """
-    🚨 WRAPPER DE COMPATIBILIDAD - usar solicitar_color_tema de tz_core.config_manager
-    
-    Nota: Función interactiva extraída al módulo config_manager.
-    Este wrapper preserva la paleta de 60 colores para diferenciación de bitácoras.
-    """
-    return solicitar_color_tema(CONFIG)
-
-# =========================
-# Geometría / KML helpers
-# =========================
-# --- Helpers de color KML (aabbggrr) desde #RRGGBB ---
-def _hex_to_kml_color(hex_rgb: str, alpha: int = 255) -> str:
-    """MIGRADA A tz_core.color_utils - usar import desde allí"""
-    return hex_to_kml_color(hex_rgb, alpha)
-
-# =========================
-# Análisis de antenas (tolerante)
-# =========================
-def analizar_antenas(df: pd.DataFrame, archivo_salida: str):
-    """Wrapper de compatibilidad - usa tz_core.analytics.analizar_antenas"""
-    from tz_core.analytics import analizar_antenas as analizar_modular
-    return analizar_modular(df, archivo_salida)
-
-# =========================
-# Burbuja condicional
-# =========================
-def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100):
-    """Wrapper de compatibilidad - usa tz_core.analytics.generar_historial_cambios_antena"""
-    from tz_core.analytics import generar_historial_cambios_antena as historial_modular
-    return historial_modular(df, max_saltos)
-
-HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
-
-# =========================
-# Funciones de formateo - usar imports directos desde tz_core.format_utils
-# - armar_descripcion_compacta()
-# - agregar_bloque()
 # =========================
 # Generación de KML (usa CONFIG)
+# ⚡ EPIC 13: Wrapper para tz_core.kml_generator
 # =========================
-def _crear_feature_kml(container, nombre_punto, lon, lat, descripcion, azimut_float, CONFIG, azimuts_extra=None):
-    # --- Sanitizar descripción: omitir campos vacíos o marcadores “sin valor” ---
-    # Afecta todas las capas que llamen a _crear_feature_kml (por_rango_horario, top_3_*, etc.)
-    try:
-
-        # --- Compactación efectiva para el campo 'name' en KML/KMZ ---
-        def compactar_nombre_antena_kml(nombre: str) -> str:
-            """
-            Compacta el nombre de antena para el campo 'name' en KML/KMZ.
-            Reglas configurables via CONFIG.kml.name_compaction:
-            - prefer_before_comma: número de secciones a tomar antes de la coma (ej. 2). Si 0/None, ignora.
-            - max_words: si no hay comas o prefer_before_comma no aplica, toma primeras N palabras significativas.
-            - max_chars: tope de caracteres; si excede, recorta y agrega '...'.
-            - stopwords: lista de palabras a omitir.
-            """
-            try:
-                nc = (CONFIG or {}).get("kml", {}).get("name_compaction", {})
-            except Exception:
-                nc = {}
-            prefer_before = int(nc.get("prefer_before_comma", 2) or 0)
-            max_words = int(nc.get("max_words", 5) or 5)
-            max_chars = int(nc.get("max_chars", 40) or 40)
-            stopwords = set(str(w).lower() for w in nc.get("stopwords", ["el","la","los","las","de","del","y","en","a","al","por","para","con","un","una"]))
-            if not nombre:
-                return ""
-            nombre = str(nombre).strip()
-            if "," in nombre and prefer_before > 0:
-                secciones = [s.strip() for s in nombre.split(",")]
-                if len(secciones) >= prefer_before:
-                    parte = ", ".join(secciones[:prefer_before])
-                else:
-                    parte = ", ".join(secciones)
-            else:
-                palabras = [w for w in re.split(r'\s+', nombre) if w and w.lower() not in stopwords]
-                parte = " ".join(palabras[:max_words])
-            if len(parte) > max_chars:
-                return parte[: max(0, max_chars-3) ] + "..."
-            return parte
-
-        # Usar nombre compacto SOLO para el campo 'name' del punto KML
-        nombre_compacto = nombre_punto
-        if nombre_punto:
-            nombre_compacto = compactar_nombre_antena_kml(nombre_punto)
-
-        # Si hay columna de dirección, no sobreescribir; si no, usar nombre completo como dirección
-        # (esto se debe manejar en el flujo de mapeo, aquí solo se documenta)
-
-        if descripcion:
-            parts = re.split(r'<br\s*/?>', str(descripcion))
-
-            # 1) Omitir líneas vacías / marcadores
-            parts = [
-                p for p in parts
-                if p and p.strip() and not any(tok in p for tok in (
-                    "> SinInf", "> Sin Inf.", "> None", "> nan", "> NaN"
-                ))
-            ]
-
-            # 2) Normalizar IDs (TEL/IMEI): quitar .0 al final del número
-            def _fix_id_line(s: str) -> str:
-                if ("<b>IMEI" in s) or ("<b>Número" in s) or ("<b>Numero" in s):
-                    return re.sub(r'(\d+)\.0\b', r'\1', s)
-                return s
-
-            parts = [_fix_id_line(p) for p in parts]
-            descripcion = "<br>".join(parts)
-    except Exception:
-        pass
-
-    # --- Normalizar y validar azimut (permitir 0°) ---
-    try:
-        az = float(azimut_float)
-    except Exception:
-        return  # no dibujar si no es numérico
-    if isinstance(az, float) and math.isnan(az):
-        return
-    # Llevar a [0, 360)
-    az = az % 360.0
-    az_int = int(round(az)) % 360
-
-    """
-    Crea el punto + (opcional) línea y cono con estilos REUSABLES en un solo lugar.
-    - Color/estilo se toma de CONFIG['style'] si existe; si no, usa defaults.
-    - Reutiliza estilos (pin/linea/cono) para hacer el KML más liviano.
-    """
-    import simplekml as sk
-
-    # Fallback eliminado - función migrada a tz_core.color_utils
-
-    # Cache global de estilos reutilizables para evitar crear objetos Style duplicados
-    # en cada llamada (mejora rendimiento del KML). Se inicializa una vez con los
-    # parámetros de CONFIG y se comparte entre todas las features del documento.
-    global _REUSABLE_STYLES
-    if "_REUSABLE_STYLES" not in globals():
-        _REUSABLE_STYLES = None
-
-    if _REUSABLE_STYLES is None:
-        style_cfg = {}
-        try:
-            style_cfg = CONFIG.get("style", {}) if isinstance(CONFIG, dict) else {}
-        except Exception:
-            style_cfg = {}
-        theme_hex = style_cfg.get("theme_hex", "#ff00ff")
-        pin_icon_url = style_cfg.get("pin_icon_url", "http://maps.google.com/mapfiles/kml/paddle/wht-blank.png")
-        pin_scale = float(style_cfg.get("pin_scale", 1.1))
-        label_scale = float(style_cfg.get("label_scale", 1.2))
-        line_width = float(style_cfg.get("line_width", 5))
-        line_abgr = style_cfg.get("line_abgr", None)
-        cone_opac = float(style_cfg.get("cone_opacity", 0.35))
-
-        # Colores KML (AABBGGRR)
-        pin_color  = _hex_to_kml_color(theme_hex, 255)
-        # Si line_abgr está en config, úsalo directamente; si no, convierte theme_hex
-        line_color = line_abgr if line_abgr else _hex_to_kml_color(theme_hex, 255)
-        cone_color = _hex_to_kml_color(theme_hex, int(max(0, min(1.0, cone_opac)) * 255))
-
-        # Estilo del PIN
-        s_pin = sk.Style()
-        s_pin.iconstyle.color = pin_color
-        s_pin.iconstyle.scale = pin_scale
-        s_pin.iconstyle.icon.href = pin_icon_url
-        s_pin.labelstyle.color = pin_color
-        s_pin.labelstyle.scale = label_scale
-
-        # Estilo de la LÍNEA
-        s_line = sk.Style()
-        s_line.linestyle.color = line_color
-        s_line.linestyle.width = line_width
-
-        # Estilo del CONO (polígono)
-        s_cone = sk.Style()
-        s_cone.polystyle.color = cone_color
-        s_cone.polystyle.fill = 1
-        s_cone.polystyle.outline = 1
-
-        _REUSABLE_STYLES = {
-            "pin": s_pin,
-            "line": s_line,
-            "cone": s_cone,
-        }
-
-    # ---------- 2) Crear el punto ----------
-    # Usar nombre compacto para la visualización en el mapa
-    p = container.newpoint(name=nombre_compacto, coords=[(lon, lat)])
-    if descripcion:
-        p.description = f'<div style="line-height:1.10; font-size:14px">{descripcion}</div>'
-    p.style = _REUSABLE_STYLES["pin"]
-
-    # ---------- 3) Si hay azimut, dibujar LÍNEA y CONO con estilos ----------
-    try:
-        az = float(azimut_float) if azimut_float is not None else float("nan")
-    except Exception:
-        az = float("nan")
-
-    if not (isinstance(az, float) and math.isnan(az)):
-        # Distancia y ángulo del cono (defaults si CONFIG no trae)
-        try:
-            az_dist_km = CONFIG.get("kml", {}).get("azimuth_km", 1.5)
-            # Priorizar kml.cone.half_degrees, luego style.cone_half_degrees
-            cone_half  = CONFIG.get("kml", {}).get("cone", {}).get("half_degrees")
-            if cone_half is None:
-                cone_half = CONFIG.get("style", {}).get("cone_half_degrees", 35)
-        except Exception:
-            az_dist_km = 1.5
-            cone_half = 35
-
-        # Calcular punto final de la línea de azimut
-        latf, lonf = calcular_punto_final(lat, lon, az, float(az_dist_km))
-
-        # LÍNEA
-        linea = container.newlinestring(
-            name=f"Azimut {int(round(az))}°",
-            coords=[(lon, lat), (lonf, latf)]
-        )
-        linea.style = _REUSABLE_STYLES["line"]
-
-        # CONO (polígono)
-        coords_cono = []
-        paso = 5
-        for ang in range(-int(cone_half), int(cone_half) + 1, paso):
-            lat_p, lon_p = calcular_punto_final(lat, lon, az + ang, float(az_dist_km))
-            coords_cono.append((lon_p, lat_p))
-        coords_cono.append((lon, lat))
-        pol = container.newpolygon(name=f"Cono Azimut {int(round(az))}°")
-        pol.outerboundaryis = coords_cono
-        pol.style = _REUSABLE_STYLES["cone"]
-        
-        # --- Azimuts secundarios (línea y cono; mismo pin) ---
-        if azimuts_extra:
-            for az_s in azimuts_extra:
-                try:
-                    az_s = float(az_s)
-                except:
-                    continue
-
-                # Línea secundaria
-                latf2, lonf2 = calcular_punto_final(lat, lon, az_s, float(az_dist_km))
-                linea2 = container.newlinestring(
-                    name=f"Azimut {int(round(az_s))}° (sec.)",
-                    coords=[(lon, lat), (lonf2, latf2)]
-                )
-                linea2.style = _REUSABLE_STYLES["line"]  # si querés, luego la hacemos más tenue
-
-                # Cono secundario
-                coords_cono2 = []
-                paso = 5
-                for ang in range(-int(cone_half), int(cone_half) + 1, paso):
-                    lat_p2, lon_p2 = calcular_punto_final(lat, lon, az_s + ang, float(az_dist_km))
-                    coords_cono2.append((lon_p2, lat_p2))
-                coords_cono2.append((lon, lat))
-
-                pol2 = container.newpolygon(name=f"Cono Azimut {int(round(az_s))}° (sec.)")
-                pol2.outerboundaryis = coords_cono2
-                pol2.style = _REUSABLE_STYLES["cone"]  # luego bajamos opacidad si querés
-
-# === SECCIÓN: GENERACIÓN KML/KMZ (placemarks, carpetas, top_n, estilos) ===
-# ⚡ EPIC 13: Función migrada a tz_core.kml_generator (26/12/2025)
-# Wrapper de compatibilidad - mantiene interfaz original del monolito
 def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
     """
     Wrapper de compatibilidad para tz_core.kml_generator.generar_kml()
@@ -707,7 +384,6 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
 
 HTML_SECCION_INTERACCIONES = ""
-HTML_SECCION_ANTENAS = ""
 # === HTML-INTERACCIONES-1 (inicio) ========================================
 def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
     """
@@ -1469,65 +1145,6 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
 
     out.append('</section>')
     return "".join(out)
-def _construir_seccion_todos_contactos(df, columnas_config=None):
-    """Wrapper de compatibilidad - usa tz_core.analytics.construir_seccion_todos_contactos"""
-    from tz_core.analytics import construir_seccion_todos_contactos as contactos_modular
-    return contactos_modular(df, columnas_config)
-
-
-# === HTML-INTERACCIONES-1 (fin) ===========================================
-# === RANGOS-UTILS (desde config, soporta cruces de medianoche) ===
-from datetime import time as _time, datetime as _dt
-
-def _parse_hhmmss_to_minutes(s: str | None) -> int | None:
-    """Convierte 'HH:MM' o 'HH:MM:SS' a minutos desde 00:00. Devuelve None si no se puede."""
-    if s is None:
-        return None
-    s = str(s).strip()
-    if not s:
-        return None
-    try:
-        parts = s.split(":")
-        hh = int(parts[0])
-        mm = int(parts[1]) if len(parts) > 1 else 0
-        # ignorar segundos si vienen
-        return hh * 60 + mm
-    except Exception:
-        return None
-
-def _minutes_from_any(hora) -> int | None:
-    """
-    Acepta: datetime.time, datetime.datetime, pandas.Timestamp, str 'HH:MM(:SS)'.
-    Devuelve minutos desde 00:00 o None.
-    """
-    try:
-        # pandas.Timestamp o datetime
-        if hasattr(hora, "hour") and hasattr(hora, "minute"):
-            return int(hora.hour) * 60 + int(hora.minute)
-        if isinstance(hora, _time):
-            return hora.hour * 60 + hora.minute
-        # string
-        return _parse_hhmmss_to_minutes(str(hora))
-    except Exception:
-        return None
-
-def _construir_rangos_cfg(rangos_cfg: list[dict]) -> list[tuple[str, int, int]]:
-    """Wrapper de compatibilidad - usa tz_core.analytics.construir_rangos_cfg"""
-    from tz_core.analytics import construir_rangos_cfg as rangos_modular
-    return rangos_modular(rangos_cfg)
-
-def _en_rango_minutos_local(minutos: int, ini: int, fin: int) -> bool:
-    """
-    True si 'minutos' cae dentro del rango [ini..fin] en minutos.
-    Soporta cruce de medianoche: si ini > fin, el rango pasa por 00:00.
-    """
-    return en_rango_minutos(minutos, ini, fin)
-
-def etiqueta_rango(hora, rangos_cfg: list[dict], default: str = "Sin rango") -> str:
-    """Wrapper de compatibilidad - usa tz_core.analytics.etiqueta_rango"""
-    from tz_core.analytics import etiqueta_rango as etiqueta_modular
-    return etiqueta_modular(hora, rangos_cfg, default)
-# === FIN RANGOS-UTILS ===
 
 
 def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str, nombre_salida: str, hoja: str | None = None, nombre_bitacora: str | None = None) -> str:
@@ -1547,12 +1164,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     
     from datetime import datetime
     
-    # =============================================================
-    # === Generación de salidas: HTML, KML, KMZ, TXT ===
-    # Aquí se construyen los archivos de salida principales.
-    # Los metadatos de alias/usuario/abonado se incluyen si existen.
-    # =============================================================
-    kml_name = os.path.basename(archivo_kml)  # nombre base, p.ej. "caso.kml"
+    kml_name = os.path.basename(archivo_kml)
     kmz_name = os.path.splitext(kml_name)[0] + ".kmz"
 
     # Integración de campos canónicos no esenciales en resultados
@@ -1716,146 +1328,17 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     )
 
 
-    # --- Top contactos (por conteo y por duración) ---
-    def _to_seconds_any(x) -> float:
-        """Convierte '1128' o '00:18:48' a segundos. Tolerante."""
-        try:
-            s = str(x).strip()
-            if not s or s.lower() in {"nan","none","null","sin inf.","sin inf","s/i"}:
-                return 0.0
-            if ":" in s:
-                parts = s.split(":")
-                if len(parts) == 3:
-                    h,m,sec = parts
-                    return float(int(h))*3600 + float(int(m))*60 + float(int(sec))
-                if len(parts) == 2:
-                    m,sec = parts
-                    return float(int(m))*60 + float(int(sec))
-            # num directo (segundos)
-            return float(pd.to_numeric(s, errors="coerce") or 0.0)
-        except Exception:
-            return 0.0
-
-    # detectar columna de contacto
-    contact_cols = [
-        "tel_contacto","contacto","destino","b_number","bnumber","numero_contacto",
-        "callednumber","to","receptor","receptor_numero","numero_destino"
-    ]
-    dur_cols = ["duracion","duration","segundos","tiempo"]
-    c_col = next((c for c in contact_cols if c in df.columns), None)
-    d_col = next((c for c in dur_cols if c in df.columns), None)
-    note_no_dur = "<p class='small' style='color:#666;background:#f7f7f7;border:1px solid #eee;padding:.5rem .75rem;border-radius:6px'>Se omite por no disponer de la columna <code>duracion</code>.</p>"
-    note_zero_dur = "<p class='note muted'>No hay minutos acumulados &gt; 0 en el período; se omite la tabla.</p>"
-
-    if not d_col:
-        log("HTML: se omitió la subtabla 'Por minutos acumulados' por falta de 'duracion'.")
-
-
-    top_contactos_cnt_html = "<p class='small'>No hay columna de contacto.</p>"
-    top_contactos_dur_html = note_no_dur if not d_col else "<p class='small'>No hay columna de contacto.</p>"
-
-    if c_col:
-        # Top N de contactos según config
-        try:
-            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('contactos') is not None:
-                _topC = int(OVERRIDE_TOPS.get('contactos'))
-            elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                _topC = int(CONFIG.get("top_contactos", CONFIG.get("html", {}).get("top_contactos_n", 10)))
-            else:
-                _topC = 10
-        except Exception:
-            _topC = 10
-        d = df.copy()
-        d["_contacto"] = d[c_col].astype(str).str.strip()
-        d = d[(d["_contacto"] != "") & d["_contacto"].notna()]
-
-        if not d.empty:
-            # segundos de duración
-            if d_col:
-                d["_sec"] = d[d_col].map(_to_seconds_any)
-            else:
-                d["_sec"] = 0.0
-
-            # normalizar teléfono: dejar solo dígitos para agrupar (pero mostrar el original si querés luego)
-            d["_c_norm"] = d["_contacto"].str.replace(r"\D+", "", regex=True)
-            d.loc[d["_c_norm"] == "", "_c_norm"] = d["_contacto"]  # si quedó vacío, usa el texto crudo
-
-
-            # por conteo (con % + barra + índice)
-            g_cnt = (
-                d.groupby("_c_norm", dropna=False)
-                .size()
-                .sort_values(ascending=False)
-            )
-            if int(_topC) > 0:
-                g_cnt = g_cnt.head(int(_topC))
-            total_cnt = int(len(d))
-            rows = []
-            for i, (k, n) in enumerate(g_cnt.items(), start=1):
-                pct = (float(n) / total_cnt * 100.0) if total_cnt else 0.0
-                rows.append(
-                    f"<tr>"
-                    f"<td class='right mono'>{i}</td>"
-                    f"<td class='mono'>{k}</td>"
-                    f"<td class='mono'>{int(n):,} <span class='small'>({pct:.1f}%)</span></td>"
-                    f"</tr>"
-                )
-                rows.append(
-                    f"<tr class='barrow'><td colspan='3'>"
-                    f"<div class='bar'><div class='fill' style='width:{pct:.1f}%;'></div></div>"
-                    f"</td></tr>"
-                )
-            if rows:
-                top_contactos_cnt_html = (
-                    "<table class='tbl'>"
-                    "<thead><tr><th class='right'>#</th><th>Contacto</th><th>Interacciones</th></tr></thead>"
-                    "<tbody>" + "".join(rows) + "</tbody></table>"
-                )
-
-            # por duración (con % + barra + índice)
-            if d_col:
-                g_dur = (
-                    d.groupby("_c_norm", dropna=False)["_sec"]
-                    .sum()
-                    .sort_values(ascending=False)
-                )
-                if int(_topC) > 0:
-                    g_dur = g_dur.head(int(_topC))
-                def _fmt_hms(sec):
-                    sec = int(round(sec))
-                    h = sec // 3600; m = (sec % 3600) // 60; s = sec % 60
-                    return f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
-
-                # justo después de: total_sec = float(d["_sec"].sum())
-                total_sec = float(pd.to_numeric(d["_sec"], errors="coerce").fillna(0).sum())
-
-                if total_sec <= 0:
-                    top_contactos_dur_html = note_zero_dur
-                    log("HTML: se omitió 'Por minutos acumulados' porque la suma total de 'duracion' es 0.")
-                else:
-                    rows = []
-                    for i, (k, tot) in enumerate(g_dur.items(), start=1):
-                        pct = (float(tot) / total_sec * 100.0) if total_sec > 0 else 0.0
-                        rows.append(
-                            f"<tr>"
-                            f"<td class='right mono'>{i}</td>"
-                            f"<td class='mono'>{k}</td>"
-                            f"<td class='mono'>{_fmt_hms(tot)} <span class='small'>({pct:.1f}%)</span></td>"
-                            f"</tr>"
-                        )
-                        rows.append(
-                            f"<tr class='barrow'><td colspan='3'>"
-                            f"<div class='bar'><div class='fill' style='width:{pct:.1f}%;'></div></div>"
-                            f"</td></tr>"
-                        )
-                    if rows:
-                        top_contactos_dur_html = (
-                            "<table class='tbl'>"
-                            "<thead><tr><th class='right'>#</th><th>Contacto</th><th>Duración total</th></tr></thead>"
-                            "<tbody>" + "\n".join(rows) + "</tbody></table>"
-                        )
-
-            # si no hay d_col o total_sec == 0, dejamos la nota en top_contactos_dur_html
+    # --- Top contactos (delegado a tz_core.html_generator) ---
+    overrides_ctx = (
+        OVERRIDE_TOPS
+        if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict)
+        else None
+    )
+    top_contactos_cnt_html, top_contactos_dur_html, _topC = build_top_contacts_sections(
+        df,
+        CONFIG if 'CONFIG' in globals() and isinstance(CONFIG, dict) else None,
+        overrides_ctx,
+    )
 
 
     # HTML (sencillo, sin frameworks)
@@ -2159,28 +1642,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
         _h1 = f'<h1 class="title">{_title}</h1>' if _title else ""
     except Exception:
         _h1 = ""
-
-    # --- TÍTULO H1 desde config.brand (name + version) ---
-    try:
-        _brand = CONFIG.get("brand", {}) if isinstance(CONFIG, dict) else {}
-        _bname = str(_brand.get("name", "")).strip()
-        _bver  = str(_brand.get("version", "")).strip()
-        if _bname and _bver:
-            _title = f"{_bname} — {_bver}"
-        elif _bname:
-            _title = _bname
-        elif _bver:
-            _title = _bver
-        else:
-            _title = ""
-
-        # ⬇️ Dejar SOLO este if, con pass adentro
-        if _title:
-            # Desactivado: no inyectar el H1 centrado
-            pass
-
-    except Exception:
-        pass
 
         # === HTML-TOC-1: índice de navegación sticky (sin KML/KMZ) ===
     try:
@@ -3748,55 +3209,9 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 # 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader
 from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja, cargar_excel_con_normalizacion
 
-def _seleccionar_hoja_visible(ruta_excel):
-    """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja_visible"""
-    return seleccionar_hoja_visible(ruta_excel)
-
-def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
-    """
-    Wrapper de compatibilidad para tz_core.data_loader.cargar_excel_con_normalizacion
-    
-    🚨 FASE 5.3a - SISTEMA DUAL DE COLUMNAS EXTRAÍDO 🚨
-    
-    Esta función implementa el sistema dual de columnas descubierto durante 
-    la refactorización campo minado:
-    
-    1. df.attrs["orig_cols"] - Columnas originales del archivo (para UI)
-    2. df.columns normalizadas - Columnas procesadas (para algoritmo)
-    
-    CRÍTICO: Ambas versiones son necesarias y NO deben ser "optimizadas".
-    La UI muestra nombres reales, el algoritmo usa nombres limpiados.
-    
-    Preserva comportamiento exacto de líneas originales 6543-6557.
-    """
-    return cargar_excel_con_normalizacion(ruta_excel, hoja_elegida)
-
-# --- Fallback: listar TODAS las hojas con pandas y seleccionar una ---
-# 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader (wrappers ya definidos arriba)
-
 # --- Normalizadores robustos y pre-flight de esenciales ---
 
 ESENCIALES_IN = ["fecha", "hora", "tel", "imei", "interaccion", "contacto", "lat", "long", "azimut", "antena"]
-
-def _es_num(x):
-    """Wrapper de compatibilidad - usa tz_core.validation_utils.es_num"""
-    return es_num(x)
-
-def _pad_hhmmss(s: str) -> str | None:
-    """Wrapper de compatibilidad - usa tz_core.data_normalizer._pad_hhmmss"""
-    from tz_core.data_normalizer import _pad_hhmmss as _pad_modular
-    return _pad_modular(s)
-
-def _normalizar_fecha(df: pd.DataFrame) -> list:
-    """Wrapper de compatibilidad - usa tz_core.data_normalizer._normalizar_fecha"""
-    from tz_core.data_normalizer import _normalizar_fecha as _normalizar_fecha_modular
-    return _normalizar_fecha_modular(df)
-
-def _normalizar_hora(df: pd.DataFrame) -> list:
-    """Wrapper de compatibilidad - usa tz_core.data_normalizer._normalizar_hora"""
-    from tz_core.data_normalizer import _normalizar_hora as _normalizar_hora_modular
-    return _normalizar_hora_modular(df)
-
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 # (Ahora importados desde tz_core.time_utils)
 
@@ -3870,87 +3285,37 @@ def run_tz_analysis(
     }
 
     # --- Monkey-patch de funciones interactivas para evitar prompts ---
-    # Guardamos originales para restaurar luego
-    g = globals()
-    _orig = {}
-    def _keep(name, fallback=None):
-        if name in g:
-            _orig[name] = g[name]
-            return g[name]
-        _orig[name] = fallback
-        return fallback
-
-    _keep("_menu_principal")
-    _keep("seleccionar_archivo")
-    _keep("seleccionar_carpeta")
-    _keep("_input_str")
-    _keep("_seleccionar_hoja_visible")
-    _keep("_solicitar_overrides_topn")
-    _keep("_solicitar_color_tema")
-
-    # 1) Modo directo: "1" (bitácora Excel)
-    def _menu_principal_mock():
-        return "1"
-    g["_menu_principal"] = _menu_principal_mock
-
-    # 2) Archivo de entrada (sin diálogo)
-    def _sel_arch_mock():
-        return ruta_entrada
-    g["seleccionar_archivo"] = _sel_arch_mock
-
-    # 3) Carpeta de salida (sin diálogo)
-    def _sel_carp_mock():
-        return carpeta_salida or os.getcwd()
-    g["seleccionar_carpeta"] = _sel_carp_mock
-
-    # 4) Nombre sugerido / otros input_str: devolver vacío = aceptar por defecto
-    def _input_str_mock(msg, *args, **kwargs):
-        return ""
-    g["_input_str"] = _input_str_mock
-
-    # 5) Selección de hoja visible (si el script lo usa)
-    if hoja is not None:
-        def _hoja_mock(_archivo):
-            return hoja
-        g["_seleccionar_hoja_visible"] = _hoja_mock
-
-    # 6) Overrides TopN si el flujo intenta pedirlos
-    def _ovr_mock(_cfg):
-        return globals().get("OVERRIDE_TOPS", None)
-    g["_solicitar_overrides_topn"] = _ovr_mock
-
-    # 7) Color tema: no preguntar; dejar CONFIG tal cual
-    def _color_mock(cfg):
-        """MIGRADA A tz_core.color_utils - usar import desde allí"""
-        return color_mock(cfg)
-    g["_solicitar_color_tema"] = _color_mock
-
-    # --- Silenciar input() durante la ejecución ---
-    import builtins
-    _orig_input_builtin = getattr(builtins, "input", None)
-
-    def _input_mock(*args, **kwargs):
-        # Simula presionar Enter en cualquier prompt
-        return ""
-
     try:
-        builtins.input = _input_mock
+        from tests.helpers.monkeypatch_flow import apply_run_monkeypatch
+
+        mp_ctx = apply_run_monkeypatch(
+            globals_dict=globals(),
+            ruta_entrada=ruta_entrada,
+            hoja=hoja,
+            carpeta_salida=carpeta_salida,
+            override_tops=globals().get("OVERRIDE_TOPS"),
+            color_mock_fn=color_mock,
+        )
+        restore = mp_ctx.get("restore")
+        out_root = mp_ctx.get("out_root")
+        _snapshot = mp_ctx.get("snapshot")
     except Exception:
-        pass
+        def _snapshot(folder):
+            try:
+                return set(glob.glob(os.path.join(folder, "**/*"), recursive=True))
+            except Exception:
+                return set()
+
+        def restore():
+            pass
+
+        out_root = carpeta_salida or os.getcwd()
 
     # --- Capturar stdout/stderr como log en memoria ---
     buf = io.StringIO()
     html_path = kmz_path = hashes_path = log_path = None
 
     # --- Snapshot de archivos previos para detectar nuevos (HTML/KMZ/HASHES) ---
-    def _snapshot(folder):
-        try:
-            pat = "**/*"
-            return set(glob.glob(os.path.join(folder, pat), recursive=True))
-        except Exception:
-            return set()
-
-    out_root = _sel_carp_mock()
     before = _snapshot(out_root)
 
     try:
@@ -3995,16 +3360,7 @@ def run_tz_analysis(
 
     # --- Restaurar originales ---
     try:
-        for name, fn in _orig.items():
-            if fn is not None:
-                g[name] = fn
-    except Exception:
-        pass
-
-        # Restaurar input() original
-    try:
-        if _orig_input_builtin is not None:
-            builtins.input = _orig_input_builtin
+        restore()
     except Exception:
         pass
 
@@ -4049,7 +3405,7 @@ def main():
             log(f"Modo válido seleccionado: {opcion}")
             # Preguntar color SIEMPRE para modos 1/2
             log("Solicitando configuración de tema de colores...")
-            CONFIG = _solicitar_color_tema(CONFIG)
+            CONFIG = solicitar_color_tema(CONFIG)
             log("Configuración de colores completada")
             break
 
@@ -4071,13 +3427,13 @@ def main():
 
     # Selección de hoja visible (si hay varias)
     log("Iniciando selección de hoja de Excel...")
-    hoja = _seleccionar_hoja_visible(archivo_entrada)
+    hoja = seleccionar_hoja_visible(archivo_entrada)
     log(f"Hoja seleccionada: {hoja}")
 
     # Carga del Excel con sistema dual de columnas (FASE 5.3a modular)
     log(f"Iniciando carga de datos desde {archivo_entrada}...")
     try:
-        df, hoja_usada = _cargar_excel_con_normalizacion(archivo_entrada, hoja)
+        df, hoja_usada = cargar_excel_con_normalizacion(archivo_entrada, hoja)
         log(f"Excel cargado exitosamente: {len(df)} filas, hoja usada: {hoja_usada}")
     except Exception as e:
         log(f"ERROR CRÍTICO al cargar Excel: {type(e).__name__}: {e}")
@@ -4866,56 +4222,6 @@ def main():
                                         except Exception: pass
                                 # === METADATOS TÉCNICOS — FIN ===============================================
 
-                                # === COPIAR LOGO A CARPETA DE SALIDA (INICIO) ================================
-                                def _copiar_logo_a_salida(logo_path: str, dest_dir: str, dest_name: str = "logo_tz.png"):
-                                    """
-                                    Copia el logo a la carpeta de salida con nombre 'logo_tz.png'.
-                                    Si no existe o falla, no rompe nada.
-                                    """
-                                    try:
-                                        if not logo_path or not dest_dir:
-                                            return
-                                        # Aceptamos rutas con / o con \\ (Windows)
-                                        if not os.path.exists(logo_path):
-                                            return
-                                        os.makedirs(dest_dir, exist_ok=True)
-                                        shutil.copyfile(logo_path, os.path.join(dest_dir, dest_name))
-                                    except Exception:
-                                        pass
-                                # === COPIAR LOGO A CARPETA DE SALIDA (FIN) ===================================
-                                
-                                    # === RENOMBRADOR DE HEADERS (opcional, si no tenés uno) ====================
-                                    def aplicar_rename_map(df, rename_map: dict) -> pd.DataFrame:
-                                        """
-                                        Intenta mapear nombres crudos del DataFrame a canónicos usando RENAME_MAP.
-                                        - Compara por clave normalizada (minúsculas, sin tildes, sin dobles espacios).
-                                        - Si dos canónicos reclaman el mismo header, prioriza el primero encontrado.
-                                        """
-                                        if df is None or df.empty or not rename_map:
-                                            return df
-
-                                        # Construir índice invertido: raw_norm -> canonico
-                                        inv = {}
-                                        for canonico, sinonimos in rename_map.items():
-                                            for raw_norm in (sinonimos or []):
-                                                if raw_norm not in inv:
-                                                    inv[raw_norm] = canonico
-
-                                        # Generar renames
-                                        ren = {}
-                                        for c in list(df.columns):
-                                            raw_norm = _normalize_key_for_synonyms(c)
-                                            if raw_norm in inv:
-                                                ren[c] = inv[raw_norm]
-
-                                        if ren:
-                                            df = df.rename(columns=ren)
-                                        return df
-                                    # ==========================================================================
-
-                                    # (y en tu flujo, luego de leer el DataFrame):
-                                    # df = aplicar_rename_map(df, RENAME_MAP)
-
                         except Exception:
                             pass
                         return _df
@@ -5165,7 +4471,7 @@ def main():
     # === Overrides Top N (Modos 1 y 2) ===
     if opcion in ("1", "2") and not MANUAL_QC_MAPPING:
         try:
-            ovr = _solicitar_overrides_topn(CONFIG)
+            ovr = solicitar_overrides_topn(CONFIG)
             if ovr:
                 globals()["OVERRIDE_TOPS"] = ovr
                 print(f"[INFO] Top N override aplicado: {ovr}")
@@ -5485,16 +4791,6 @@ def main():
     # HTML opcional (solo si lo activás en config.json con html.generar_en_modo_manual = true)
     if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
         try:
-            # 🚨 DESHABILITADO: Framework HTML modular no implementado completamente
-            # TODO: Implementar tz_core.html_generator cuando sea necesario
-            # from tz_core.html_generator import HTMLReportGenerator
-            # html_gen = HTMLReportGenerator()
-            # html_gen._copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
-            # informe_html = html_gen.generar_informe_html(
-            #     df, archivo_kml, carpeta_salida, nombre_salida, hoja
-            # )
-            # print(f"Informe HTML generado en: {informe_html}")
-            
             print("[INFO] Generación HTML modular no disponible. Usar generar_en_modo_manual=false en config.json")
             # --- Normalizar ubicación del KMZ (por si quedó fuera de BASE) ---
             try:
@@ -5621,44 +4917,14 @@ def main():
         # 2b) Construir sección "Todos los contactos"
         try:
             global HTML_SECCION_TODOS_CONTACTOS
-            HTML_SECCION_TODOS_CONTACTOS = _construir_seccion_todos_contactos(
+            HTML_SECCION_TODOS_CONTACTOS = construir_seccion_todos_contactos(
                 df, columnas_config=_cols_cfg
             )
         except Exception:
             HTML_SECCION_TODOS_CONTACTOS = ""
 
 
-        # 3) (Opcional) Sección Top N antenas para la portada del HTML
-        try:
-            global HTML_SECCION_ANTENAS
-
-            # Leer Top N antenas (override -> config -> 3)
-            try:
-                if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
-                    _topN = int(OVERRIDE_TOPS.get('antenas'))
-                elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                    _topN = int(CONFIG.get("html", {}).get("top_antenas_n", 3))
-                else:
-                    _topN = 3
-            except Exception:
-                _topN = 3
-
-
-            # Buscar la función si existe (con o sin guion bajo)
-            _func = globals().get("_construir_seccion_antenas") or globals().get("construir_seccion_antenas")
-            if callable(_func):
-                HTML_SECCION_ANTENAS = _func(df, top_n=_topN, columnas_config=_cols_cfg)
-            else:
-                # Si no existe la función, no pasa nada: el HTML ya arma su sección de antenas.
-                HTML_SECCION_ANTENAS = ""
-        except Exception:
-            HTML_SECCION_ANTENAS = ""
-
-            # Si no existe la función o algo falla, la sección queda vacía (no bloquea el HTML)
-            # print(f"[DEBUG] Antenas HTML error: {e}")
-            HTML_SECCION_ANTENAS = ""
-
-        # 4) Generar el HTML
+        # 3) Generar el HTML
         print("[DEBUG] Llamando a generar_informe_html(...)")
         # � FIX: Usar función original (no existe html_generator modular funcional)
         try:
@@ -5869,10 +5135,6 @@ def _aplicar_filtros_tiempo(df, filtros):
 
     df2 = df.loc[mask].copy()
     return df2, resumen
-
-def _solicitar_overrides_topn(config):
-    """Wrapper de compatibilidad - usa tz_core.ui_utils.solicitar_overrides_topn"""
-    return solicitar_overrides_topn(config)
 
 if __name__ == "__main__":
     bootstrap_config()

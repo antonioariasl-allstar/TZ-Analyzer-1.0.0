@@ -32,7 +32,6 @@ from collections import Counter, defaultdict
 from typing import Optional, Tuple
 
 import pandas as pd
-import numpy as np
 from simplekml import Kml
 import simplekml as sk
 

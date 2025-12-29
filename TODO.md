@@ -1,5 +1,19 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
+## ✅ EPIC 16A: EXTRACCIÓN TOP CONTACTOS (28/12/2025)
+
+**Log de avance:**
+- Helper `build_top_contacts_sections` creado en `tz_core/html_generator.py` (conteo y duración, respeta overrides y config).
+- Monolito delega la sección "Contactos con más comunicación" al helper; HTML idéntico validado por usuario (prueba manual OK).
+- Sintaxis verificada con `py_compile`; commit atómico: `refactor: extraer seccion top contactos a helper`.
+- Próximo paso: continuar con extracción de "Top antenas" y consolidar en HTML builder.
+- [29/12/2025] Config centralizada: nuevo helper `tz_core/config_loader.py` con `load_config/get_config` (ajuste PyInstaller para logo) y wrappers de sinónimos/color; monolito importa desde el helper y se eliminan duplicados locales; alias `_normalize_key_for_synonyms` preserva compatibilidad; usuario validó manualmente.
+- [29/12/2025] Limpieza de compatibilidad: monolito deja de duplicar wrappers (`get_config`, `_solicitar_color_tema`, `_hex_to_kml_color`, `analizar_antenas`); se usan helpers directos de `tz_core` y se mantiene monkeypatch de color en tests.
+- [29/12/2025] HTML limpio: se elimina el bloque H1 (brand/version) desactivado para reducir código muerto; TOC sigue igual.
+- [29/12/2025] Interacciones/contactos: se elimina el wrapper `_construir_seccion_todos_contactos` y utilidades de rangos sin uso; ahora se importa directo `construir_seccion_todos_contactos` desde `tz_core.analytics`.
+- [29/12/2025] Monkeypatch a helper: bloque de mocks para `run_tz_analysis` movido a `tests/helpers/monkeypatch_flow.py` y el monolito lo consume (fallback resiliente); smoke de pruebas: `pytest tests/unit/test_config_manager.py -q` OK (13 passed, warnings preexistentes).
+- [29/12/2025] Top antenas: se elimina el fallback a `_construir_seccion_antenas` inexistente; sección queda explícitamente deshabilitada con log informativo.
+
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 
 **UNIFICACIÓN KML: kml_generador.py → tz_core/kml_generator.py (ARQUITECTURA LIMPIA)**
