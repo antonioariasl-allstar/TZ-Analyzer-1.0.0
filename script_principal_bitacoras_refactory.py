@@ -622,7 +622,6 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
 
 HTML_SECCION_INTERACCIONES = ""
-HTML_SECCION_ANTENAS = ""
 # === HTML-INTERACCIONES-1 (inicio) ========================================
 def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
     """
@@ -5131,16 +5130,6 @@ def main():
     # HTML opcional (solo si lo activás en config.json con html.generar_en_modo_manual = true)
     if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
         try:
-            # 🚨 DESHABILITADO: Framework HTML modular no implementado completamente
-            # TODO: Implementar tz_core.html_generator cuando sea necesario
-            # from tz_core.html_generator import HTMLReportGenerator
-            # html_gen = HTMLReportGenerator()
-            # html_gen._copiar_logo_a_salida(CONFIG.get("branding", {}).get("logo_path"), carpeta_salida)
-            # informe_html = html_gen.generar_informe_html(
-            #     df, archivo_kml, carpeta_salida, nombre_salida, hoja
-            # )
-            # print(f"Informe HTML generado en: {informe_html}")
-            
             print("[INFO] Generación HTML modular no disponible. Usar generar_en_modo_manual=false en config.json")
             # --- Normalizar ubicación del KMZ (por si quedó fuera de BASE) ---
             try:
@@ -5274,12 +5263,7 @@ def main():
             HTML_SECCION_TODOS_CONTACTOS = ""
 
 
-        # 3) Sección Top N antenas (deshabilitada: helper no disponible)
-        global HTML_SECCION_ANTENAS
-        HTML_SECCION_ANTENAS = ""
-        log("[INFO] Sección Top antenas no generada (helper ausente)")
-
-        # 4) Generar el HTML
+        # 3) Generar el HTML
         print("[DEBUG] Llamando a generar_informe_html(...)")
         # � FIX: Usar función original (no existe html_generator modular funcional)
         try:
