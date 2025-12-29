@@ -197,16 +197,7 @@ MANUAL_QC_MAPPING = True
 # =========================================================================
 
 
-# --- LOGS: helper para registrar degrade/mapas/omisiones ---
-from datetime import datetime
-from datetime import datetime
-
-# ===================================================================
-# WRAPPERS DE COMPATIBILIDAD PARA LOGGING - FASE 9C
-# ===================================================================
-# EXTRAÍDO A: tz_core.logging_utils
-# MIGRACIÓN: Variables globales LOGS y LOG_PLACEHOLDERS movidas a módulo
-# COMPATIBILIDAD: Wrappers mantienen interfaz original del monolito
+# Wrappers de compatibilidad para logging
 
 # Crear objetos que simulan las variables globales originales
 class _LogsCompat:
@@ -3210,8 +3201,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja, cargar_excel_con_normalizacion
 
 # --- Normalizadores robustos y pre-flight de esenciales ---
-
-ESENCIALES_IN = ["fecha", "hora", "tel", "imei", "interaccion", "contacto", "lat", "long", "azimut", "antena"]
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 # (Ahora importados desde tz_core.time_utils)
 
