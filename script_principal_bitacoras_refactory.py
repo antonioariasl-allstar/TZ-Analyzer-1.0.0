@@ -3452,32 +3452,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 # 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader
 from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja, cargar_excel_con_normalizacion
 
-def _seleccionar_hoja_visible(ruta_excel):
-    """Wrapper de compatibilidad para tz_core.data_loader.seleccionar_hoja_visible"""
-    return seleccionar_hoja_visible(ruta_excel)
-
-def _cargar_excel_con_normalizacion(ruta_excel, hoja_elegida=None):
-    """
-    Wrapper de compatibilidad para tz_core.data_loader.cargar_excel_con_normalizacion
-    
-    🚨 FASE 5.3a - SISTEMA DUAL DE COLUMNAS EXTRAÍDO 🚨
-    
-    Esta función implementa el sistema dual de columnas descubierto durante 
-    la refactorización campo minado:
-    
-    1. df.attrs["orig_cols"] - Columnas originales del archivo (para UI)
-    2. df.columns normalizadas - Columnas procesadas (para algoritmo)
-    
-    CRÍTICO: Ambas versiones son necesarias y NO deben ser "optimizadas".
-    La UI muestra nombres reales, el algoritmo usa nombres limpiados.
-    
-    Preserva comportamiento exacto de líneas originales 6543-6557.
-    """
-    return cargar_excel_con_normalizacion(ruta_excel, hoja_elegida)
-
-# --- Fallback: listar TODAS las hojas con pandas y seleccionar una ---
-# 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader (wrappers ya definidos arriba)
-
 # --- Normalizadores robustos y pre-flight de esenciales ---
 
 ESENCIALES_IN = ["fecha", "hora", "tel", "imei", "interaccion", "contacto", "lat", "long", "azimut", "antena"]
@@ -3716,13 +3690,13 @@ def main():
 
     # Selección de hoja visible (si hay varias)
     log("Iniciando selección de hoja de Excel...")
-    hoja = _seleccionar_hoja_visible(archivo_entrada)
+    hoja = seleccionar_hoja_visible(archivo_entrada)
     log(f"Hoja seleccionada: {hoja}")
 
     # Carga del Excel con sistema dual de columnas (FASE 5.3a modular)
     log(f"Iniciando carga de datos desde {archivo_entrada}...")
     try:
-        df, hoja_usada = _cargar_excel_con_normalizacion(archivo_entrada, hoja)
+        df, hoja_usada = cargar_excel_con_normalizacion(archivo_entrada, hoja)
         log(f"Excel cargado exitosamente: {len(df)} filas, hoja usada: {hoja_usada}")
     except Exception as e:
         log(f"ERROR CRÍTICO al cargar Excel: {type(e).__name__}: {e}")
