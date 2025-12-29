@@ -116,10 +116,6 @@ from datetime import time as _time
 # =========================
 # Generación de KML (usa CONFIG)
 # =========================
-# FUNCIÓN _crear_feature_kml MOVIDA A LÍNEA 1308 - ELIMINADA DUPLICACIÓN
-
-# ...existing code...
-#=================================================================================
 
 def bootstrap_config() -> None:
     """
@@ -224,10 +220,7 @@ LOGS = _LogsCompat()
 LOG_PLACEHOLDERS = _PlaceholdersCompat()
 
 def log(msg: str):
-    """
-    Wrapper de compatibilidad para función log.
-    IMPLEMENTACIÓN REAL: tz_core.logging_utils.log()
-    """
+    """Wrapper de compatibilidad para función log."""
     _log_impl(msg)
 
 
@@ -308,8 +301,6 @@ except Exception:
 # =========================
 # Configuración externa
 # =========================
-# --- ANTI-COLISIONES DE COLUMNAS (fusiona duplicadas por primer valor no vacío) ---
-# === IMPORTS MODULARES (gradual refactoring) ===
 from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
 from tz_core.config_loader import (
     get_config as core_get_config,
@@ -343,12 +334,7 @@ OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejec
 # Generación de KML (usa CONFIG)
 # =========================
 def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
-    """
-    Wrapper de compatibilidad para tz_core.kml_generator.generar_kml()
-    
-    MIGRADA EN EPIC 13 (26/12/2025): ~350 líneas extraídas a módulo profesional
-    IMPLEMENTACIÓN REAL: tz_core.kml_generator.generar_kml()
-    """
+    """Wrapper de compatibilidad para tz_core.kml_generator.generar_kml()"""
     from tz_core.kml_generator import generar_kml as generar_kml_modular
     
     # Inyectar CONFIG global y OVERRIDE_TOPS si existen
@@ -365,7 +351,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
 
 HTML_SECCION_INTERACCIONES = ""
-# === HTML-INTERACCIONES-1 (inicio) ========================================
+
 def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
     """
     Construye una sección HTML con 'Interacciones de los últimos N días registrados en bitácora'.
@@ -492,7 +478,6 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
         if col_lat and col_long and (col_lat in row) and (col_long in row):
             return _valid_latlon_vals(row[col_lat], row[col_long])
         return False
-    # === TOP-ANTENA-1A (fin) ===
 
     # Si no hay df razonable, retorna vacío (no rompe HTML)
     if df is None or df.empty:
@@ -843,7 +828,6 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
             for a in alertas:
                 out.append(f'<li class="alerta-item">{a}</li>')
             out.append('</ul></div>')
-        # === ALERTAS-2 (fin) ===
 
         # === Mini-heatmap diario: genera un pequeño mapa por fecha ===
         # Se muestra DESPUÉS de las tablas y alertas
@@ -1669,7 +1653,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
             html = html.replace("</header>", "</header>\n  " + _toc_html, 1)
     except Exception:
         pass
-    # === HTML-TOC-1 (fin) ===
 
     # === HTML-BRANDING-1: Marca de agua (usa config.branding) ===
     try:
@@ -1690,7 +1673,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
             html = html.replace("</header>", "</header>\n  " + f"<div class='wm'>{_mw_txt}</div>", 1)
     except Exception:
         pass
-    # === HTML-BRANDING-1 (fin) ===
 
     # === HTML-TABLA-ESPACIADO-1: Ajustes de "Todos los contactos" (solo CSS) ===
     try:
@@ -1806,8 +1788,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
     except Exception:
         pass
-    # === HTML-TABLA-ESPACIADO-1 (fin) ===
-
 
 
     # HTML-INTERACCIONES-1: inyectar sección (si fue calculada)
@@ -2198,7 +2178,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                 log(f"[DEBUG] Antenas por horario: {len(sec_ant_rangos)} chars")
         except Exception:
             sec_ant_rangos = ""
-        # === FIN HTML-ANTENAS-RANGOS-1 ===
 
         # === HTML-HISTORIAL-CAMBIOS-1: Generar bloque de Historial de cambios de antena ===
         sec_historial = ""
@@ -2252,7 +2231,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
         except Exception as e:
             log(f"[WARNING] Error generando historial de cambios: {e}")
             sec_historial = ""
-        # === FIN HTML-HISTORIAL-CAMBIOS-1 ===
 
         # === HTML-HEATMAP-1: Generar bloque de Mapa de Calor de actividad ===
         # Contrato de datos: puntos [lat, lon, weight] donde weight se normaliza (0..1) por
@@ -2487,7 +2465,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                         log(f"[DEBUG] Heatmap: {len(sec_heatmap)} chars, puntos={len(heat_points)}")
         except Exception:
             sec_heatmap = ""
-        # === FIN HTML-HEATMAP-1 ===
 
         # 1) Mover "Top antenas" inmediatamente después de "Indicadores" (si aún no lo está)
         idx_ind = html.find("<h2>Indicadores</h2>")
@@ -3041,7 +3018,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
     except Exception:
         pass
-    # === HTML-BRANDING-2 (fin) ===
 
     # FORZAR-ULTIMO: mover "Todos los contactos" al final del documento (antes del footer si existe)
     try:
@@ -3179,16 +3155,10 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 # --- Anti-hojas: ignorar ocultas y elegir visible ---
 from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja, cargar_excel_con_normalizacion
 
-# --- Normalizadores robustos y pre-flight de esenciales ---
-# --- Helpers de hora y carpetas/rangos (Preset A SV) ---
-# (Ahora importados desde tz_core.time_utils)
-
 # =========================
 # Flujo principal
 # =========================
 
-# === MODO MANUAL ===
-# Wrapper para tz_core.manual_mode.modo_manual
 def _modo_manual():
     """Wrapper de compatibilidad - usa tz_core.manual_mode.modo_manual"""
     from tz_core.manual_mode import modo_manual
@@ -3326,7 +3296,6 @@ def run_tz_analysis(
         "hashes": hashes_path,
         "log": log_path,
     }
-# === RUN_TZ_ANALYSIS (FIN) ====================================================
 
 # === SECCIÓN: MENÚ PRINCIPAL / ENTRYPOINT (opciones 1/2/3) ===
 def main():
@@ -3533,8 +3502,6 @@ def main():
             except Exception:
                 pass
             return True
-    # === VALIDACIÓN DE SCHEMA — FIN ============================================
-
 
     # Auto-mapeo de encabezados (desde CONFIG.schema.fields) con fuzzy
     # - Usa sinónimos del config
@@ -3675,8 +3642,6 @@ def main():
         # Ejecutar dedup/coalesce con preferencia ligera (por si te interesa priorizar algún origen)
         if not MANUAL_QC_MAPPING:
             df = _coalesce_duplicates(df, prefer=["hora", "fecha", "lat", "long", "lon", "azimut", "tel", "imei", "antena"])
-        # === FIN DEDUP/COALESCE =======================================================
-
 
              # WIZARD (esenciales + selector de UBICACIÓN) y persistencia de sinónimos (modo estricto)
     try:
@@ -3933,8 +3898,6 @@ def main():
                             return False, "Coordenadas inválidas tras el mapeo."
                     return True, ""
                 
-                # === WIZARD: HELPERS DE VALIDACIÓN (fin) ===================================
-
                 # WIZARD UBICACIÓN POR CAMPO + VALIDACIÓN DURA (lat, long, antena)
                 try:
                     def _ask_map_col(_df, colname: str):
@@ -3998,7 +3961,6 @@ def main():
                                         log(f"[WARN][synonyms] No se pudo persistir el sinónimo: {e}")
 
                                     log(f"WIZARD: la columna '{src}' fue mapeada a '{colname}'.")
-                                # === WIZARD: MAPEO ROBUSTO — FIN ===========================================
                                 validate_schema_or_abort(_df)
 
                                 # === VALIDACIÓN DE SCHEMA (aborto elegante) — INICIO =======================
@@ -4730,9 +4692,7 @@ def main():
     nombre_carpeta = nombre_salida
     carpeta_salida = os.path.join(carpeta_base, nombre_carpeta)
     os.makedirs(carpeta_salida, exist_ok=True)
-    # --- FIN selección de carpeta ---
 
-    # --- RUTAS FINALES KML/KMZ (ya existe carpeta_salida) ---
     if CONFIG.get("salida", {}).get("separar_kml_kmz", False):
         carpeta_kml = os.path.join(carpeta_salida, "kml")
         os.makedirs(carpeta_kml, exist_ok=True)
@@ -4741,7 +4701,6 @@ def main():
     else:
         archivo_kml = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kml")
         archivo_kmz = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
-    # --- FIN rutas KML/KMZ ---
 
     # HTML opcional (solo si lo activás en config.json con html.generar_en_modo_manual = true)
     if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
@@ -4761,7 +4720,6 @@ def main():
                     log(f"[DEBUG] KMZ reubicado a: {kmz_esperado}")
             except Exception as _e:
                 print(f"[WARN] No se pudo reubicar KMZ: {_e}")
-            # --- FIN normalización KMZ ---
 
         except Exception as e:
             print(f"[ERROR] No se pudo generar el HTML: {e}")
