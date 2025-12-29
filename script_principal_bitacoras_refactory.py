@@ -388,20 +388,24 @@ def _to_datetime_series(df):
         return s
     return pd.Series(pd.NaT, index=df.index)
 
-def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
+def _fmt_hms(total_seconds):
+    """Formatea segundos totales a formato HH:MM:SS.
+    
+    Retorna "00:00:00" si el valor no es numérico válido.
+    """
+    try:
+        total_seconds = float(total_seconds)
+    except Exception:
+        return "00:00:00"
+    if np.isnan(total_seconds):
+        return "00:00:00"
+    total_seconds = int(round(total_seconds))
+    h = total_seconds // 3600
+    m = (total_seconds % 3600) // 60
+    s = total_seconds % 60
+    return f"{h:02d}:{m:02d}:{s:02d}"
 
-    def _fmt_hms(total_seconds):
-        try:
-            total_seconds = float(total_seconds)
-        except Exception:
-            return "00:00:00"
-        if np.isnan(total_seconds):
-            return "00:00:00"
-        total_seconds = int(round(total_seconds))
-        h = total_seconds // 3600
-        m = (total_seconds % 3600) // 60
-        s = total_seconds % 60
-        return f"{h:02d}:{m:02d}:{s:02d}"
+def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
 
     # Column mapping - buscar primero por config, luego por nombres canónicos y fallbacks
     columnas_config = columnas_config or {}
