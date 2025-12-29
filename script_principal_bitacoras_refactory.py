@@ -3208,20 +3208,8 @@ from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, sele
 # Flujo principal
 # =========================
 
-# === MODO MANUAL (EPIC 16B - 27/12/2025) ==============================================
-#  MÓDULO EXTRAÍDO: Modo manual de entrada interactiva (498 líneas)
-# Migrado a: tz_core/manual_mode.py -> modo_manual()
-# Reducción: -498 líneas del monolito
-#
-# ARQUITECTURA:
-# - Wizard CLI con menú [A]gregar/[L]istar/[E]liminar/[G]raficar/[V]olver
-# - Dos modos: Antenas/Celdas (con azimut) vs Puntos libres (sin azimut)
-# - Validación robusta: _input_str, _input_float, _input_int con límites
-# - Generación KML/KMZ sin DataFrame Excel (construcción manual)
-# - Helpers internos: listar, armar_df, sanear_nombre, auto-nombre
-#
-# COMPATIBILIDAD: 100% - Wrapper preserva global CONFIG y firma original
-# ========================================================================================
+# === MODO MANUAL ===
+# Wrapper para tz_core.manual_mode.modo_manual
 def _modo_manual():
     """Wrapper de compatibilidad - usa tz_core.manual_mode.modo_manual"""
     from tz_core.manual_mode import modo_manual
