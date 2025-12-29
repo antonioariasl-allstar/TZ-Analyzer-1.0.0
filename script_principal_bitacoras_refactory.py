@@ -352,6 +352,13 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
 HTML_SECCION_INTERACCIONES = ""
 
+def _pick_col(df, candidatos):
+    """Busca la primera columna existente en df de una lista de candidatos."""
+    for c in candidatos:
+        if c and c in df.columns:  # Ignora None y strings vacíos
+            return c
+    return None
+
 def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
     """
     Construye una sección HTML con 'Interacciones de los últimos N días registrados en bitácora'.
@@ -359,13 +366,6 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
     - Por cada fecha: tabla por contacto con #interacciones, duración acumulada, antena top y sus coords/azimut.
     - Si una fecha no tiene antenas válidas: muestra nota.
     """
-
-    # Helpers
-    def _pick_col(df, candidatos):
-        for c in candidatos:
-            if c and c in df.columns:  # Ignora None y strings vacíos
-                return c
-        return None
 
     def _to_datetime_series(df):
         # Intento 1: combinación fecha + hora
