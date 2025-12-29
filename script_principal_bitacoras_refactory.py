@@ -73,13 +73,9 @@ from simplekml import Kml
 # Módulos locales
 from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
-# 🔧 MÓDULO EXTRAÍDO (Epic 14): KML puntos libres consolidado en tz_core
 from tz_core.kml_generator import generar_kml_puntos_libres
-# 🔧 MÓDULO EXTRAÍDO (Epic 15): Wizard QC mapeo completo
 from tz_core.mapping_wizard import wizard_qc_mapeo as _wizard_qc_mapeo
-# 🔧 MÓDULO EXTRAÍDO: HTML helpers para generar_informe_html
 from tz_core.html_helpers import fmt_datetime as fmt_dt
-# 🔧 MÓDULO EXTRAÍDO: Sistema de logging centralizado
 from tz_core.logging_utils import (
     log as _log_impl,
     get_logs,
@@ -96,18 +92,13 @@ from tz_core.logging_utils import (
     log_error,
     log_debug
 )
-
-# 🔧 MÓDULO EXTRAÍDO: Utilidades de interfaz de usuario
 from tz_core.ui_utils import (
     solicitar_overrides_topn
 )
-
-# 🔧 MÓDULO EXTRAÍDO: Utilidades de procesamiento de texto
 from tz_core.text_utils import (
     _fix_mojibake_text,
     _aplicar_reemplazos_regex
 )
-# 🔧 MÓDULO EXTRAÍDO: Utilidades de formato y configuración
 from tz_core.format_utils import agregar_bloque, armar_descripcion_compacta
 from tz_core.config_manager import cfg_build_rename_map, add_user_synonym, solicitar_color_tema
 from tz_core.color_utils import hex_to_kml_color
@@ -350,7 +341,6 @@ OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejec
 
 # =========================
 # Generación de KML (usa CONFIG)
-# ⚡ EPIC 13: Wrapper para tz_core.kml_generator
 # =========================
 def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
     """
@@ -1143,8 +1133,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     Genera un informe HTML sencillo (portada + KPIs + enlaces) en la misma carpeta del KML.
     Retorna la ruta del HTML generado.
     """
-    # 🔧 MÓDULO EXTRAÍDO: HTML generator para generar_informe_html (ya en imports globales)
-    
     # Validación defensiva de entrada
     if df is None:
         log("[ERROR] generar_informe_html: DataFrame es None, abortando")
@@ -1270,7 +1258,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     # rango de fechas/horas (visual dd/mm/aaaa HH:MM — dd/mm/aaaa HH:MM)
     rango_str = "Sin datos"
 
-    # 🔧 EXTRAÍDO: Usando fmt_dt del módulo html_helpers
     if "fecha" in df.columns:
         # Preferir combinar fecha+hora si existe 'hora'
         dt = None
@@ -1575,16 +1562,9 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
         # ante cualquier problema, evita romper: deja un placeholder textual
         logo_html = "<div style='font-weight:700;font-size:18px'>TZ Analyzer</div>"
 
-    # 🔧 FASE 2.1: HTML Header extraído a módulo independiente  
     html_header = generate_html_header(theme_hex, nombre_salida)
-    
-    # 🔧 FASE 2.2: HTML Body Header extraído a módulo independiente
     body_header = generate_body_header(logo_html, nombre_salida, hoja, gen_dt, CONFIG)
-    
-    # 🔧 FASE 2.3: HTML Metadatos extraído a módulo independiente
     metadata_section = generate_metadata_section(nombre_bitacora, hoja, rango_str, ident_rows)
-    
-    # 🔧 FASE 2.4: HTML KPIs/Indicadores extraído a módulo independiente
     kpi_section = generate_kpi_section(total, coord_validas, coord_invalidas, ant_uniq, cel_uniq, cel_label, top_antena, top_count, top_pct)
     
     html = f"""{html_header}
@@ -3197,7 +3177,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
 
 # --- Anti-hojas: ignorar ocultas y elegir visible ---
-# 🔄 WRAPPER: Funciones extraídas a tz_core.data_loader
 from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja, cargar_excel_con_normalizacion
 
 # --- Normalizadores robustos y pre-flight de esenciales ---
@@ -4370,7 +4349,6 @@ def main():
         esenciales_qc = ["fecha", "hora", "tel", "imei", "interaccion", "contacto", "lat", "long", "azimut", "antena"]
         no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
         
-        # ⚡ LÍNEA CRÍTICA: Segunda componente del sistema dual
         # Esta línea preserva las columnas DESPUÉS de la normalización inicial
         # pero ANTES del wizard. Es parte del sistema dual de columnas.
         # Ver docs/SISTEMA_DUAL_COLUMNAS.md y docs/WIZARD_QC_PELIGRO_EXTREMO.md
@@ -4789,7 +4767,6 @@ def main():
             print(f"[ERROR] No se pudo generar el HTML: {e}")
             informe_html = None
     else:
-        # 🔧 FIX: Usar función original cuando modo manual está deshabilitado
         try:
             informe_html = generar_informe_html(df, archivo_kml, carpeta_salida, nombre_salida, hoja)
             print(f"Informe HTML generado (modo legacy): {informe_html}")
@@ -4858,7 +4835,7 @@ def main():
     # Rellena solo si faltan; si ya existen no pregunta
     df = _prep_meta_unicos(df, [
         ("alias", "alias"),
-        ("nombre_usuario", "nombre_usuario"),  # 🔧 FIX: volver a "nombre_usuario" que es como se guarda realmente
+        ("nombre_usuario", "nombre_usuario"),
         ("abonado", "abonado"),
     ])
 
@@ -4902,8 +4879,6 @@ def main():
 
 
         # 3) Generar el HTML
-        print("[DEBUG] Llamando a generar_informe_html(...)")
-        # � FIX: Usar función original (no existe html_generator modular funcional)
         try:
             informe_html = generar_informe_html(
                 df, archivo_kml, carpeta_salida, nombre_salida, hoja,
