@@ -352,53 +352,60 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
 HTML_SECCION_INTERACCIONES = ""
 
-def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
+def _pick_col(df, candidatos):
+    """Busca la primera columna existente en df de una lista de candidatos."""
+    for c in candidatos:
+        if c and c in df.columns:  # Ignora None y strings vacíos
+            return c
+    return None
+
+def _to_datetime_series(df):
+    """Convierte columnas de fecha/hora del df a una Serie de datetime.
+    
+    Intenta múltiples estrategias en orden:
+    1. Combinar 'fecha' + 'hora'
+    2. Columnas comunes de timestamp
+    3. Solo 'fecha'
+    
+    Retorna Serie con pd.NaT si no puede parsear.
     """
-    Construye una sección HTML con 'Interacciones de los últimos N días registrados en bitácora'.
-    - Subsecciones por fecha (dd/mm/aaaa), orden: más reciente -> más antiguo.
-    - Por cada fecha: tabla por contacto con #interacciones, duración acumulada, antena top y sus coords/azimut.
-    - Si una fecha no tiene antenas válidas: muestra nota.
-    """
-
-    # Helpers
-    def _pick_col(df, candidatos):
-        for c in candidatos:
-            if c and c in df.columns:  # Ignora None y strings vacíos
-                return c
-        return None
-
-    def _to_datetime_series(df):
-        # Intento 1: combinación fecha + hora
-        if 'fecha' in df.columns and 'hora' in df.columns:
-            try:
-                return pd.to_datetime(df['fecha'].astype(str).str.strip() + ' ' + df['hora'].astype(str).str.strip(),
-                                      dayfirst=True, errors='coerce')
-            except Exception:
-                pass
-        # Intento 2: columnas comunes
-        for c in ['datetime', 'fecha_hora', 'timestamp', 'fec_hor', 'fechaHora']:
-            if c in df.columns:
-                s = pd.to_datetime(df[c], dayfirst=True, errors='coerce')
-                if s.notna().any():
-                    return s
-        # Intento 3: solo fecha
-        if 'fecha' in df.columns:
-            s = pd.to_datetime(df['fecha'], dayfirst=True, errors='coerce')
-            return s
-        return pd.Series(pd.NaT, index=df.index)
-
-    def _fmt_hms(total_seconds):
+    # Intento 1: combinación fecha + hora
+    if 'fecha' in df.columns and 'hora' in df.columns:
         try:
-            total_seconds = float(total_seconds)
+            return pd.to_datetime(df['fecha'].astype(str).str.strip() + ' ' + df['hora'].astype(str).str.strip(),
+                                  dayfirst=True, errors='coerce')
         except Exception:
-            return "00:00:00"
-        if np.isnan(total_seconds):
-            return "00:00:00"
-        total_seconds = int(round(total_seconds))
-        h = total_seconds // 3600
-        m = (total_seconds % 3600) // 60
-        s = total_seconds % 60
-        return f"{h:02d}:{m:02d}:{s:02d}"
+            pass
+    # Intento 2: columnas comunes
+    for c in ['datetime', 'fecha_hora', 'timestamp', 'fec_hor', 'fechaHora']:
+        if c in df.columns:
+            s = pd.to_datetime(df[c], dayfirst=True, errors='coerce')
+            if s.notna().any():
+                return s
+    # Intento 3: solo fecha
+    if 'fecha' in df.columns:
+        s = pd.to_datetime(df['fecha'], dayfirst=True, errors='coerce')
+        return s
+    return pd.Series(pd.NaT, index=df.index)
+
+def _fmt_hms(total_seconds):
+    """Formatea segundos totales a formato HH:MM:SS.
+    
+    Retorna "00:00:00" si el valor no es numérico válido.
+    """
+    try:
+        total_seconds = float(total_seconds)
+    except Exception:
+        return "00:00:00"
+    if np.isnan(total_seconds):
+        return "00:00:00"
+    total_seconds = int(round(total_seconds))
+    h = total_seconds // 3600
+    m = (total_seconds % 3600) // 60
+    s = total_seconds % 60
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
 
     # Column mapping - buscar primero por config, luego por nombres canónicos y fallbacks
     columnas_config = columnas_config or {}
