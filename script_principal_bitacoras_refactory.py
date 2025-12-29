@@ -359,10 +359,7 @@ from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo
 RANGOS_SV = RANGOS_SV_MODULAR
 
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
-def _copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> str | None:
-    """Wrapper de compatibilidad - usa tz_core.file_utils.copiar_logo_a_salida"""
-    return copiar_logo_a_salida(logo_src, carpeta_salida)
-
+# (copiar_logo_a_salida ya disponible desde tz_core.file_utils)
 
 # Alias para compatibilidad - usar DEFAULT_CONFIG de tz_core.config_manager
 DEFAULT_CONFIG = DEFAULT_CONFIG_MODULAR
@@ -4814,7 +4811,7 @@ def main():
     # === Overrides Top N (Modos 1 y 2) ===
     if opcion in ("1", "2") and not MANUAL_QC_MAPPING:
         try:
-            ovr = _solicitar_overrides_topn(CONFIG)
+            ovr = solicitar_overrides_topn(CONFIG)
             if ovr:
                 globals()["OVERRIDE_TOPS"] = ovr
                 print(f"[INFO] Top N override aplicado: {ovr}")
@@ -5493,10 +5490,6 @@ def _aplicar_filtros_tiempo(df, filtros):
 
     df2 = df.loc[mask].copy()
     return df2, resumen
-
-def _solicitar_overrides_topn(config):
-    """Wrapper de compatibilidad - usa tz_core.ui_utils.solicitar_overrides_topn"""
-    return solicitar_overrides_topn(config)
 
 if __name__ == "__main__":
     bootstrap_config()
