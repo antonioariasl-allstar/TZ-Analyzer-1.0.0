@@ -341,7 +341,6 @@ from tz_core.config_loader import (
     cfg_add_user_synonym,
     normalize_key_for_synonyms,
     solicitar_color_tema,
-    DEFAULT_CONFIG as DEFAULT_CONFIG_MODULAR,
 )
 
 # Alias de compatibilidad para funciones de sinónimos usadas en el monolito
@@ -361,19 +360,12 @@ RANGOS_SV = RANGOS_SV_MODULAR
 # === HASHES + ENTORNO (helpers) — INICIO ====================================
 # (copiar_logo_a_salida ya disponible desde tz_core.file_utils)
 
-# Alias para compatibilidad - usar DEFAULT_CONFIG de tz_core.config_manager
-DEFAULT_CONFIG = DEFAULT_CONFIG_MODULAR
-
 # CONFIG inicializado al nivel de módulo (se carga una sola vez)
 CONFIG = None
 OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejecución)
 
 # =========================
 # Geometría / KML helpers
-# =========================
-
-HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
-
 # =========================
 # Funciones de formateo - usar imports directos desde tz_core.format_utils
 # - armar_descripcion_compacta()
@@ -4250,56 +4242,6 @@ def main():
                                         try: log(f"[WARN][meta] No se pudo inyectar metadatos técnicos: {_e}")
                                         except Exception: pass
                                 # === METADATOS TÉCNICOS — FIN ===============================================
-
-                                # === COPIAR LOGO A CARPETA DE SALIDA (INICIO) ================================
-                                def _copiar_logo_a_salida(logo_path: str, dest_dir: str, dest_name: str = "logo_tz.png"):
-                                    """
-                                    Copia el logo a la carpeta de salida con nombre 'logo_tz.png'.
-                                    Si no existe o falla, no rompe nada.
-                                    """
-                                    try:
-                                        if not logo_path or not dest_dir:
-                                            return
-                                        # Aceptamos rutas con / o con \\ (Windows)
-                                        if not os.path.exists(logo_path):
-                                            return
-                                        os.makedirs(dest_dir, exist_ok=True)
-                                        shutil.copyfile(logo_path, os.path.join(dest_dir, dest_name))
-                                    except Exception:
-                                        pass
-                                # === COPIAR LOGO A CARPETA DE SALIDA (FIN) ===================================
-                                
-                                    # === RENOMBRADOR DE HEADERS (opcional, si no tenés uno) ====================
-                                    def aplicar_rename_map(df, rename_map: dict) -> pd.DataFrame:
-                                        """
-                                        Intenta mapear nombres crudos del DataFrame a canónicos usando RENAME_MAP.
-                                        - Compara por clave normalizada (minúsculas, sin tildes, sin dobles espacios).
-                                        - Si dos canónicos reclaman el mismo header, prioriza el primero encontrado.
-                                        """
-                                        if df is None or df.empty or not rename_map:
-                                            return df
-
-                                        # Construir índice invertido: raw_norm -> canonico
-                                        inv = {}
-                                        for canonico, sinonimos in rename_map.items():
-                                            for raw_norm in (sinonimos or []):
-                                                if raw_norm not in inv:
-                                                    inv[raw_norm] = canonico
-
-                                        # Generar renames
-                                        ren = {}
-                                        for c in list(df.columns):
-                                            raw_norm = _normalize_key_for_synonyms(c)
-                                            if raw_norm in inv:
-                                                ren[c] = inv[raw_norm]
-
-                                        if ren:
-                                            df = df.rename(columns=ren)
-                                        return df
-                                    # ==========================================================================
-
-                                    # (y en tu flujo, luego de leer el DataFrame):
-                                    # df = aplicar_rename_map(df, RENAME_MAP)
 
                         except Exception:
                             pass
