@@ -359,33 +359,36 @@ def _pick_col(df, candidatos):
             return c
     return None
 
-def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
+def _to_datetime_series(df):
+    """Convierte columnas de fecha/hora del df a una Serie de datetime.
+    
+    Intenta múltiples estrategias en orden:
+    1. Combinar 'fecha' + 'hora'
+    2. Columnas comunes de timestamp
+    3. Solo 'fecha'
+    
+    Retorna Serie con pd.NaT si no puede parsear.
     """
-    Construye una sección HTML con 'Interacciones de los últimos N días registrados en bitácora'.
-    - Subsecciones por fecha (dd/mm/aaaa), orden: más reciente -> más antiguo.
-    - Por cada fecha: tabla por contacto con #interacciones, duración acumulada, antena top y sus coords/azimut.
-    - Si una fecha no tiene antenas válidas: muestra nota.
-    """
+    # Intento 1: combinación fecha + hora
+    if 'fecha' in df.columns and 'hora' in df.columns:
+        try:
+            return pd.to_datetime(df['fecha'].astype(str).str.strip() + ' ' + df['hora'].astype(str).str.strip(),
+                                  dayfirst=True, errors='coerce')
+        except Exception:
+            pass
+    # Intento 2: columnas comunes
+    for c in ['datetime', 'fecha_hora', 'timestamp', 'fec_hor', 'fechaHora']:
+        if c in df.columns:
+            s = pd.to_datetime(df[c], dayfirst=True, errors='coerce')
+            if s.notna().any():
+                return s
+    # Intento 3: solo fecha
+    if 'fecha' in df.columns:
+        s = pd.to_datetime(df['fecha'], dayfirst=True, errors='coerce')
+        return s
+    return pd.Series(pd.NaT, index=df.index)
 
-    def _to_datetime_series(df):
-        # Intento 1: combinación fecha + hora
-        if 'fecha' in df.columns and 'hora' in df.columns:
-            try:
-                return pd.to_datetime(df['fecha'].astype(str).str.strip() + ' ' + df['hora'].astype(str).str.strip(),
-                                      dayfirst=True, errors='coerce')
-            except Exception:
-                pass
-        # Intento 2: columnas comunes
-        for c in ['datetime', 'fecha_hora', 'timestamp', 'fec_hor', 'fechaHora']:
-            if c in df.columns:
-                s = pd.to_datetime(df[c], dayfirst=True, errors='coerce')
-                if s.notna().any():
-                    return s
-        # Intento 3: solo fecha
-        if 'fecha' in df.columns:
-            s = pd.to_datetime(df['fecha'], dayfirst=True, errors='coerce')
-            return s
-        return pd.Series(pd.NaT, index=df.index)
+def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
 
     def _fmt_hms(total_seconds):
         try:
