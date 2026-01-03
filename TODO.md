@@ -30,6 +30,14 @@
 - Limpieza local en el monolito: se eliminaron ~70 líneas de helpers duplicados; todas las referencias se mantienen vía imports directos.
 - Validación paranoica: `python -m py_compile tz_core/time_utils.py tz_core/dataframe_utils.py script_principal_bitacoras_refactory.py` + `pytest tests/unit/test_config_manager.py -q` (13 tests OK) + smoke manual del script principal (usuario) → ✅.
 
+## ✅ EPIC 16D: COALESCE DE COLUMNAS DUPLICADAS MODULAR (03/01/2026)
+
+**Log de avance:**
+- `_coalesce_duplicates` se convirtió en `coalesce_duplicates` dentro de `tz_core/dataframe_utils.py` con alias legacy; ahora acepta `original_columns` para preservar el orden original tras el mapeo.
+- El monolito deja de definir la función inline y simplemente invoca el helper modular para fusionar columnas duplicadas cuando `MANUAL_QC_MAPPING` está desactivado.
+- `tz_core.__init__` exporta el nuevo helper; se limpió el bloque instructivo comentado en el script.
+- Validaciones: `python -m py_compile tz_core/dataframe_utils.py script_principal_bitacoras_refactory.py` + `pytest tests/unit/test_config_manager.py -q` (13 tests OK) + smoke manual del script principal (usuario).
+
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 
 **UNIFICACIÓN KML: kml_generador.py → tz_core/kml_generator.py (ARQUITECTURA LIMPIA)**

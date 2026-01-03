@@ -321,7 +321,7 @@ from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix
 from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
-from tz_core.dataframe_utils import dedupe_columns, _pick_col
+from tz_core.dataframe_utils import dedupe_columns, _pick_col, _coalesce_duplicates
 from tz_core.analytics import construir_seccion_todos_contactos, generar_historial_cambios_antena
 from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo_a_salida
 
@@ -3530,78 +3530,16 @@ def main():
     if not MANUAL_QC_MAPPING and rename_map:
         df = df.rename(columns=rename_map)
 
-        # === DEDUP/COALESCE DE COLUMNAS DUPLICADAS (post-rename) =====================
-        def _coalesce_duplicates(df: pd.DataFrame, prefer: list[str] | None = None) -> pd.DataFrame:
-            """
-            Si quedaron columnas duplicadas tras el rename (p.ej. 2 columnas 'hora'),
-            coalescea fila por fila tomando el primer valor "no vacío" y elimina duplicadas.
-            'prefer' permite dar un orden de preferencia por nombre exacto de columna original.
-            """
-            import numpy as np
-
-            prefer = prefer or []
-            cols = list(df.columns)
-            seen = set()
-            for col in cols:
-                if col in seen:
-                    continue
-                # ¿Cuántas veces aparece este nombre?
-                idxs = [i for i, c in enumerate(cols) if c == col]
-                if len(idxs) <= 1:
-                    seen.add(col)
-                    continue
-
-                # Armar lista de nombres "con sufijo posición" para poder ordenarlos por preferencia
-                dup_names = [df.columns[i] for i in idxs]  # todos se llaman igual, pero usamos posiciones
-                # Orden: primero los que estén en 'prefer' (si alguno matchea exactamente), luego el resto
-                def _rank(n):
-                    try:
-                        return prefer.index(n)
-                    except ValueError:
-                        return len(prefer)
-                # Nota: aunque todos se llamen igual, pandas conserva el orden original; usamos ese orden más 'prefer'
-                sub = [df.iloc[:, i] for i in idxs]
-                # Coalesce fila por fila: primer valor que no sea vacío/"Sin Inf."/NaN
-                def _clean_series(s: pd.Series) -> pd.Series:
-                    s2 = s.astype(object).copy()
-                    # normalizamos "vacío"
-                    inv = {"", "sin inf", "sin inf.", "nan", "none", "null", "s/i"}
-                    s2 = s2.where(~s2.astype(str).str.strip().str.lower().isin(inv), None)
-                    return s2
-
-                base = None
-                for ser in sub:
-                    s = _clean_series(ser)
-                    if base is None:
-                        base = s
-                    else:
-                        mask = (base.isna()) | (base.astype(str).str.strip() == "")
-                        base = base.where(~mask, s)
-
-                # Asignamos columna coalescida y eliminamos duplicadas extras
-                df[col] = base
-                # eliminar las otras instancias (dejamos la primera posición)
-                drop_pos = idxs[1:]
-                df = df.drop(columns=[cols[i] for i in drop_pos])
-                # recomputar lista de columnas tras drop (unión: originales + actuales)
-                cols = list(dict.fromkeys(cols_originales + list(df.columns)))
-
-                seen.add(col)
-
-            return df
-
-        # Si en tu archivo original había una llamada inmediata a _coalesce_duplicates(...),
-        # cortala de donde estaba y pegala aquí debajo, indentada dentro del 'if'.
-        # Ejemplo (mantén tus parámetros tal cual):
-        # df = _coalesce_duplicates(df, prefer=[...])
-
     else:
         print("[QC] Sin renombrar encabezados ni coalesce (QC manual activo).")
 
-        
-        # Ejecutar dedup/coalesce con preferencia ligera (por si te interesa priorizar algún origen)
-        if not MANUAL_QC_MAPPING:
-            df = _coalesce_duplicates(df, prefer=["hora", "fecha", "lat", "long", "lon", "azimut", "tel", "imei", "antena"])
+    # Ejecutar dedup/coalesce con preferencia ligera (por si te interesa priorizar algún origen)
+    if not MANUAL_QC_MAPPING:
+        df = _coalesce_duplicates(
+            df,
+            prefer=["hora", "fecha", "lat", "long", "lon", "azimut", "tel", "imei", "antena"],
+            original_columns=cols_originales,
+        )
 
              # WIZARD (esenciales + selector de UBICACIÓN) y persistencia de sinónimos (modo estricto)
     try:

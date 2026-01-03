@@ -54,8 +54,10 @@ from .time_utils import (
 from .dataframe_utils import (
     dedupe_columns,
     pick_first_existing_column,
+    coalesce_duplicates,
     _dedupe_columns,
     _pick_col,
+    _coalesce_duplicates,
 )
 
 # validation_utils - Funciones de validación extraídas para modularización
