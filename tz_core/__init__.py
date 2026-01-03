@@ -75,3 +75,11 @@ from .text_utils import (
     normalizar_texto,
     normalizar_columnas_texto
 )
+
+# time_filters - Helpers interactivos para filtros temporales
+from .time_filters import (
+    solicitar_filtros_tiempo,
+    aplicar_filtros_tiempo,
+    _solicitar_filtros_tiempo,
+    _aplicar_filtros_tiempo,
+)

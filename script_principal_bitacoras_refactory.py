@@ -110,6 +110,10 @@ from tz_core.html_generator import (
     build_identification_rows,
     build_top_contacts_sections,
 )
+from tz_core.time_filters import (
+    _solicitar_filtros_tiempo,
+    _aplicar_filtros_tiempo,
+)
 # --- Helpers de hora y carpetas/rangos (Preset A SV) ---
 from datetime import time as _time
 
@@ -4938,121 +4942,6 @@ def main():
 
     except Exception as e:
         print(f"[ERROR] Bloque HTML/KML falló: {e}")
-def _solicitar_filtros_tiempo():
-    """
-    Devuelve un dict con claves:
-      {"tipo": "dia"|"rango_dias"|"rango_horas_dia"|"rango_horas",
-       "dia": "dd/mm/yyyy" | None,
-       "desde": "dd/mm/yyyy" | None,
-       "hasta": "dd/mm/yyyy" | None,
-       "hora_ini": "HH:MM:SS" | None,
-       "hora_fin": "HH:MM:SS" | None}
-    Si el usuario pulsa Enter en todo, retorna None (sin filtros).
-    """
-    print("\nSeleccione el filtro de tiempo:")
-    print("[1] Día específico")
-    print("[2] Rango de días")
-    print("[3] Rango de horas en un día específico")
-    print("[4] Rango de horas (aplicado a todos los días)")
-    resp = input("Opción (1/2/3/4, Enter=sin filtro): ").strip()
-    if resp not in ("1","2","3","4"):
-        return None
-    if resp == "1":
-        d = input("Ingrese el día (dd/mm/yyyy): ").strip()
-        return {"tipo":"dia","dia":d, "desde":None,"hasta":None,"hora_ini":None,"hora_fin":None}
-    if resp == "2":
-        d1 = input("Desde (dd/mm/yyyy): ").strip()
-        d2 = input("Hasta (dd/mm/yyyy): ").strip()
-        return {"tipo":"rango_dias","dia":None,"desde":d1,"hasta":d2,"hora_ini":None,"hora_fin":None}
-    if resp == "3":
-        d = input("Día (dd/mm/yyyy): ").strip()
-        h1 = input("Hora inicio (HH:MM, Enter=usar presets SV): ").strip()
-        h2 = input("Hora fin (HH:MM, Enter=usar presets SV): ").strip()
-        h1 = (h1 + ":00") if (h1 and len(h1)==5) else (h1 if h1 else None)
-        h2 = (h2 + ":00") if (h2 and len(h2)==5) else (h2 if h2 else None)
-        return {"tipo":"rango_horas_dia","dia":d,"desde":None,"hasta":None,"hora_ini":h1,"hora_fin":h2}
-    if resp == "4":
-        h1 = input("Hora inicio (HH:MM, Enter=usar presets SV): ").strip()
-        h2 = input("Hora fin (HH:MM, Enter=usar presets SV): ").strip()
-        h1 = (h1 + ":00") if (h1 and len(h1)==5) else (h1 if h1 else None)
-        h2 = (h2 + ":00") if (h2 and len(h2)==5) else (h2 if h2 else None)
-        return {"tipo":"rango_horas","dia":None,"desde":None,"hasta":None,"hora_ini":h1,"hora_fin":h2}
-
-def _aplicar_filtros_tiempo(df, filtros):
-    """
-    Aplica los filtros al DataFrame según el dict de _solicitar_filtros_tiempo().
-    Devuelve: (df_filtrado, resumen_texto).
-    """
-    if not filtros:
-        return df, "Sin filtro de tiempo"
-
-    tipo = filtros.get("tipo")
-    resumen = ""
-
-    # Normalizar fecha (f) y hora (h)
-    f = pd.to_datetime(df["fecha"], dayfirst=True, errors="coerce") if "fecha" in df.columns else None
-    h = pd.to_timedelta(df["hora"].astype(str), errors="coerce") if "hora" in df.columns else None
-
-    # Máscara base
-    mask = pd.Series([True]*len(df), index=df.index)
-
-    if tipo == "dia" and f is not None:
-        try:
-            d = pd.to_datetime(filtros.get("dia"), dayfirst=True, errors="coerce").normalize()
-            mask &= (f.dt.normalize() == d)
-            resumen = f"Día: {filtros.get('dia')}"
-        except Exception:
-            pass
-
-    elif tipo == "rango_dias" and f is not None:
-        d1 = pd.to_datetime(filtros.get("desde"), dayfirst=True, errors="coerce")
-        d2 = pd.to_datetime(filtros.get("hasta"), dayfirst=True, errors="coerce")
-        if pd.notna(d1): d1 = d1.normalize()
-        if pd.notna(d2): d2 = d2.normalize()
-        if pd.notna(d1): mask &= (f.dt.normalize() >= d1)
-        if pd.notna(d2): mask &= (f.dt.normalize() <= d2)
-        resumen = f"Rango de días: {filtros.get('desde')} → {filtros.get('hasta')}"
-
-    elif tipo == "rango_horas_dia" and (f is not None) and (h is not None):
-        # Día específico + rango de horas (maneja cruce de medianoche)
-        d = pd.to_datetime(filtros.get("dia"), dayfirst=True, errors="coerce")
-        h1 = filtros.get("hora_ini")
-        h2 = filtros.get("hora_fin")
-        if pd.notna(d) and h1 and h2:
-            try:
-                d = d.normalize()
-                t1 = pd.to_timedelta(h1)
-                t2 = pd.to_timedelta(h2)
-                mask &= (f.dt.normalize() == d)
-                if t1 <= t2:
-                    mask &= (h >= t1) & (h <= t2)
-                else:
-                    mask &= (h >= t1) | (h <= t2)
-                resumen = f"Rango de horas en día {filtros.get('dia')}: {h1} → {h2}"
-            except Exception:
-                resumen = "Rango de horas en día (entrada inválida, sin filtrar)"
-
-    elif tipo == "rango_horas" and h is not None:
-        # Rango de horas aplicado a todos los días (maneja cruce de medianoche)
-        h1 = filtros.get("hora_ini")
-        h2 = filtros.get("hora_fin")
-        if h1 and h2:
-            try:
-                t1 = pd.to_timedelta(h1)
-                t2 = pd.to_timedelta(h2)
-                if t1 <= t2:
-                    mask &= (h >= t1) & (h <= t2)
-                else:
-                    mask &= (h >= t1) | (h <= t2)
-                resumen = f"Rango de horas: {h1} → {h2}"
-            except Exception:
-                resumen = "Rango de horas (entrada inválida, sin filtrar)"
-        else:
-            resumen = "Rango de horas (usando presets SV)"
-
-    df2 = df.loc[mask].copy()
-    return df2, resumen
-
 if __name__ == "__main__":
     bootstrap_config()
 
