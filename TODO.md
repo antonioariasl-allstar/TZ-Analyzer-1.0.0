@@ -46,6 +46,7 @@
 - `build_schema_synonym_map` vive en `tz_core/schema_utils.py` para generar `syn2target` reutilizable; el monolito lo importa y elimina el loop manual.
 - `apply_schema_renames` en `tz_core/dataframe_utils.py` encapsula el mapeo exacto + fuzzy y respeta `MANUAL_QC_MAPPING`; `_construir_seccion_interacciones` usa el helper para reducir ruido.
 - Validaciones paranoicas: `python -m py_compile script_principal_bitacoras_refactory.py tz_core/text_utils.py tz_core/schema_utils.py tz_core/dataframe_utils.py` + `.venv312\Scripts\python.exe -m pytest tests/unit/test_config_manager.py -q` (13 tests OK).
+- [03/01/2026] `_has_location_ok` y `_need_fields` se movieron literal a `tz_core/schema_utils.py` como `has_location_coverage` y `collect_missing_required_fields`; el monolito ahora importa los helpers sin alterar el flujo del wizard (QC confirmado en smoke rápido).
 
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 

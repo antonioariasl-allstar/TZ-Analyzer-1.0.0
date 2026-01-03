@@ -94,7 +94,11 @@ from .text_utils import (
 )
 
 # schema_utils - Helpers de schema/sinónimos
-from .schema_utils import build_schema_synonym_map
+from .schema_utils import (
+    build_schema_synonym_map,
+    has_location_coverage,
+    collect_missing_required_fields,
+)
 
 # time_filters - Helpers interactivos para filtros temporales
 from .time_filters import (

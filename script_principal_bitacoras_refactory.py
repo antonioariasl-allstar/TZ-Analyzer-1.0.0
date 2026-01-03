@@ -322,7 +322,11 @@ from tz_core.text_utils import (
     _fix_mojibake_text,
     normalize_header_key,
 )
-from tz_core.schema_utils import build_schema_synonym_map
+from tz_core.schema_utils import (
+    build_schema_synonym_map,
+    has_location_coverage,
+    collect_missing_required_fields,
+)
 from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
@@ -3533,34 +3537,12 @@ def main():
 
         present = set(cols)
 
-        def _has_location_ok():
-            return any(all((_target_alias.get(a, a)) in present for a in alt) for alt in location_alts)
-
-        def _need_fields():
-            req = set()
-            # sujeto
-            req.add("imei" if subject_mode == "imei" else "tel")
-            # tiempo
-            if "timestamp" in present:
-                req.add("timestamp")
-            else:
-                req.update(["fecha","hora"])
-            # contacto/interaccion
-            req.update(["contacto","interaccion"])
-            # ubicación (si no está completa, pediremos luego)
-            # respetar required/required_mode del schema
-            for k, meta in fields_meta.items():
-                tgt = _target_alias.get(k, k)
-                if meta.get("required") is True:
-                    req.add(tgt)
-                if str(meta.get("required_mode","")).lower() == subject_mode:
-                    req.add(tgt)
-            # faltantes fuera de ubicación
-            faltan = [f for f in req if f not in present]
-            return faltan
-
         # 3) Si falta ubicación completa, NO preguntar (modo QC manual)
-        if not _has_location_ok():
+        if not has_location_coverage(
+            present,
+            location_alts,
+            _target_alias,
+        ):
             if MANUAL_QC_MAPPING:
                 print("\n[WIZARD] Falta UBICACIÓN → modo asistido desactivado. Usando 'lat + long' automáticamente (QC).")
                 choice = None  # QC manual: se mapea lat/lon dentro del wizard QC, no aquí
@@ -3612,7 +3594,12 @@ def main():
                     pass
 
        # 4) Resolver otros esenciales faltantes (no-ubicación)
-        missing = _need_fields()
+        missing = collect_missing_required_fields(
+            present,
+            subject_mode=subject_mode,
+            fields_meta=fields_meta,
+            target_alias=_target_alias,
+        )
         if missing:
             if MANUAL_QC_MAPPING:
                 print("\n[WIZARD] QC activo: faltan canónicos esenciales (no se pedirá aquí):", ", ".join(missing))
