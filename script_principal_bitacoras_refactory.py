@@ -55,7 +55,6 @@ import os
 import re
 import shutil
 import sys
-import unicodedata
 import logging
 import traceback
 import io
@@ -317,7 +316,12 @@ from tz_core.config_loader import (
 # Alias de compatibilidad para funciones de sinónimos usadas en el monolito
 _normalize_key_for_synonyms = normalize_key_for_synonyms
 from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
-from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix_mojibake_text
+from tz_core.text_utils import (
+    normalizar_texto,
+    normalizar_columnas_texto,
+    _fix_mojibake_text,
+    normalize_header_key,
+)
 from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
@@ -327,6 +331,9 @@ from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo
 
 # Importar constantes desde tz_core para consistencia
 RANGOS_SV = RANGOS_SV_MODULAR
+
+# Alias de compatibilidad para normalización de encabezados
+_norm_head = normalize_header_key
 
 # === CONFIG & GLOBALS ===
 
@@ -3467,15 +3474,7 @@ def main():
     # - Usa sinónimos del config
     # - Normaliza sinónimos igual que las columnas (lower, sin acentos, separadores -> _)
     # - Fuzzy (difflib) para casos no exactos
-    import difflib, re, unicodedata
-
-    def _norm_head(x: str) -> str:
-        x = str(x or "").strip()
-        x = unicodedata.normalize("NFD", x).encode("ascii", "ignore").decode("ascii")
-        x = x.lower()
-        x = re.sub(r"[\s\-\/\.]+", "_", x)   # igual que arriba
-        x = re.sub(r"__+", "_", x).strip("_")
-        return x
+    import difflib
 
     schema_fields = {}
     try:
@@ -3543,14 +3542,6 @@ def main():
 
              # WIZARD (esenciales + selector de UBICACIÓN) y persistencia de sinónimos (modo estricto)
     try:
-        import json, unicodedata, re, difflib, sys
-
-        def _norm_head_local(x):
-            x = unicodedata.normalize("NFD", str(x)).encode("ascii","ignore").decode("ascii")
-            x = x.lower()
-            x = re.sub(r"[\s\-\/\.]+","_", x)
-            x = re.sub(r"__+","_", x).strip("_")
-            return x
 
         # 1) Schema y alias
         SCHEMA = (CONFIG.get("schema") or {})

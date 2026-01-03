@@ -100,6 +100,22 @@ def _aplicar_reemplazos_regex(s: str, reglas_regex: Optional[List] = None) -> st
     return s
 
 
+def normalize_header_key(value: Any) -> str:
+    """Normaliza encabezados/aliases para comparaciones canónicas."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = unicodedata.normalize("NFD", text)
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = text.lower()
+    text = re.sub(r"[\s\-\/\.]+", "_", text)
+    return re.sub(r"__+", "_", text).strip("_")
+
+
+def _norm_head(value: Any) -> str:  # pragma: no cover
+    return normalize_header_key(value)
+
+
 def normalizar_texto(s: Any, reglas: Optional[Dict[str, str]] = None) -> Any:
     """Arregla mojibake, normaliza Unicode y aplica abreviaturas/reglas (regex o literales).
     

@@ -38,6 +38,13 @@
 - `tz_core.__init__` exporta el nuevo helper; se limpió el bloque instructivo comentado en el script.
 - Validaciones: `python -m py_compile tz_core/dataframe_utils.py script_principal_bitacoras_refactory.py` + `pytest tests/unit/test_config_manager.py -q` (13 tests OK) + smoke manual del script principal (usuario).
 
+## 🚧 EPIC 16E: LIMPIEZA WIZARD – NORMALIZACIÓN (03/01/2026)
+
+**Log de avance:**
+- Nuevo helper `normalize_header_key` en `tz_core/text_utils.py` (con alias `_norm_head`) centraliza la normalización ASCII/lower/underscores de encabezados.
+- `_construir_seccion_interacciones` deja de definir versiones locales (`_norm_head`, `_norm_head_local`) y reutiliza el helper modular en todo el flujo de schema/wizard.
+- Validaciones paranoicas: `python -m py_compile script_principal_bitacoras_refactory.py tz_core/text_utils.py` + `.venv312\Scripts\python.exe -m pytest tests/unit/test_config_manager.py -q` (13 tests OK).
+
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 
 **UNIFICACIÓN KML: kml_generador.py → tz_core/kml_generator.py (ARQUITECTURA LIMPIA)**
