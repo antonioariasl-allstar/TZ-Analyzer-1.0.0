@@ -16,14 +16,8 @@ Architecture: TZ-Analyzer Professional v1.0.0
 """
 
 # Imports necesarios para construir_seccion_interacciones
-import getpass
 import json
-import os
-import platform
 import re
-import sys
-import time
-from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -41,6 +35,7 @@ from tz_core.html_helpers import (
     luhn_check,
     is_valid_imei,
 )
+from tz_core.runtime_utils import collect_env_snapshot
 
 def generate_html_header(theme_hex: str, nombre_salida: str) -> str:
     """
@@ -1421,31 +1416,6 @@ def _construir_seccion_todos_contactos(df, columnas_config=None):
     return contactos_modular(df, columnas_config)
 
 
-def _collect_runtime_snapshot(config: dict | None = None) -> dict[str, str]:
-    """Devuelve metadatos básicos del entorno de ejecución para trazabilidad HTML."""
-    cfg = config or {}
-    brand = cfg.get("brand") or {}
-    try:
-        tzname = time.tzname[0]
-    except Exception:
-        tzname = "UTC"
-    try:
-        usuario = getpass.getuser()
-    except Exception:
-        usuario = ""
-
-    return {
-        "so": f"{platform.system()} {platform.release()}".strip(),
-        "python": sys.version.split()[0],
-        "tz": tzname,
-        "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "tz_analysis": cfg.get("version") or brand.get("version") or "sin_version",
-        "version_config": cfg.get("version_config") or "sin_version",
-        "hostname": platform.node() or "",
-        "usuario": usuario,
-    }
-
-
 def _build_meta_block(snapshot: dict[str, str], modo: str, mostrar_versiones: bool) -> str:
     """Construye el bloque HTML con la información técnica configurable."""
     etiquetas = [
@@ -1525,7 +1495,7 @@ def inject_technical_metadata(html_path: str, config: dict | None = None) -> boo
     if "metainfo meta-tecnica" in html:
         return False
 
-    snapshot = _collect_runtime_snapshot(config)
+    snapshot = collect_env_snapshot(config)
     modo = (meta_cfg.get("modo") or "minimo").lower()
     block = _build_meta_block(snapshot, modo, bool(meta_cfg.get("mostrar_versiones", False)))
     if not block:

@@ -112,3 +112,6 @@ from .time_filters import (
     _solicitar_filtros_tiempo,
     _aplicar_filtros_tiempo,
 )
+
+# runtime_utils - Metadata del entorno de ejecucion
+from .runtime_utils import collect_env_snapshot
