@@ -275,3 +275,38 @@ def _es_columna_valida_para(
         return True, ""
 
     return True, ""
+
+
+def preview_column_mapping(
+    serie,
+    source_name: str,
+    target_name: str,
+    *,
+    muestras_fn: Callable[[Any, int], list[str]] = _muestras_columna,
+    validator_fn: Callable[[str, Any], tuple[bool, str]] = _es_columna_valida_para,
+    input_fn: Optional[Callable[[str], str]] = None,
+    output_fn: Optional[Callable[[str], None]] = None,
+    sample_size: int = 5,
+):
+    """Muestra valores y confirma con el usuario antes de mapear una columna."""
+
+    input_cb = input_fn or input  # type: ignore[arg-type]
+    output_cb = output_fn or print
+
+    samples = muestras_fn(serie, n=sample_size)
+    output_cb(f"\n[WIZARD] Previsualización de '{source_name}' para mapear a '{target_name}':")
+    for idx, value in enumerate(samples, 1):
+        output_cb(f"   {idx}. {value}")
+
+    ok_tipo, motivo = validator_fn(target_name, serie)
+    if not ok_tipo:
+        output_cb(f"[WIZARD] Esta columna no parece ser '{target_name}': {motivo}")
+        output_cb("Volvé a elegir otra columna para este canónico.")
+        return False
+
+    resp = (input_cb(f"[CONFIRMAR] ¿Seguro que '{source_name}' → '{target_name}'? (S/N): ") or "").strip().lower()
+    if resp not in ("s", "si", "sí"):
+        output_cb("Cancelado. Elegí otra columna.")
+        return False
+
+    return True

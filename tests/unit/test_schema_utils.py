@@ -8,6 +8,7 @@ from tz_core.schema_utils import (
     has_location_coverage,
     collect_missing_required_fields,
     ensure_placeholder_columns,
+    preview_column_mapping,
     _en_bbox_sv,
     _es_columna_valida_para,
 )
@@ -153,3 +154,39 @@ class TestEnsurePlaceholderColumns:
         assert added == ["abonado_final"]
         assert "abonado_final" in df.columns
         assert (df["abonado_final"] == "N/A").all()
+
+
+class TestPreviewColumnMapping:
+    def test_confirma_mapeo_tras_preview(self):
+        serie = pd.Series(["1", "2"])
+        salidas: list[str] = []
+
+        result = preview_column_mapping(
+            serie,
+            "col_src",
+            "tel",
+            muestras_fn=lambda s, n: ["a", "b"],
+            validator_fn=lambda canon, _: (True, ""),
+            input_fn=lambda _: "s",
+            output_fn=salidas.append,
+        )
+
+        assert result is True
+        assert any("Previsualización" in linea for linea in salidas)
+
+    def test_rechaza_al_no_validar_tipo(self):
+        serie = pd.Series(["x"])
+        salidas: list[str] = []
+
+        result = preview_column_mapping(
+            serie,
+            "col_src",
+            "tel",
+            muestras_fn=lambda s, n: ["x"],
+            validator_fn=lambda canon, _: (False, "motivo"),
+            input_fn=lambda _: "s",
+            output_fn=salidas.append,
+        )
+
+        assert result is False
+        assert any("motivo" in linea for linea in salidas)

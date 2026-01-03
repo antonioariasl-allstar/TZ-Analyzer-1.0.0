@@ -100,6 +100,7 @@ from .schema_utils import (
     collect_missing_required_fields,
     prep_meta_unicos,
     ensure_placeholder_columns,
+    preview_column_mapping,
     _muestras_columna,
     _es_numero,
     _en_bbox_sv,

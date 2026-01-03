@@ -228,6 +228,29 @@ def log(msg: str):
     _log_impl(msg)
 
 
+def _apply_qc_placeholders(
+    df: pd.DataFrame,
+    missing_fields,
+    cols_originales,
+    target_alias,
+    *,
+    logger=log,
+):
+    """Rellena placeholders 'SinInf' y devuelve listas refrescadas para QC manual."""
+
+    ensure_placeholder_columns(
+        df,
+        missing_fields,
+        placeholder="SinInf",
+        target_alias=target_alias,
+        logger=logger,
+    )
+
+    cols = list(dict.fromkeys(cols_originales + list(df.columns)))
+    present = set(cols)
+    return cols, present
+
+
 # =========================
 # Fallbacks de importación
 # =========================
@@ -329,6 +352,7 @@ from tz_core.schema_utils import (
     collect_missing_required_fields,
     prep_meta_unicos,
     ensure_placeholder_columns,
+    preview_column_mapping,
     _muestras_columna,
     _es_numero,
     _en_bbox_sv,
@@ -3619,16 +3643,13 @@ def main():
             if MANUAL_QC_MAPPING:
                 print("\n[WIZARD] QC activo: faltan canónicos esenciales (no se pedirá aquí):", ", ".join(missing))
                 # No abortamos ni preguntamos; dejamos marcadores para que el pipeline no truene.
-                ensure_placeholder_columns(
+                cols, present = _apply_qc_placeholders(
                     df,
                     missing,
-                    placeholder="SinInf",
-                    target_alias=_target_alias,
+                    cols_originales,
+                    _target_alias,
                     logger=log,
                 )
-                # refrescar listas internas
-                cols = list(dict.fromkeys(cols_originales + list(df.columns)))
-                present = set(cols)
             else:
                 print("\n[WIZARD] Faltan campos esenciales:", ", ".join(missing))
                 print("Elegí la columna correspondiente (número). Enter = saltar.\nColumnas disponibles:")
@@ -3717,21 +3738,16 @@ def main():
                                 src = cols_list[k-1]
                                 # === WIZARD: MAPEO ROBUSTO CON PREVIEW + CHECKS (inicio) ===================
                                 if src != colname and src in _df.columns:
-                                    # 1) Vista previa de muestras y validación por tipo
-                                    smps = _muestras_columna(_df[src], n=5)
-                                    print(f"\n[WIZARD] Previsualización de '{src}' para mapear a '{colname}':")
-                                    for i, v in enumerate(smps, 1):
-                                        print(f"   {i}. {v}")
-                                    ok_tipo, motivo = _es_columna_valida_para(colname, _df[src])
-                                    if not ok_tipo:
-                                        print(f"[WIZARD] Esta columna no parece ser '{colname}': {motivo}")
-                                        print("Volvé a elegir otra columna para este canónico.")
-                                        return None  # aborta esta selección, se vuelve al menú
-
-                                    # 2) Doble confirmación anti-error de dedo
-                                    resp = input(f"[CONFIRMAR] ¿Seguro que '{src}' → '{colname}'? (S/N): ").strip().lower()
-                                    if resp not in ("s", "si", "sí"):
-                                        print("Cancelado. Elegí otra columna.")
+                                    confirmado = preview_column_mapping(
+                                        _df[src],
+                                        src,
+                                        colname,
+                                        muestras_fn=_muestras_columna,
+                                        validator_fn=_es_columna_valida_para,
+                                        input_fn=input,
+                                        output_fn=print,
+                                    )
+                                    if not confirmado:
                                         return None
 
                                     # 3) Conflictos con synonyms_user (si ya apuntaba a otro canónico)
