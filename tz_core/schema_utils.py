@@ -1,5 +1,8 @@
 """Helpers relacionados con schema/aliasado de columnas para TZ Analyzer."""
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional
+import re
+
+import pandas as pd
 
 from .text_utils import normalize_header_key
 from .logging_utils import log as core_log
@@ -156,3 +159,85 @@ def prep_meta_unicos(
                     pass
 
     return df
+
+
+def _muestras_columna(serie, n: int = 5) -> list[str]:
+    """Devuelve una vista previa de hasta *n* valores no vacíos de la serie."""
+
+    try:
+        vals = [str(v) for v in serie.dropna().astype(str).head(n).tolist()]
+        if not vals:
+            vals = ["(sin datos visibles)"]
+        return vals
+    except Exception:
+        return ["(error al leer muestras)"]
+
+
+def _es_numero(valor: Any) -> bool:
+    """Indica si el valor puede interpretarse como número (permite coma decimal)."""
+
+    try:
+        float(str(valor).replace(",", "."))
+        return True
+    except Exception:
+        return False
+
+
+def _en_bbox_sv(lat: Any, lon: Any, bbox: Optional[Mapping[str, float]] = None) -> bool:
+    """Valida si una coordenada cae dentro del bounding box de SV (o el provisto)."""
+
+    fallback_bbox = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
+    bbox_ok = isinstance(bbox, Mapping) and all(k in bbox for k in fallback_bbox)
+    bbox = bbox if bbox_ok else fallback_bbox
+
+    try:
+        lat = float(lat)
+        lon = float(lon)
+        if abs(lat) < 1e-9 and abs(lon) < 1e-9:
+            return False
+        return bbox["lat_min"] <= lat <= bbox["lat_max"] and bbox["lon_min"] <= lon <= bbox["lon_max"]
+    except Exception:
+        return False
+
+
+def _es_columna_valida_para(
+    canonico: str,
+    serie,
+) -> tuple[bool, str]:
+    """Replica las validaciones heurísticas usadas por el wizard QC."""
+
+    name = (canonico or "").strip().lower()
+    smps = _muestras_columna(serie, n=5)
+
+    if name in {"lat", "long"}:
+        nums = sum(1 for v in smps if _es_numero(v))
+        if nums < max(1, len(smps)):
+            return False, f"La columna para '{canonico}' debería ser numérica; muestras: {', '.join(smps)}"
+        return True, ""
+
+    if name == "hora":
+        pat = re.compile(r"^\d{2}:\d{2}:\d{2}$")
+        ok = sum(1 for v in smps if pat.match(str(v).strip()[:8]) is not None)
+        if ok < max(1, len(smps)):
+            return False, f"Se espera formato HH:MM:SS; muestras: {', '.join(smps)}"
+        return True, ""
+
+    if name == "fecha":
+        conv = pd.to_datetime(pd.Series(smps), errors="coerce", dayfirst=True)
+        if conv.isna().any():
+            return False, f"Algunas muestras no parecen fechas; muestras: {', '.join(smps)}"
+        return True, ""
+
+    if name in {"tel", "contacto", "tel_contacto"}:
+        ok = sum(1 for v in smps if re.search(r"\d{7,}", v) is not None)
+        if ok < max(1, len(smps)):
+            return False, f"Se esperan números telefónicos; muestras: {', '.join(smps)}"
+        return True, ""
+
+    if name in {"azimut", "lac", "celda"}:
+        nums = sum(1 for v in smps if _es_numero(v))
+        if nums < max(1, len(smps)):
+            return False, f"Se esperan valores numéricos; muestras: {', '.join(smps)}"
+        return True, ""
+
+    return True, ""

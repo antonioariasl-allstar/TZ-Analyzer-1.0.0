@@ -99,6 +99,10 @@ from .schema_utils import (
     has_location_coverage,
     collect_missing_required_fields,
     prep_meta_unicos,
+    _muestras_columna,
+    _es_numero,
+    _en_bbox_sv,
+    _es_columna_valida_para,
 )
 
 # time_filters - Helpers interactivos para filtros temporales

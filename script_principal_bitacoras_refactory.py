@@ -327,6 +327,10 @@ from tz_core.schema_utils import (
     has_location_coverage,
     collect_missing_required_fields,
     prep_meta_unicos,
+    _muestras_columna,
+    _es_numero,
+    _en_bbox_sv,
+    _es_columna_valida_para,
 )
 from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
@@ -3657,77 +3661,6 @@ def main():
                 df = dedupe_columns(df)
                 
                 # === WIZARD: HELPERS DE VALIDACIÓN (inicio) ================================
-                def _muestras_columna(serie, n=5):
-                    try:
-                        vals = [str(v) for v in serie.dropna().astype(str).head(n).tolist()]
-                        if not vals:
-                            vals = ["(sin datos visibles)"]
-                        return vals
-                    except Exception:
-                        return ["(error al leer muestras)"]
-
-                def _es_numero(x):
-                    try:
-                        float(str(x).replace(",", "."))
-                        return True
-                    except Exception:
-                        return False
-
-                def _en_bbox_sv(lat, lon):
-                    try:
-                        bbox = (CONFIG or {}).get("geografia", {}).get("sv_bbox", None)
-                        if not (isinstance(bbox, dict) and all(k in bbox for k in ("lat_min","lat_max","lon_min","lon_max"))):
-                            bbox = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
-                        lat = float(lat); lon = float(lon)
-                        if abs(lat) < 1e-9 and abs(lon) < 1e-9:
-                            return False
-                        return (bbox["lat_min"] <= lat <= bbox["lat_max"]) and (bbox["lon_min"] <= lon <= bbox["lon_max"])
-                    except Exception:
-                        return False
-
-                def _es_columna_valida_para(canonico: str, serie) -> tuple[bool, str]:
-                    """
-                    Reglas mínimas por tipo canónico. Devuelve (ok, motivo_si_falla).
-                    """
-                    name = (canonico or "").strip().lower()
-                    smps = _muestras_columna(serie, n=5)
-
-                    if name in {"lat", "long"}:
-                        # pedimos 5/5 numéricos; si ambos existen, validamos bbox con pares lat/long si están en el df
-                        nums = sum(1 for v in smps if _es_numero(v))
-                        if nums < max(1, len(smps)):  # al menos todo lo que se ve debe ser numérico
-                            return False, f"La columna para '{canonico}' debería ser numérica; muestras: {', '.join(smps)}"
-                        return True, ""
-
-                    if name == "hora":
-                        pat = re.compile(r"^\d{2}:\d{2}:\d{2}$")
-                        ok = sum(1 for v in smps if pat.match(str(v).strip()[:8]) is not None)
-                        if ok < max(1, len(smps)):
-                            return False, f"Se espera formato HH:MM:SS; muestras: {', '.join(smps)}"
-                        return True, ""
-
-                    if name == "fecha":
-                        conv = pd.to_datetime(pd.Series(smps), errors="coerce", dayfirst=True)
-                        if conv.isna().any():
-                            return False, f"Algunas muestras no parecen fechas; muestras: {', '.join(smps)}"
-                        return True, ""
-
-                    if name in {"tel", "contacto", "tel_contacto"}:
-                        # números, +, espacios y guiones tolerados, pero que haya dígitos suficientes
-                        ok = sum(1 for v in smps if re.search(r"\d{7,}", v) is not None)
-                        if ok < max(1, len(smps)):
-                            return False, f"Se esperan números telefónicos; muestras: {', '.join(smps)}"
-                        return True, ""
-
-                    if name in {"azimut", "lac", "celda"}:
-                        nums = sum(1 for v in smps if _es_numero(v))
-                        if nums < max(1, len(smps)):
-                            return False, f"Se esperan valores numéricos; muestras: {', '.join(smps)}"
-                        return True, ""
-
-                    # Por defecto, no bloqueamos
-                    return True, ""
-
                 def _smoke_schema_postmap(df):
                     """
                     Chequeo express después de mapear:
