@@ -322,6 +322,7 @@ from tz_core.text_utils import (
     _fix_mojibake_text,
     normalize_header_key,
 )
+from tz_core.schema_utils import build_schema_synonym_map
 from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
@@ -3496,14 +3497,7 @@ def main():
 
 
     # Construir tabla de sinónimos normalizados -> nombre_canonico_target
-    syn2target = {}
-    for canon, meta in schema_fields.items():
-        target = _target_alias.get(canon, canon)
-        # incluir el propio nombre canonico como sinonimo
-        for s in [canon] + list(meta.get("synonyms", [])):
-            ns = _norm_head(s)
-            if ns:
-                syn2target[ns] = target
+    syn2target = build_schema_synonym_map(schema_fields, target_alias=_target_alias)
 
     # Mapeo exacto primero
     rename_map = {}

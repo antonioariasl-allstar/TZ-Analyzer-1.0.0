@@ -87,8 +87,13 @@ from .text_utils import (
     _fix_mojibake_text,
     _aplicar_reemplazos_regex,
     normalizar_texto,
-    normalizar_columnas_texto
+    normalizar_columnas_texto,
+    normalize_header_key,
+    _norm_head,
 )
+
+# schema_utils - Helpers de schema/sinónimos
+from .schema_utils import build_schema_synonym_map
 
 # time_filters - Helpers interactivos para filtros temporales
 from .time_filters import (

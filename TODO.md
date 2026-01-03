@@ -41,9 +41,8 @@
 ## 🚧 EPIC 16E: LIMPIEZA WIZARD – NORMALIZACIÓN (03/01/2026)
 
 **Log de avance:**
-- Nuevo helper `normalize_header_key` en `tz_core/text_utils.py` (con alias `_norm_head`) centraliza la normalización ASCII/lower/underscores de encabezados.
-- `_construir_seccion_interacciones` deja de definir versiones locales (`_norm_head`, `_norm_head_local`) y reutiliza el helper modular en todo el flujo de schema/wizard.
-- Validaciones paranoicas: `python -m py_compile script_principal_bitacoras_refactory.py tz_core/text_utils.py` + `.venv312\Scripts\python.exe -m pytest tests/unit/test_config_manager.py -q` (13 tests OK).
+- `build_schema_synonym_map` vive en `tz_core/schema_utils.py` para generar `syn2target` reutilizable; el monolito lo importa y elimina el loop manual.
+- Validaciones paranoicas: `python -m py_compile script_principal_bitacoras_refactory.py tz_core/text_utils.py tz_core/schema_utils.py` + `.venv312\Scripts\python.exe -m pytest tests/unit/test_config_manager.py -q` (13 tests OK).
 
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 
