@@ -108,6 +108,7 @@ from tz_core.html_generator import (
     generate_kpi_section,
     build_identification_rows,
     build_top_contacts_sections,
+    inject_technical_metadata,
 )
 from tz_core.time_filters import (
     _solicitar_filtros_tiempo,
@@ -3067,6 +3068,14 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html)
+
+    try:
+        inject_technical_metadata(
+            html_path,
+            CONFIG if 'CONFIG' in globals() and isinstance(CONFIG, dict) else None,
+        )
+    except Exception:
+        pass
 
     # --- HASHES de salida: HTML, KML y KMZ (si existen) ---
     try:

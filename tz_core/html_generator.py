@@ -16,8 +16,15 @@ Architecture: TZ-Analyzer Professional v1.0.0
 """
 
 # Imports necesarios para construir_seccion_interacciones
+import getpass
 import json
+import os
+import platform
 import re
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
 from typing import Optional, Tuple
 
 import pandas as pd
@@ -1412,6 +1419,129 @@ def _construir_seccion_todos_contactos(df, columnas_config=None):
     """Wrapper de compatibilidad - usa tz_core.analytics.construir_seccion_todos_contactos"""
     from tz_core.analytics import construir_seccion_todos_contactos as contactos_modular
     return contactos_modular(df, columnas_config)
+
+
+def _collect_runtime_snapshot(config: dict | None = None) -> dict[str, str]:
+    """Devuelve metadatos básicos del entorno de ejecución para trazabilidad HTML."""
+    cfg = config or {}
+    brand = cfg.get("brand") or {}
+    try:
+        tzname = time.tzname[0]
+    except Exception:
+        tzname = "UTC"
+    try:
+        usuario = getpass.getuser()
+    except Exception:
+        usuario = ""
+
+    return {
+        "so": f"{platform.system()} {platform.release()}".strip(),
+        "python": sys.version.split()[0],
+        "tz": tzname,
+        "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "tz_analysis": cfg.get("version") or brand.get("version") or "sin_version",
+        "version_config": cfg.get("version_config") or "sin_version",
+        "hostname": platform.node() or "",
+        "usuario": usuario,
+    }
+
+
+def _build_meta_block(snapshot: dict[str, str], modo: str, mostrar_versiones: bool) -> str:
+    """Construye el bloque HTML con la información técnica configurable."""
+    etiquetas = [
+        ("Sistema operativo", snapshot.get("so")),
+        ("Python", snapshot.get("python")),
+        ("Zona horaria", snapshot.get("tz")),
+        ("Fecha/hora", snapshot.get("fecha_hora")),
+    ]
+
+    if mostrar_versiones:
+        etiquetas.append(("TZ Analyzer", snapshot.get("tz_analysis")))
+        etiquetas.append(("Versión config", snapshot.get("version_config")))
+
+    if modo == "ampliado":
+        etiquetas.append(("Hostname", snapshot.get("hostname")))
+        etiquetas.append(("Usuario", snapshot.get("usuario")))
+
+    filas = [
+        f'<div class="meta-row"><span class="lbl">{label}:</span> '
+        f'<span class="mono">{value}</span></div>'
+        for label, value in etiquetas
+        if value
+    ]
+
+    if not filas:
+        return ""
+
+    contenido = "".join(filas)
+    return (
+        '<div class="metainfo meta-tecnica" '
+        'style="margin:8px 0 12px 0; padding:10px; border:1px dashed #d1d5db; '
+        'background:#f9fafb; font-size:12px;">'
+        f'<div class="title" style="font-weight:600;margin-bottom:4px;">Metadatos técnicos ({modo})</div>'
+        f"{contenido}"
+        "</div>"
+    )
+
+
+def _inject_block(html: str, block: str) -> tuple[str, bool]:
+    lower_html = html.lower()
+    idx = lower_html.find("<section")
+    while idx != -1:
+        close = html.find(">", idx)
+        if close == -1:
+            break
+        window = lower_html[idx: min(len(lower_html), idx + 200)]
+        if "meta" in window:
+            injected_html = html[:close+1] + "\n" + block + html[close+1:]
+            return injected_html, True
+        idx = lower_html.find("<section", close)
+
+    body_idx = lower_html.find("<body")
+    if body_idx != -1:
+        body_close = html.find(">", body_idx)
+        if body_close != -1:
+            injected_html = html[:body_close+1] + "\n" + block + html[body_close+1:]
+            return injected_html, True
+
+    return html + block, bool(block)
+
+
+def inject_technical_metadata(html_path: str, config: dict | None = None) -> bool:
+    """Inyecta metadatos técnicos en el informe HTML si la configuración lo habilita."""
+    meta_cfg = ((config or {}).get("html") or {}).get("metadatos_tecnicos") or {}
+    if not meta_cfg.get("enabled"):
+        return False
+
+    path = Path(html_path or "")
+    if not path.is_file():
+        return False
+
+    try:
+        html = path.read_text(encoding="utf-8")
+    except Exception:
+        return False
+
+    if "metainfo meta-tecnica" in html:
+        return False
+
+    snapshot = _collect_runtime_snapshot(config)
+    modo = (meta_cfg.get("modo") or "minimo").lower()
+    block = _build_meta_block(snapshot, modo, bool(meta_cfg.get("mostrar_versiones", False)))
+    if not block:
+        return False
+
+    new_html, injected = _inject_block(html, block)
+    if not injected:
+        return False
+
+    try:
+        path.write_text(new_html, encoding="utf-8")
+        log("[meta] Metadatos técnicos inyectados (según config).")
+    except Exception:
+        return False
+
+    return True
 
 
 
