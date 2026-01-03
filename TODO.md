@@ -51,9 +51,10 @@
 - [03/01/2026] Los helpers `_muestras_columna`, `_es_numero`, `_en_bbox_sv` y `_es_columna_valida_para` viven ahora en `tz_core/schema_utils`; el wizard los importa directo y se evita duplicar validaciones locales.
 - [03/01/2026] `inject_technical_metadata` se consolidó en `tz_core/html_generator.py` junto con `_build_meta_block`/`_inject_block`; el monolito solo pasa el HTML generado y recibe la salida con metadata técnica.
 - [03/01/2026] Nuevo módulo `tz_core/runtime_utils.collect_env_snapshot` agrupa versión de tz_cli/tz_core, datos de Python/OS y timestamp para reutilizar en reportes/logging; exportado via `tz_core.__init__`.
-- [03/01/2026] `tests/unit/test_schema_utils.py` cubre 16 escenarios (sinónimos, campos requeridos, cobertura bbox y validación de columnas) asegurando que los helpers de schema extraídos sigan comportándose igual que el wizard.
+- [03/01/2026] `tests/unit/test_schema_utils.py` cubre 18 escenarios (sinónimos, placeholders, cobertura bbox y validación de columnas) asegurando que los helpers de schema extraídos sigan comportándose igual que el wizard.
 - [03/01/2026] `tests/unit/test_html_generator.py` suma 7 pruebas para `inject_technical_metadata`, `_build_meta_block`, `_inject_block` y `collect_env_snapshot`, garantizando configuraciones deterministas antes de tocar `_wizard_qc_mapeo`.
-- [TODO] Faltan dos bloques de riesgo medio: (1) helpers de persistencia `SinInf`/placeholders para wizard QC y (2) rutina de muestreo previo a `_wizard_qc_mapeo`. Requieren extracción gradual + smoke manual.
+- [03/01/2026] Nuevo helper `tz_core.schema_utils.ensure_placeholder_columns` reemplaza el rellenado inline de "SinInf" en QC manual; el wizard solo delega y refresca sus estructuras internas.
+- [TODO] Sigue pendiente la rutina de muestreo previo a `_wizard_qc_mapeo` (los helpers de placeholders ya viven en tz_core). Requiere extracción gradual + smoke manual.
 
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 

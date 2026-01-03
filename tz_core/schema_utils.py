@@ -161,6 +161,40 @@ def prep_meta_unicos(
     return df
 
 
+def ensure_placeholder_columns(
+    df,
+    missing_fields: Iterable[str],
+    *,
+    placeholder: str = "SinInf",
+    target_alias: Optional[Mapping[str, str]] = None,
+    logger: Optional[Callable[[str], None]] = None,
+):
+    """Garantiza columnas canónicas presentes rellenando con un placeholder.
+
+    Se usa cuando el wizard está en modo QC manual: en lugar de volver a preguntar
+    por campos esenciales faltantes, se agregan columnas con un valor sentinela
+    para que el pipeline posterior (HTML/KML) no falle.
+    """
+
+    target_alias = target_alias or {}
+    added: list[str] = []
+    log_fn = logger or core_log
+
+    for field in missing_fields or []:
+        canonical = target_alias.get(field, field)
+        if canonical in df.columns:
+            continue
+        df[canonical] = placeholder
+        added.append(canonical)
+        if log_fn:
+            try:
+                log_fn(f"[WIZARD] '{canonical}' se rellena con placeholder '{placeholder}'.")
+            except Exception:
+                pass
+
+    return added
+
+
 def _muestras_columna(serie, n: int = 5) -> list[str]:
     """Devuelve una vista previa de hasta *n* valores no vacíos de la serie."""
 

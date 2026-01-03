@@ -7,6 +7,7 @@ from tz_core.schema_utils import (
     build_schema_synonym_map,
     has_location_coverage,
     collect_missing_required_fields,
+    ensure_placeholder_columns,
     _en_bbox_sv,
     _es_columna_valida_para,
 )
@@ -126,3 +127,29 @@ class TestEsColumnaValidaPara:
         serie = pd.Series(["cualquier cosa", None])
         ok, _ = _es_columna_valida_para("otros", serie)
         assert ok is True
+
+
+class TestEnsurePlaceholderColumns:
+    def test_agrega_columnas_con_placeholder(self):
+        df = pd.DataFrame({"lat": [13.5]})
+
+        added = ensure_placeholder_columns(df, ["abonado", "alias"])
+
+        assert set(added) == {"abonado", "alias"}
+        assert (df["abonado"] == "SinInf").all()
+        assert (df["alias"] == "SinInf").all()
+
+    def test_respeta_alias_y_placeholder_personalizado(self):
+        df = pd.DataFrame()
+        target_alias = {"abonado": "abonado_final"}
+
+        added = ensure_placeholder_columns(
+            df,
+            ["abonado"],
+            placeholder="N/A",
+            target_alias=target_alias,
+        )
+
+        assert added == ["abonado_final"]
+        assert "abonado_final" in df.columns
+        assert (df["abonado_final"] == "N/A").all()

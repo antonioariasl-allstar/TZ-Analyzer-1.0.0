@@ -328,6 +328,7 @@ from tz_core.schema_utils import (
     has_location_coverage,
     collect_missing_required_fields,
     prep_meta_unicos,
+    ensure_placeholder_columns,
     _muestras_columna,
     _es_numero,
     _en_bbox_sv,
@@ -3618,10 +3619,13 @@ def main():
             if MANUAL_QC_MAPPING:
                 print("\n[WIZARD] QC activo: faltan canónicos esenciales (no se pedirá aquí):", ", ".join(missing))
                 # No abortamos ni preguntamos; dejamos marcadores para que el pipeline no truene.
-                for k in missing:
-                    real_tgt = _target_alias.get(k, k)
-                    if real_tgt not in df.columns:
-                        df[real_tgt] = "SinInf"
+                ensure_placeholder_columns(
+                    df,
+                    missing,
+                    placeholder="SinInf",
+                    target_alias=_target_alias,
+                    logger=log,
+                )
                 # refrescar listas internas
                 cols = list(dict.fromkeys(cols_originales + list(df.columns)))
                 present = set(cols)
