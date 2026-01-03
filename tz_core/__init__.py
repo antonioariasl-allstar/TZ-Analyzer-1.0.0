@@ -35,6 +35,8 @@ from .time_utils import (
     parse_hhmmss_to_minutes,
     minutes_from_any,
     etiqueta_rango,
+    to_datetime_series,
+    format_seconds_hms,
     RANGOS_SV,
     # Aliases para compatibilidad hacia atrás
     _hhmmss_to_time_or_none,
@@ -43,7 +45,17 @@ from .time_utils import (
     _parse_hhmmss_to_minutes,
     _minutes_from_any,
     _construir_rangos_cfg,
-    _en_rango_minutos
+    _en_rango_minutos,
+    _to_datetime_series,
+    _fmt_hms,
+)
+
+# dataframe_utils
+from .dataframe_utils import (
+    dedupe_columns,
+    pick_first_existing_column,
+    _dedupe_columns,
+    _pick_col,
 )
 
 # validation_utils - Funciones de validación extraídas para modularización

@@ -7,6 +7,7 @@ con DataFrames, incluyendo deduplicación de columnas.
 
 import pandas as pd
 from collections import Counter
+from typing import Iterable, Optional
 
 
 def dedupe_columns(df):
@@ -84,3 +85,15 @@ def dedupe_columns(df):
 
 # Alias para compatibilidad con script principal
 _dedupe_columns = dedupe_columns
+
+
+def pick_first_existing_column(df: pd.DataFrame, candidates: Iterable[Optional[str]]) -> Optional[str]:
+    """Devuelve la primera columna existente en `df` dentro de la lista `candidates`."""
+    for col in candidates:
+        if col and col in df.columns:
+            return col
+    return None
+
+
+def _pick_col(df: pd.DataFrame, candidates: Iterable[Optional[str]]) -> Optional[str]:  # pragma: no cover
+    return pick_first_existing_column(df, candidates)

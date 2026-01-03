@@ -11,6 +11,9 @@ Módulo de bajo riesgo - funciones sin estado y sin dependencias externas comple
 from datetime import time as _time
 from typing import Optional, List, Dict, Tuple, Any
 
+import pandas as pd
+import numpy as np
+
 # Definición de rangos horarios para clasificación "SV" (usado en carpetas de KML)
 # Formato: clave -> (nombre_carpeta, hora_inicio, hora_fin)
 RANGOS_SV = {
@@ -216,3 +219,49 @@ def _construir_rangos_cfg(rangos_cfg: List[Dict[str, Any]]) -> List[Tuple[str, i
 def _en_rango_minutos(minutos: int, ini: int, fin: int) -> bool:
     """Alias para compatibilidad hacia atrás."""
     return en_rango_minutos(minutos, ini, fin)
+
+
+def to_datetime_series(df: Any) -> pd.Series:
+    """Construye una Serie datetime combinando columnas estándar (fecha/hora)."""
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("df debe ser un pandas DataFrame")
+    if "fecha" in df.columns and "hora" in df.columns:
+        try:
+            return pd.to_datetime(
+                df["fecha"].astype(str).str.strip() + " " + df["hora"].astype(str).str.strip(),
+                dayfirst=True,
+                errors="coerce",
+            )
+        except Exception:
+            pass
+    for column in ["datetime", "fecha_hora", "timestamp", "fec_hor", "fechaHora"]:
+        if column in df.columns:
+            series = pd.to_datetime(df[column], dayfirst=True, errors="coerce")
+            if series.notna().any():
+                return series
+    if "fecha" in df.columns:
+        return pd.to_datetime(df["fecha"], dayfirst=True, errors="coerce")
+    return pd.Series(pd.NaT, index=df.index)
+
+
+def format_seconds_hms(total_seconds: Any) -> str:
+    """Formatea segundos totales en HH:MM:SS con tolerancia a entradas inválidas."""
+    try:
+        total_seconds = float(total_seconds)
+    except Exception:
+        return "00:00:00"
+    if np.isnan(total_seconds):
+        return "00:00:00"
+    total_seconds = int(round(total_seconds))
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _to_datetime_series(df: Any) -> pd.Series:  # pragma: no cover
+    return to_datetime_series(df)
+
+
+def _fmt_hms(total_seconds: Any) -> str:  # pragma: no cover
+    return format_seconds_hms(total_seconds)

@@ -321,7 +321,7 @@ from tz_core.text_utils import normalizar_texto, normalizar_columnas_texto, _fix
 from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
-from tz_core.dataframe_utils import dedupe_columns
+from tz_core.dataframe_utils import dedupe_columns, _pick_col
 from tz_core.analytics import construir_seccion_todos_contactos, generar_historial_cambios_antena
 from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo_a_salida
 
@@ -356,58 +356,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
 HTML_SECCION_INTERACCIONES = ""
 
-def _pick_col(df, candidatos):
-    """Busca la primera columna existente en df de una lista de candidatos."""
-    for c in candidatos:
-        if c and c in df.columns:  # Ignora None y strings vacíos
-            return c
-    return None
-
-def _to_datetime_series(df):
-    """Convierte columnas de fecha/hora del df a una Serie de datetime.
-    
-    Intenta múltiples estrategias en orden:
-    1. Combinar 'fecha' + 'hora'
-    2. Columnas comunes de timestamp
-    3. Solo 'fecha'
-    
-    Retorna Serie con pd.NaT si no puede parsear.
-    """
-    # Intento 1: combinación fecha + hora
-    if 'fecha' in df.columns and 'hora' in df.columns:
-        try:
-            return pd.to_datetime(df['fecha'].astype(str).str.strip() + ' ' + df['hora'].astype(str).str.strip(),
-                                  dayfirst=True, errors='coerce')
-        except Exception:
-            pass
-    # Intento 2: columnas comunes
-    for c in ['datetime', 'fecha_hora', 'timestamp', 'fec_hor', 'fechaHora']:
-        if c in df.columns:
-            s = pd.to_datetime(df[c], dayfirst=True, errors='coerce')
-            if s.notna().any():
-                return s
-    # Intento 3: solo fecha
-    if 'fecha' in df.columns:
-        s = pd.to_datetime(df['fecha'], dayfirst=True, errors='coerce')
-        return s
-    return pd.Series(pd.NaT, index=df.index)
-
-def _fmt_hms(total_seconds):
-    """Formatea segundos totales a formato HH:MM:SS.
-    
-    Retorna "00:00:00" si el valor no es numérico válido.
-    """
-    try:
-        total_seconds = float(total_seconds)
-    except Exception:
-        return "00:00:00"
-    if np.isnan(total_seconds):
-        return "00:00:00"
-    total_seconds = int(round(total_seconds))
-    h = total_seconds // 3600
-    m = (total_seconds % 3600) // 60
-    s = total_seconds % 60
-    return f"{h:02d}:{m:02d}:{s:02d}"
+from tz_core.time_utils import _to_datetime_series, _fmt_hms
 
 def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
 

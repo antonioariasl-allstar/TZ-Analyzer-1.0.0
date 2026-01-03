@@ -22,6 +22,14 @@
 - Validación paranoica: `python -m py_compile tz_core/time_filters.py script_principal_bitacoras_refactory.py` + `pytest tests/unit/test_config_manager.py -q` (13 tests OK, warnings base intactos).
 - Impacto: -115 líneas del monolito, path limpio para futuras extracciones de filtros avanzados; cero regresiones reportadas.
 
+## ✅ EPIC 16C: HELPERS DE COLUMNAS/DATETIME EXTRAÍDOS (03/01/2026)
+
+**Log de avance:**
+- `_pick_col` se movió a `tz_core/dataframe_utils.py` como `pick_first_existing_column`; el monolito consume el alias `_pick_col` desde tz_core para compatibilidad.
+- `_to_datetime_series` y `_fmt_hms` migraron a `tz_core/time_utils.py` como `to_datetime_series` y `format_seconds_hms`, con imports (`pd`, `np`) adecuados y aliases legacy expuestos en `tz_core.__init__`.
+- Limpieza local en el monolito: se eliminaron ~70 líneas de helpers duplicados; todas las referencias se mantienen vía imports directos.
+- Validación paranoica: `python -m py_compile tz_core/time_utils.py tz_core/dataframe_utils.py script_principal_bitacoras_refactory.py` + `pytest tests/unit/test_config_manager.py -q` (13 tests OK) + smoke manual del script principal (usuario) → ✅.
+
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 
 **UNIFICACIÓN KML: kml_generador.py → tz_core/kml_generator.py (ARQUITECTURA LIMPIA)**
