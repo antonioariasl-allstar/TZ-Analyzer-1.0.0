@@ -2,6 +2,7 @@
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional
 
 from .text_utils import normalize_header_key
+from .logging_utils import log as core_log
 
 
 def build_schema_synonym_map(
@@ -122,3 +123,36 @@ def collect_missing_required_fields(
             req.add(tgt)
 
     return [field for field in req if field not in present]
+
+
+def prep_meta_unicos(
+    df,
+    campos: Iterable[tuple[str, str]],
+    *,
+    logger: Optional[Callable[[str], None]] = None,
+):
+    """Replica `_prep_meta_unicos` para rellenar alias/usuario/abonado vacíos."""
+
+    log_fn = logger or core_log
+
+    for etiqueta, col in campos:
+        serie = df[col] if col in df.columns else None
+
+        vacio = True
+        if serie is not None:
+            try:
+                vacio = bool(
+                    serie.isna().all() or (serie.astype(str).str.strip() == "").all()
+                )
+            except Exception:
+                vacio = True
+
+        if (col not in df.columns) or vacio:
+            df[col] = ""
+            if log_fn:
+                try:
+                    log_fn(f"[QC] {col} no presente/vacío; se deja vacío (no se imprime en salida).")
+                except Exception:
+                    pass
+
+    return df

@@ -326,6 +326,7 @@ from tz_core.schema_utils import (
     build_schema_synonym_map,
     has_location_coverage,
     collect_missing_required_fields,
+    prep_meta_unicos,
 )
 from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
@@ -4625,30 +4626,15 @@ def main():
             pass
 
     # PRE-KML: asegurar alias/usuario/abonado sin prompt (usar 'SinInf' si faltan)
-    def _prep_meta_unicos(_df, campos):
-
-        for etiqueta, col in campos:
-            serie = _df[col] if col in _df.columns else None
-
-            vacio = True
-            if serie is not None:
-                try:
-                    vacio = bool(serie.isna().all() or (serie.astype(str).str.strip() == '').all())
-                except Exception:
-                    vacio = True
-
-            if (col not in _df.columns) or vacio:
-                _df[col] = ""  # dejar vacío (sin placeholder)
-                log(f"[QC] {col} no presente/vacío; se deja vacío (no se imprime en salida).")
-
-        return _df
-
-    # Rellena solo si faltan; si ya existen no pregunta
-    df = _prep_meta_unicos(df, [
-        ("alias", "alias"),
-        ("nombre_usuario", "nombre_usuario"),
-        ("abonado", "abonado"),
-    ])
+    df = prep_meta_unicos(
+        df,
+        [
+            ("alias", "alias"),
+            ("nombre_usuario", "nombre_usuario"),
+            ("abonado", "abonado"),
+        ],
+        logger=log,
+    )
 
 
     archivo_kml, desc_coords = generar_kml(df, archivo_kml, flat=False)

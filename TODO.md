@@ -47,6 +47,8 @@
 - `apply_schema_renames` en `tz_core/dataframe_utils.py` encapsula el mapeo exacto + fuzzy y respeta `MANUAL_QC_MAPPING`; `_construir_seccion_interacciones` usa el helper para reducir ruido.
 - Validaciones paranoicas: `python -m py_compile script_principal_bitacoras_refactory.py tz_core/text_utils.py tz_core/schema_utils.py tz_core/dataframe_utils.py` + `.venv312\Scripts\python.exe -m pytest tests/unit/test_config_manager.py -q` (13 tests OK).
 - [03/01/2026] `_has_location_ok` y `_need_fields` se movieron literal a `tz_core/schema_utils.py` como `has_location_coverage` y `collect_missing_required_fields`; el monolito ahora importa los helpers sin alterar el flujo del wizard (QC confirmado en smoke rápido).
+- [03/01/2026] `_prep_meta_unicos` emigró a `tz_core/schema_utils.prep_meta_unicos`; el monolito solo lo invoca pasando el logger original, manteniendo el relleno silencioso previo al KML.
+- [TODO] Faltan dos bloques de riesgo medio: (1) helpers de persistencia `SinInf`/placeholders para wizard QC y (2) rutina de muestreo previo a `_wizard_qc_mapeo`. Requieren extracción gradual + smoke manual.
 
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 
