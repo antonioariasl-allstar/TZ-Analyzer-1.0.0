@@ -326,7 +326,7 @@ from tz_core.schema_utils import build_schema_synonym_map
 from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
-from tz_core.dataframe_utils import dedupe_columns, _pick_col, _coalesce_duplicates
+from tz_core.dataframe_utils import dedupe_columns, _pick_col, _coalesce_duplicates, apply_schema_renames
 from tz_core.analytics import construir_seccion_todos_contactos, generar_historial_cambios_antena
 from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo_a_salida
 
@@ -3474,8 +3474,7 @@ def main():
     # Auto-mapeo de encabezados (desde CONFIG.schema.fields) con fuzzy
     # - Usa sinónimos del config
     # - Normaliza sinónimos igual que las columnas (lower, sin acentos, separadores -> _)
-    # - Fuzzy (difflib) para casos no exactos
-    import difflib
+    # - Lógica fuzzy centralizada en tz_core.dataframe_utils.apply_schema_renames
 
     schema_fields = {}
     try:
@@ -3499,31 +3498,15 @@ def main():
     # Construir tabla de sinónimos normalizados -> nombre_canonico_target
     syn2target = build_schema_synonym_map(schema_fields, target_alias=_target_alias)
 
-    # Mapeo exacto primero
-    rename_map = {}
-    for col in list(df.columns):
-        ncol = _norm_head(col)  # ya están normalizadas, pero por si acaso
-        if ncol in syn2target:
-            rename_map[col] = syn2target[ncol]
+    # Aplicar renombrados automáticos (exacto + fuzzy)
+    df, rename_map = apply_schema_renames(
+        df,
+        syn2target,
+        manual_qc_mapping=MANUAL_QC_MAPPING,
+        fuzzy_cutoff=0.84,
+    )
 
-    # Fuzzy para columnas no mapeadas aún
-    remaining = [c for c in df.columns if c not in rename_map]
-    candidate_keys = list(syn2target.keys())
-    for col in remaining:
-        ncol = _norm_head(col)
-        if not ncol:
-            continue
-        # mejores coincidencias (umbral conservador 0.84)
-        matches = difflib.get_close_matches(ncol, candidate_keys, n=1, cutoff=0.84)
-        if matches:
-            best = matches[0]
-            rename_map[col] = syn2target[best]
-
-    # Aplicar (solo si NO estamos en QC manual)
-    if not MANUAL_QC_MAPPING and rename_map:
-        df = df.rename(columns=rename_map)
-
-    else:
+    if MANUAL_QC_MAPPING or not rename_map:
         print("[QC] Sin renombrar encabezados ni coalesce (QC manual activo).")
 
     # Ejecutar dedup/coalesce con preferencia ligera (por si te interesa priorizar algún origen)

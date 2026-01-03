@@ -7,8 +7,11 @@ con DataFrames, incluyendo deduplicación de columnas.
 
 import pandas as pd
 import numpy as np
+import difflib
 from collections import Counter
-from typing import Iterable, Optional, List
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
+
+from .text_utils import normalize_header_key
 
 
 def dedupe_columns(df):
@@ -98,6 +101,48 @@ def pick_first_existing_column(df: pd.DataFrame, candidates: Iterable[Optional[s
 
 def _pick_col(df: pd.DataFrame, candidates: Iterable[Optional[str]]) -> Optional[str]:  # pragma: no cover
     return pick_first_existing_column(df, candidates)
+
+
+def apply_schema_renames(
+    df: pd.DataFrame,
+    synonym_map: Optional[Dict[str, str]] = None,
+    *,
+    manual_qc_mapping: bool = False,
+    fuzzy_cutoff: float = 0.84,
+    normalizer: Optional[Callable[[object], str]] = None,
+) -> Tuple[pd.DataFrame, Dict[str, str]]:
+    """Genera/aplica `rename_map` usando coincidencias exactas y fuzzy."""
+
+    synonym_map = synonym_map or {}
+    if normalizer is None:
+        normalizer = normalize_header_key
+
+    if df is None or df.empty or not synonym_map:
+        return df, {}
+
+    rename_map: Dict[str, str] = {}
+    columns = list(df.columns)
+
+    for col in columns:
+        normalized = normalizer(col)
+        if normalized and normalized in synonym_map:
+            rename_map[col] = synonym_map[normalized]
+
+    remaining = [c for c in columns if c not in rename_map]
+    if remaining:
+        candidate_keys = list(synonym_map.keys())
+        for col in remaining:
+            normalized = normalizer(col)
+            if not normalized:
+                continue
+            matches = difflib.get_close_matches(normalized, candidate_keys, n=1, cutoff=fuzzy_cutoff)
+            if matches:
+                rename_map[col] = synonym_map[matches[0]]
+
+    if not manual_qc_mapping and rename_map:
+        df = df.rename(columns=rename_map)
+
+    return df, rename_map
 
 
 def coalesce_duplicates(

@@ -55,6 +55,7 @@ from .dataframe_utils import (
     dedupe_columns,
     pick_first_existing_column,
     coalesce_duplicates,
+    apply_schema_renames,
     _dedupe_columns,
     _pick_col,
     _coalesce_duplicates,
