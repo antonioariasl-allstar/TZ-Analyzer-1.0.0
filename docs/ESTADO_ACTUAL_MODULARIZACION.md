@@ -20,12 +20,12 @@
    * `inject_technical_metadata()` vive ahora en `tz_core/html_generator.py` junto con `_build_meta_block()` y `_inject_block()` para reutilizar la inyección de metadatos en cualquier salida HTML.
    * Nuevo módulo `tz_core/runtime_utils.py` con `collect_env_snapshot()` para exponer snapshot de versión de tz_cli, tz_core, Python y SO. Exportado vía `tz_core.__init__`.
    * `script_principal_bitacoras_refactory.py` delega la inyección técnica al helper modular y deja de construir bloques inline.
-- **Testing/validaciones:** `python -m py_compile tz_core/html_generator.py tz_core/runtime_utils.py script_principal_bitacoras_refactory.py` + `pytest tests/unit/test_schema_utils.py -q` (16 tests nuevos cubriendo helpers de schema) + `pytest tests/unit/test_html_generator.py -q` (3 tests para metadata HTML y snapshot) + smoke manual del script principal (usuario) ✅
+- **Testing/validaciones:** `python -m py_compile tz_core/html_generator.py tz_core/runtime_utils.py script_principal_bitacoras_refactory.py` + `pytest tests/unit/test_schema_utils.py -q` (16 tests nuevos cubriendo helpers de schema) + `pytest tests/unit/test_html_generator.py -q` (7 tests para metadata HTML, snapshot e inyección) + smoke manual del script principal (usuario) ✅
 - **Beneficios:**
    * Metadata técnica consistente y reutilizable, lista para futuras plantillas.
    * Snapshot de entorno centralizado para logging, reportes y troubleshooting.
    * Nuevos tests (`tests/unit/test_schema_utils.py`) validan sinónimos, cobertura geográfica, campos requeridos y reglas de columnas, reduciendo riesgo en `_wizard_qc_mapeo()`.
-   * `tests/unit/test_html_generator.py` garantiza que la inyección de metadatos y el snapshot de entorno mantengan contratos deterministas.
+   * `tests/unit/test_html_generator.py` garantiza que la inyección de metadatos, el snapshot de entorno y los helpers privados mantengan contratos deterministas.
 - **Estado:** Cambios en rama `feature/time-filters-extraction` con commits `0b9da7c`, `c207f80`, `259eec5` (pushed).
 
 #### 🔥 **EPIC 14 COMPLETADO: Consolidación Arquitectura KML** - 26 diciembre 2025 ⚡ UNIFICACIÓN

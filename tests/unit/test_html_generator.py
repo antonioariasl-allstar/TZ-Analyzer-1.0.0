@@ -59,6 +59,55 @@ def test_inject_metadata_inserts_snapshot_block(tmp_path, monkeypatch):
     assert resultado.count("meta-tecnica") == 1
 
 
+def test_build_meta_block_handles_modes_and_versions():
+    snapshot = {
+        "so": "UnitOS",
+        "python": "3.12.8",
+        "tz_analysis": "2.1.0",
+        "version_config": "cfg-A",
+        "hostname": "unit-host",
+        "usuario": "tester",
+    }
+
+    block = html_generator._build_meta_block(snapshot, "ampliado", True)
+
+    assert "Metadatos" in block
+    assert "UnitOS" in block
+    assert "cfg-A" in block
+    assert "Hostname" in block
+    assert "Usuario" in block
+
+
+def test_build_meta_block_returns_empty_without_values():
+    block = html_generator._build_meta_block({}, "minimo", False)
+    assert block == ""
+
+
+def test_inject_block_prefers_meta_sections():
+    block = "<div>meta</div>"
+    html = '<html><body><section class="meta-card"></section></body></html>'
+
+    nuevo, injected = html_generator._inject_block(html, block)
+
+    assert injected
+    assert nuevo.count(block) == 1
+    assert nuevo.index(block) < nuevo.index("</section>")
+
+
+def test_inject_block_fallbacks_to_body_and_append():
+    block = "<div>meta</div>"
+    html_body = "<html><body><section></section></body></html>"
+    html_plain = "<html><div>sin body</div></html>"
+
+    in_body, injected_body = html_generator._inject_block(html_body, block)
+    assert injected_body
+    assert "<body" in in_body and block in in_body
+
+    appended, injected_append = html_generator._inject_block(html_plain, block)
+    assert injected_append
+    assert appended.endswith(block)
+
+
 def test_collect_env_snapshot_prefers_config(monkeypatch):
     class FixedDatetime(datetime):
         @classmethod
