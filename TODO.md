@@ -49,6 +49,10 @@
 - [03/01/2026] `_has_location_ok` y `_need_fields` se movieron literal a `tz_core/schema_utils.py` como `has_location_coverage` y `collect_missing_required_fields`; el monolito ahora importa los helpers sin alterar el flujo del wizard (QC confirmado en smoke rápido).
 - [03/01/2026] `_prep_meta_unicos` emigró a `tz_core/schema_utils.prep_meta_unicos`; el monolito solo lo invoca pasando el logger original, manteniendo el relleno silencioso previo al KML.
 - [03/01/2026] Los helpers `_muestras_columna`, `_es_numero`, `_en_bbox_sv` y `_es_columna_valida_para` viven ahora en `tz_core/schema_utils`; el wizard los importa directo y se evita duplicar validaciones locales.
+- [03/01/2026] `inject_technical_metadata` se consolidó en `tz_core/html_generator.py` junto con `_build_meta_block`/`_inject_block`; el monolito solo pasa el HTML generado y recibe la salida con metadata técnica.
+- [03/01/2026] Nuevo módulo `tz_core/runtime_utils.collect_env_snapshot` agrupa versión de tz_cli/tz_core, datos de Python/OS y timestamp para reutilizar en reportes/logging; exportado via `tz_core.__init__`.
+- [03/01/2026] `tests/unit/test_schema_utils.py` cubre 16 escenarios (sinónimos, campos requeridos, cobertura bbox y validación de columnas) asegurando que los helpers de schema extraídos sigan comportándose igual que el wizard.
+- [03/01/2026] `tests/unit/test_html_generator.py` agrega 3 pruebas para `inject_technical_metadata` y `collect_env_snapshot`, garantizando configuraciones deterministas antes de tocar `_wizard_qc_mapeo`.
 - [TODO] Faltan dos bloques de riesgo medio: (1) helpers de persistencia `SinInf`/placeholders para wizard QC y (2) rutina de muestreo previo a `_wizard_qc_mapeo`. Requieren extracción gradual + smoke manual.
 
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**

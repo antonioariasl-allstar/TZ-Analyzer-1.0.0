@@ -7,12 +7,26 @@
 
 ### **PROGRESO GENERAL:**
 - **Estado de completitud:** Epic 14 COMPLETADO - Arquitectura KML unificada ✅⚡
-- **Funciones migradas:** 43+ funciones en tz_core (1 nueva en Epic 14)
-- **Módulos tz_core activos:** 20 módulos funcionando (kml_generator.py consolidado)
+- **Funciones migradas:** 46+ funciones en tz_core (último lote: helpers wizard/HTML)
+- **Módulos tz_core activos:** 21 módulos funcionando (nuevo `runtime_utils`)
 - **Regresiones detectadas:** 0 (Zero regressions policy mantenida)
 - **Reducción acumulada:** 6,510 → 6,462 líneas (proyección limpia: ~5,850 al archivar kml_generador.py)
 
 ### **ÚLTIMAS EXTRACCIONES/LIMPIEZAS COMPLETADAS:**
+
+#### 🔥 **Lote 03 enero 2026: Helpers Wizard + HTML** - 03 enero 2026 ⚡ CICLO BAJO RIESGO
+- **Tipo:** Centralización de helpers técnicos y cobertura de validaciones
+- **Migraciones/Creaciones:**
+   * `inject_technical_metadata()` vive ahora en `tz_core/html_generator.py` junto con `_build_meta_block()` y `_inject_block()` para reutilizar la inyección de metadatos en cualquier salida HTML.
+   * Nuevo módulo `tz_core/runtime_utils.py` con `collect_env_snapshot()` para exponer snapshot de versión de tz_cli, tz_core, Python y SO. Exportado vía `tz_core.__init__`.
+   * `script_principal_bitacoras_refactory.py` delega la inyección técnica al helper modular y deja de construir bloques inline.
+- **Testing/validaciones:** `python -m py_compile tz_core/html_generator.py tz_core/runtime_utils.py script_principal_bitacoras_refactory.py` + `pytest tests/unit/test_schema_utils.py -q` (16 tests nuevos cubriendo helpers de schema) + `pytest tests/unit/test_html_generator.py -q` (3 tests para metadata HTML y snapshot) + smoke manual del script principal (usuario) ✅
+- **Beneficios:**
+   * Metadata técnica consistente y reutilizable, lista para futuras plantillas.
+   * Snapshot de entorno centralizado para logging, reportes y troubleshooting.
+   * Nuevos tests (`tests/unit/test_schema_utils.py`) validan sinónimos, cobertura geográfica, campos requeridos y reglas de columnas, reduciendo riesgo en `_wizard_qc_mapeo()`.
+   * `tests/unit/test_html_generator.py` garantiza que la inyección de metadatos y el snapshot de entorno mantengan contratos deterministas.
+- **Estado:** Cambios en rama `feature/time-filters-extraction` con commits `0b9da7c`, `c207f80`, `259eec5` (pushed).
 
 #### 🔥 **EPIC 14 COMPLETADO: Consolidación Arquitectura KML** - 26 diciembre 2025 ⚡ UNIFICACIÓN
 - **Tipo:** Consolidación arquitectónica (eliminar dualidad KML)
@@ -163,6 +177,7 @@ tz_core/
 ├── html_generator.py      ✅ Generación HTML modular
 ├── html_helpers.py        ✅ Helpers HTML pequeños
 ├── html_utils.py          ✅ Utilidades HTML menores
+├── runtime_utils.py       ✅ Snapshot de entorno/host
 ├── logging_utils.py       ✅ Sistema de logging
 ├── text_utils.py          ✅ Procesamiento de texto
 ├── time_utils.py          ✅ Utilidades temporales
