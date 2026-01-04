@@ -27,8 +27,11 @@ FASE: 9C - Logging (Riesgo Bajo)
 IMPACTO: 50+ usos en todo el monolito
 """
 
+import os
 from datetime import datetime
-from typing import List, Set
+from typing import Callable, Optional, List, Set
+
+import pandas as pd
 
 
 # ==========================================
@@ -232,3 +235,57 @@ def log_error(msg: str) -> None:
 def log_debug(msg: str) -> None:
     """Helper para logs de depuración."""
     log(f"[DEBUG] {msg}")
+
+
+def write_minimal_filter_log(
+    df: pd.DataFrame,
+    resumen_filtro: str,
+    output_path: str | os.PathLike[str],
+    *,
+    logger: Optional[Callable[[str], None]] = None,
+) -> str:
+    """Genera log_minimo.txt con métricas básicas post filtro."""
+
+    lat_series = pd.to_numeric(df.get("lat", pd.Series(dtype=float)), errors="coerce")
+    long_src = df.get("long")
+    if long_src is None:
+        long_src = df.get("lon", pd.Series(dtype=float))
+    long_series = pd.to_numeric(long_src, errors="coerce")
+    lat_series = lat_series.reindex(df.index)
+    long_series = long_series.reindex(df.index)
+    m_coord = (
+        lat_series.notna()
+        & long_series.notna()
+        & ~((lat_series.fillna(0) == 0) & (long_series.fillna(0) == 0))
+        & lat_series.between(-90, 90)
+        & long_series.between(-180, 180)
+    )
+
+    ant_unicas = 0
+    if "antena" in df.columns:
+        s_ant = df.loc[m_coord, "antena"].astype(str).str.strip()
+        invalid = {"", "0", "null", "none", "nan", "sin inf", "sin inf.", "s/i"}
+        s_ant = s_ant[~s_ant.str.lower().isin(invalid)]
+        ant_unicas = int(s_ant.nunique())
+
+    contactos_unicos = 0
+    if "tel_contacto" in df.columns:
+        s_ct = df["tel_contacto"].astype(str).str.strip()
+        invalid_contacts = {"", "0", "null", "none", "nan", "sin inf", "sin inf."}
+        s_ct = s_ct.mask(s_ct.str.lower().isin(invalid_contacts))
+        contactos_unicos = int(s_ct.nunique(dropna=True))
+
+    path_str = os.fspath(output_path)
+    with open(path_str, "w", encoding="utf-8") as f:
+        f.write(f"Filtro aplicado: {resumen_filtro}\n")
+        f.write(f"Registros tras filtro: {len(df)}\n")
+        f.write(f"Antenas únicas (válidas): {ant_unicas}\n")
+        f.write(f"Contactos únicos: {contactos_unicos}\n")
+
+    log_fn = logger or log
+    try:
+        log_fn(f"[QC] log_minimo generado en: {path_str}")
+    except Exception:
+        pass
+
+    return path_str

@@ -57,6 +57,8 @@
 - [03/01/2026] `preview_column_mapping` se mudó a `tz_core.schema_utils` para encapsular la rutina de muestreo/confirmación previa a `_wizard_qc_mapeo`; `_ask_map_col` solo delega.
 - [03/01/2026] `tests/unit/test_wizard_qc_placeholders.py` simula MANUAL_QC_MAPPING=true y verifica que `_apply_qc_placeholders` rellene columnas faltantes con "SinInf" respetando aliases.
 - [03/01/2026] Los dos bloques de riesgo medio (placeholders y muestreo previo) ya viven en `tz_core`; el siguiente paso será preparar la extracción completa de `_wizard_qc_mapeo`.
+- [03/01/2026] `confirm_column_mapping_with_preview` completa la experiencia interactiva del wizard con rollback, detección de conflictos en `synonyms_user` y persistencia segura desde el monolito.
+- [03/01/2026] `write_minimal_filter_log` (tz_core/logging_utils.py) centraliza la generación de `log_minimo.txt` y cuenta con `tests/unit/test_logging_utils.py` para validar antenas/contactos.
 
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 

@@ -89,7 +89,8 @@ from tz_core.logging_utils import (
     log_info,
     log_warn,
     log_error,
-    log_debug
+    log_debug,
+    write_minimal_filter_log,
 )
 from tz_core.ui_utils import (
     solicitar_overrides_topn
@@ -353,6 +354,7 @@ from tz_core.schema_utils import (
     prep_meta_unicos,
     ensure_placeholder_columns,
     preview_column_mapping,
+    confirm_column_mapping_with_preview,
     _muestras_columna,
     _es_numero,
     _en_bbox_sv,
@@ -3738,45 +3740,34 @@ def main():
                                 src = cols_list[k-1]
                                 # === WIZARD: MAPEO ROBUSTO CON PREVIEW + CHECKS (inicio) ===================
                                 if src != colname and src in _df.columns:
-                                    confirmado = preview_column_mapping(
-                                        _df[src],
+                                    user_syn = (CONFIG or {}).get("synonyms_user", {}) or {}
+
+                                    def _persist_user_synonym(canonico, encabezado):
+                                        global CONFIG, RENAME_MAP
+                                        try:
+                                            CONFIG = cfg_add_user_synonym(CONFIG, canonico, encabezado)
+                                            RENAME_MAP = cfg_build_rename_map(CONFIG)
+                                        except Exception as e:
+                                            log(f"[WARN][synonyms] No se pudo persistir el sinónimo: {e}")
+
+                                    _mapped_df = confirm_column_mapping_with_preview(
+                                        _df,
                                         src,
                                         colname,
+                                        preview_fn=preview_column_mapping,
                                         muestras_fn=_muestras_columna,
                                         validator_fn=_es_columna_valida_para,
+                                        post_map_validator=_smoke_schema_postmap,
                                         input_fn=input,
                                         output_fn=print,
+                                        synonyms_user=user_syn,
+                                        persist_synonym_fn=_persist_user_synonym,
+                                        logger=log,
                                     )
-                                    if not confirmado:
+                                    if _mapped_df is None:
                                         return None
+                                    _df = _mapped_df
 
-                                    # 3) Conflictos con synonyms_user (si ya apuntaba a otro canónico)
-                                    user_syn = (CONFIG or {}).get("synonyms_user", {}) or {}
-                                    if src in user_syn and str(user_syn[src]).strip().lower() != str(colname).strip().lower():
-                                        print(f"[WIZARD] Conflicto: '{src}' ya está registrado como sinónimo de '{user_syn[src]}'.")
-                                        resp2 = input("¿Deseás SOBREESCRIBIR ese registro? (S/N): ").strip().lower()
-                                        if resp2 not in ("s", "si", "sí"):
-                                            print("No se aplicó el mapeo por conflicto. Volvé a elegir.")
-                                            return None
-
-                                    # 4) Renombrar (aplicar) y smoke test
-                                    _df_backup = _df.copy()
-                                    _df = _df.rename(columns={src: colname})
-
-                                    ok_schema, motivo_schema = _smoke_schema_postmap(_df)
-                                    if not ok_schema:
-                                        print(f"[WIZARD] Se revirtió el mapeo por inconsistencia: {motivo_schema}")
-                                        _df = _df_backup  # rollback
-                                        return None
-
-                                    # 5) Persistir sinónimo y reconstruir mapa efectivo (solo si todo fue ok)
-                                    try:
-                                        CONFIG = cfg_add_user_synonym(CONFIG, colname, src)     # guarda en config.json
-                                        RENAME_MAP = cfg_build_rename_map(CONFIG)                # vuelve a construir mapa en memoria
-                                    except Exception as e:
-                                        log(f"[WARN][synonyms] No se pudo persistir el sinónimo: {e}")
-
-                                    log(f"WIZARD: la columna '{src}' fue mapeada a '{colname}'.")
                                 validate_schema_or_abort(_df)
                         except Exception:
                             pass
@@ -4374,37 +4365,12 @@ def main():
     if opcion == "2":
         try:
             log_min = os.path.join(carpeta_salida, "log_minimo.txt")
-
-            # Conteos básicos
-            total_post_filtro = len(df)
-
-            # Antenas válidas (con coordenadas válidas)
-            latn = pd.to_numeric(df.get("lat", pd.Series(dtype=float)), errors="coerce")
-            lonn = pd.to_numeric(df.get("long", pd.Series(dtype=float)), errors="coerce")
-            m_coord = (
-                latn.notna() & lonn.notna() &
-                ~((latn.fillna(0) == 0) & (lonn.fillna(0) == 0)) &
-                latn.between(-90, 90) & lonn.between(-180, 180)
+            write_minimal_filter_log(
+                df,
+                _resumen_filtro,
+                log_min,
+                logger=log,
             )
-
-            ant_unicas = 0
-            if "antena" in df.columns:
-                s_ant = df.loc[m_coord, "antena"].astype(str).str.strip()
-                invalid = {"", "0", "null", "none", "nan", "sin inf", "sin inf.", "s/i"}
-                s_ant = s_ant[~s_ant.str.lower().isin(invalid)]
-                ant_unicas = int(s_ant.nunique())
-
-            contactos_unicos = 0
-            if "tel_contacto" in df.columns:
-                s_ct = df["tel_contacto"].astype(str).str.strip()
-                s_ct = s_ct.replace({"": None})
-                contactos_unicos = int(s_ct.nunique(dropna=True))
-
-            with open(log_min, "w", encoding="utf-8") as f:
-                f.write(f"Filtro aplicado: {_resumen_filtro}\n")
-                f.write(f"Registros tras filtro: {total_post_filtro}\n")
-                f.write(f"Antenas únicas (válidas): {ant_unicas}\n")
-                f.write(f"Contactos únicos: {contactos_unicos}\n")
         except Exception:
             # No detiene el flujo si hay algún problema con el log
             pass

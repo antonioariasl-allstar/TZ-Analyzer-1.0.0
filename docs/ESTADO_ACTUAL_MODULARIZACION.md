@@ -22,14 +22,17 @@
    * `script_principal_bitacoras_refactory.py` delega la inyección técnica al helper modular y deja de construir bloques inline.
    * `ensure_placeholder_columns()` encapsula el relleno de campos esenciales con "SinInf" cuando el wizard está en QC manual, evitando lógica duplicada en el monolito.
    * `preview_column_mapping()` centraliza la vista previa/confirmación antes de mapear columnas en el wizard QC, reduciendo la lógica interactiva inline.
-- **Testing/validaciones:** `python -m py_compile tz_core/html_generator.py tz_core/runtime_utils.py script_principal_bitacoras_refactory.py` + `pytest tests/unit/test_schema_utils.py -q` (20 tests cubriendo helpers de schema) + `pytest tests/unit/test_html_generator.py -q` (7 tests para metadata HTML, snapshot e inyección) + smoke manual del script principal (usuario) ✅
+   * `confirm_column_mapping_with_preview()` amplía la secuencia interactiva con rollback seguro, verificación de `synonyms_user` y persistencia controlada desde el wizard.
+   * `write_minimal_filter_log()` en `tz_core/logging_utils.py` genera el `log_minimo.txt` (antenas/contactos) para cualquier flujo que necesite ese resumen.
+- **Testing/validaciones:** `python -m py_compile tz_core/html_generator.py tz_core/runtime_utils.py script_principal_bitacoras_refactory.py` + `pytest tests/unit/test_schema_utils.py -q` (20 tests cubriendo helpers de schema) + `pytest tests/unit/test_html_generator.py -q` (7 tests para metadata HTML, snapshot e inyección) + `pytest tests/unit/test_logging_utils.py -q` (2 tests para el helper del log mínimo) + smoke manual del script principal (usuario) ✅
 - **Beneficios:**
    * Metadata técnica consistente y reutilizable, lista para futuras plantillas.
    * Snapshot de entorno centralizado para logging, reportes y troubleshooting.
    * Nuevos tests (`tests/unit/test_schema_utils.py`) validan sinónimos, cobertura geográfica, campos requeridos y reglas de columnas, reduciendo riesgo en `_wizard_qc_mapeo()`.
    * `tests/unit/test_html_generator.py` garantiza que la inyección de metadatos, el snapshot de entorno y los helpers privados mantengan contratos deterministas.
    * `ensure_placeholder_columns()` mantiene controlado el relleno de placeholders `SinInf` sin repetir código en el wizard.
-   * `preview_column_mapping()` asegura que el asistente conserve la misma UX al validar muestras y confirmaciones.
+   * `preview_column_mapping()` y `confirm_column_mapping_with_preview()` aseguran que el asistente conserve la misma UX al validar muestras, conflictos y confirmaciones.
+   * `write_minimal_filter_log()` garantiza que el `log_minimo.txt` de Modo 2 tenga métricas consistentes y testeadas.
    * `tests/unit/test_wizard_qc_placeholders.py` verifica el flujo MANUAL_QC_MAPPING (placeholders `SinInf`) antes de extraer `_wizard_qc_mapeo()`.
 - **Estado:** Cambios en rama `feature/time-filters-extraction` con commits `0b9da7c`, `c207f80`, `259eec5` (pushed).
 

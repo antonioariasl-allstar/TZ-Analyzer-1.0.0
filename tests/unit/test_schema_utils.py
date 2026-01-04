@@ -9,6 +9,7 @@ from tz_core.schema_utils import (
     collect_missing_required_fields,
     ensure_placeholder_columns,
     preview_column_mapping,
+    confirm_column_mapping_with_preview,
     _en_bbox_sv,
     _es_columna_valida_para,
 )
@@ -190,3 +191,46 @@ class TestPreviewColumnMapping:
 
         assert result is False
         assert any("motivo" in linea for linea in salidas)
+
+
+class TestConfirmColumnMappingWithPreview:
+    def test_aplica_mapeo_y_persistencia(self):
+        df = pd.DataFrame({"foo": [1, 2], "bar": [3, 4]})
+        persisted: list[tuple[str, str]] = []
+
+        result = confirm_column_mapping_with_preview(
+            df,
+            "foo",
+            "lat",
+            preview_fn=lambda *args, **kwargs: True,
+            post_map_validator=lambda _: (True, ""),
+            persist_synonym_fn=lambda canon, raw: persisted.append((canon, raw)),
+            synonyms_user={},
+            input_fn=lambda _: "s",
+            output_fn=lambda *_: None,
+        )
+
+        assert result is not None
+        assert "lat" in result.columns and "foo" not in result.columns
+        assert persisted == [("lat", "foo")]
+
+    def test_conflicto_requiere_confirmacion(self):
+        df = pd.DataFrame({"foo": [1]})
+        salidas: list[str] = []
+
+        def _input_mock(prompt: str) -> str:
+            return "n" if "SOBREESCRIBIR" in prompt else "s"
+
+        result = confirm_column_mapping_with_preview(
+            df,
+            "foo",
+            "lat",
+            preview_fn=lambda *args, **kwargs: True,
+            post_map_validator=lambda _: (True, ""),
+            synonyms_user={"foo": "antena"},
+            input_fn=_input_mock,
+            output_fn=salidas.append,
+        )
+
+        assert result is None
+        assert any("Conflicto" in linea for linea in salidas)

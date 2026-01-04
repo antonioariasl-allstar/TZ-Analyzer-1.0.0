@@ -310,3 +310,77 @@ def preview_column_mapping(
         return False
 
     return True
+
+
+def confirm_column_mapping_with_preview(
+    df: pd.DataFrame,
+    source_name: str,
+    target_name: str,
+    *,
+    preview_fn: Callable[..., bool] = preview_column_mapping,
+    muestras_fn: Callable[[Any, int], list[str]] = _muestras_columna,
+    validator_fn: Callable[[str, Any], tuple[bool, str]] = _es_columna_valida_para,
+    post_map_validator: Optional[Callable[[pd.DataFrame], tuple[bool, str]]] = None,
+    input_fn: Optional[Callable[[str], str]] = None,
+    output_fn: Optional[Callable[[str], None]] = None,
+    synonyms_user: Optional[Mapping[str, Any]] = None,
+    persist_synonym_fn: Optional[Callable[[str, str], None]] = None,
+    logger: Optional[Callable[[str], None]] = None,
+) -> Optional[pd.DataFrame]:
+    """Ejecuta preview/confirmación y aplica el mapeo con rollback ante fallos."""
+
+    if source_name not in df.columns:
+        return df
+
+    input_cb = input_fn or input  # type: ignore[arg-type]
+    output_cb = output_fn or print
+    log_fn = logger or core_log
+
+    confirmado = preview_fn(
+        df[source_name],
+        source_name,
+        target_name,
+        muestras_fn=muestras_fn,
+        validator_fn=validator_fn,
+        input_fn=input_cb,
+        output_fn=output_cb,
+    )
+    if not confirmado:
+        return None
+
+    synonyms_user = synonyms_user or {}
+    current_target = synonyms_user.get(source_name)
+    target_norm = str(target_name).strip().lower()
+    if current_target is not None:
+        current_norm = str(current_target).strip().lower()
+        if current_norm and current_norm != target_norm:
+            output_cb(f"[WIZARD] Conflicto: '{source_name}' ya está registrado como sinónimo de '{current_target}'.")
+            resp = (input_cb("¿Deseás SOBREESCRIBIR ese registro? (S/N): ") or "").strip().lower()
+            if resp not in ("s", "si", "sí"):
+                output_cb("No se aplicó el mapeo por conflicto. Volvé a elegir.")
+                return None
+
+    renamed = df.rename(columns={source_name: target_name})
+    if post_map_validator is not None:
+        ok_schema, motivo = post_map_validator(renamed)
+        if not ok_schema:
+            output_cb(f"[WIZARD] Se revirtió el mapeo por inconsistencia: {motivo}")
+            return None
+
+    if persist_synonym_fn is not None:
+        try:
+            persist_synonym_fn(target_name, source_name)
+        except Exception as exc:  # pragma: no cover - log defensivo
+            if log_fn:
+                try:
+                    log_fn(f"[WARN][synonyms] No se pudo persistir el sinónimo: {exc}")
+                except Exception:
+                    pass
+
+    if log_fn:
+        try:
+            log_fn(f"WIZARD: la columna '{source_name}' fue mapeada a '{target_name}'.")
+        except Exception:
+            pass
+
+    return renamed

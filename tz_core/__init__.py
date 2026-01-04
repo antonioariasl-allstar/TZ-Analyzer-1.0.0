@@ -101,6 +101,7 @@ from .schema_utils import (
     prep_meta_unicos,
     ensure_placeholder_columns,
     preview_column_mapping,
+    confirm_column_mapping_with_preview,
     _muestras_columna,
     _es_numero,
     _en_bbox_sv,
