@@ -38,7 +38,11 @@ from tz_core.html_helpers import (
 )
 from tz_core.runtime_utils import collect_env_snapshot
 from tz_core.time_utils import to_datetime_silent
-from tz_core.bitacora_normalization import parse_duration_seconds
+from tz_core.bitacora_normalization import (
+    parse_duration_seconds,
+    normalize_msisdn,
+    normalize_imei,
+)
 
 
 def resolve_top_antennas_n(config: dict | None, overrides: dict | None, default: int = 3) -> int:
@@ -682,7 +686,7 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
     imei_cols = ["imei","imei1","imei_1"]
     imsi_cols = ["imsi","imsi1","imsi_1","imsi_origen"]
 
-    tel_val = first_nonempty_in(df, tel_cols)
+    tel_val = normalize_msisdn(first_nonempty_in(df, tel_cols)) or first_nonempty_in(df, tel_cols)
     alias_val = first_nonempty_in(df, alias_cols)
     user_val = first_nonempty_in(df, user_cols)
     abon_val = first_nonempty_in(df, abon_cols)
@@ -700,7 +704,7 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
         except Exception:
             return str(value)
 
-    imei_val = _coerce_float_str(imei_raw) if imei_raw is not None else None
+    imei_val = normalize_imei(imei_raw) or (_coerce_float_str(imei_raw) if imei_raw is not None else None)
     imsi_val = _coerce_float_str(imsi_raw) if imsi_raw is not None else None
 
     def _ask_if_missing(label_visible: str, current_value, col_name: str):
@@ -748,14 +752,18 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
     imsi_disp = _fmt_uni(imsi_val, imsi_n)
 
     tel_list, tel_more = unique_values_in(df, tel_cols, max_items=8)
+    tel_list = [normalize_msisdn(x) for x in tel_list if normalize_msisdn(x)]
+    tel_n = len(set(tel_list)) if tel_list else tel_n
+    tel_disp = _fmt_uni(tel_val, tel_n)
+    tel_more = max(0, tel_n - len(tel_list))
     ali_list, ali_more = unique_values_in(df, alias_cols, max_items=8)
     usr_list, usr_more = unique_values_in(df, user_cols, max_items=8)
     abo_list, abo_more = unique_values_in(df, abon_cols, max_items=8)
     imei_list, imei_more = unique_values_in(df, imei_cols, max_items=20)
     imsi_list, imsi_more = unique_values_in(df, imsi_cols, max_items=20)
 
-    imei_list = [fmt_imei_item(x) for x in imei_list]
-    imei_list = [x for x in imei_list if is_valid_imei(x)]
+    imei_list = [normalize_imei(fmt_imei_item(x)) for x in imei_list]
+    imei_list = [x for x in imei_list if x and is_valid_imei(x)]
     if not imei_list:
         imei_disp = None
         imei_more = 0
@@ -786,7 +794,8 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
         for tel in tel_list:
             imsis = set()
             for _, row in df.iterrows():
-                if str(row.get("tel", "")).strip() == str(tel):
+                row_tel = normalize_msisdn(row.get("tel", "")) or str(row.get("tel", "")).strip()
+                if row_tel == str(tel):
                     imsi_value = row.get("imsi", "")
                     if imsi_value:
                         imsis.add(str(imsi_value).strip())
