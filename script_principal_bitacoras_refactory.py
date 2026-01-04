@@ -127,6 +127,7 @@ from tz_core.html_generator import (
     build_top_contacts_sections,
     build_top_antennas_section,
     build_antennas_by_hour_section,
+    build_recent_contacts_section,
     inject_technical_metadata,
     resolve_top_antennas_n,
 )
@@ -1534,48 +1535,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
             df_dt["_dt"] = pd.NaT
 
         max_dt = df_dt["_dt"].max()
-        recent_html = ""
-        if pd.notna(max_dt) and c_col:
-            start = max_dt - pd.Timedelta(days=5)
-            r = df_dt[df_dt["_dt"].between(start, max_dt)].copy()
-            # Limpia contactos "vacíos"
-            r[c_col] = r[c_col].astype(str).str.strip()
-            r = r[(r[c_col] != "") & r[c_col].notna()]
-
-            # Formateo
-            r["_dt_str"] = r["_dt"].dt.strftime("%d/%m/%Y %H:%M:%S")
-            def _fmt_sec(x):
-                try:
-                    s = str(x).strip()
-                    if ":" in s:
-                        return s  # ya viene HH:MM:SS
-                    v = float(pd.to_numeric(s, errors="coerce") or 0.0)
-                except Exception:
-                    v = 0.0
-                v = int(round(v))
-                h = v // 3600; m = (v % 3600) // 60; s2 = v % 60
-                return f"{h:02d}:{m:02d}:{s2:02d}" if h > 0 else f"{m:02d}:{s2:02d}"
-
-            # Orden por fecha descendente y límite para no hacer pesado el HTML
-            r = r.sort_values("_dt", ascending=False).head(200)
-
-            filas = []
-            for _, rr in r.iterrows():
-                dt_s  = rr.get("_dt_str", "") or ""
-                tipo  = rr.get(t_col, "") if t_col else ""
-                cont  = rr.get(c_col, "")
-                dur_s = _fmt_sec(rr.get(d_col, "")) if d_col else ""
-                filas.append(
-                    f"<tr>"
-                    f"<td class='mono'>{dt_s}</td>"
-                    f"<td>{tipo}</td>"
-                    f"<td class='mono'>{cont}</td>"
-                    f"<td class='mono'>{dur_s}</td>"
-                    f"</tr>"
-                )
-
-            if filas:
-                recent_html = ""
+        recent_html = build_recent_contacts_section(df)
 
 
     # === TOPC (para títulos "Top N" en HTML) ===
