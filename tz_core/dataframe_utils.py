@@ -8,6 +8,7 @@ con DataFrames, incluyendo deduplicación de columnas.
 import pandas as pd
 import numpy as np
 import difflib
+import warnings
 from collections import Counter
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -62,18 +63,27 @@ def dedupe_columns(df):
         if len(same_columns) <= 1:
             continue
             
-        # Tomar primera columna como base usando índice (garantiza Series)
-        base = result_df.iloc[:, same_columns[0]].copy()
-        
-        # Consolidar desde columnas extras
-        for col_idx in same_columns[1:]:
-            s = result_df.iloc[:, col_idx]
-            # Máscara para valores vacíos: NaN o string en blanco
-            mask_blank = base.isna() | (base.astype(str).str.strip() == "")
-            base = base.where(~mask_blank, s)
-        
-        # Actualizar la primera columna con valores consolidados
-        result_df.iloc[:, same_columns[0]] = base
+        # Consolidar con backfill: reemplaza vacíos/NaN por el siguiente valor disponible
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=".*incompatible dtype.*",
+                category=FutureWarning,
+            )
+            result_df.iloc[:, same_columns] = result_df.iloc[:, same_columns].astype(object)
+
+        dup_df = result_df.iloc[:, same_columns].copy()
+        dup_df = dup_df.apply(lambda col: col.map(lambda x: np.nan if (pd.isna(x) or str(x).strip() == "") else x))
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated*",
+                category=FutureWarning,
+            )
+            combined = dup_df.bfill(axis=1).iloc[:, 0]
+
+        # Actualizar la primera columna con valores consolidados (forzando dtype object para evitar FutureWarning)
+        result_df.iloc[:, same_columns[0]] = combined.values
         
         # Crear lista de columnas a mantener (excluyendo duplicadas extras)
         cols_to_keep = []

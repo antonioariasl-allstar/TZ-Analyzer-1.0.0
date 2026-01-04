@@ -59,6 +59,7 @@ import logging
 import traceback
 import io
 import base64
+import warnings
 
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
@@ -127,7 +128,6 @@ from tz_core.html_generator import (
     build_top_contacts_sections,
     build_top_antennas_section,
     build_antennas_by_hour_section,
-    build_recent_contacts_section,
     inject_technical_metadata,
     resolve_top_antennas_n,
 )
@@ -260,7 +260,18 @@ def _prepare_manual_mapping(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], 
     ]
     no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
 
-    df._orig_cols = list(df.columns)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Pandas doesn't allow columns to be created via a new attribute name*",
+            category=UserWarning,
+        )
+        try:
+            df._orig_cols = list(df.columns)
+        except Exception:
+            pass
+
+    df.attrs["_orig_cols"] = list(df.columns)
     return df, esenciales_qc, no_esenciales_qc
 
 
@@ -1858,6 +1869,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
         # para insertarla entre "Antenas más activadas" y "Contactos con más comunicación".
         sec_ant_rangos = ""
         sec_heatmap = ""
+        sec_recientes = ""
         try:
             sec_ant_rangos = build_antennas_by_hour_section(
                 df,
@@ -2188,24 +2200,20 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                         html = html[:ini_int] + html[fin_int+10:]
                         # 2A.1) Insertar HEATMAP justo después del resumen (si lo tenemos)
                         fin_res = html.find("</section>", idx_res)
+                        insert_pos = fin_res + 10 if fin_res != -1 else -1
+
+                        # Insertar heatmap primero (si existe)
                         if fin_res != -1 and sec_heatmap:
                             html = html[:fin_res+10] + "\n" + sec_heatmap + html[fin_res+10:]
-                            # recalcular punto de inserción para contactos: después del heatmap
                             idx_hm = html.find('id="heatmap-actividad"', fin_res)
                             if idx_hm != -1:
                                 fin_hm = html.find("</section>", idx_hm)
                                 if fin_hm != -1:
-                                    html = html[:fin_hm+10] + "\n" + bloque_int + html[fin_hm+10:]
-                                else:
-                                    # fallback: si no encontramos cierre, insertar tras resumen
-                                    html = html[:fin_res+10] + "\n" + bloque_int + html[fin_res+10:]
-                            else:
-                                # fallback por si no quedó el id (no debería ocurrir)
-                                html = html[:fin_res+10] + "\n" + bloque_int + html[fin_res+10:]
-                        else:
-                            # si no hay heatmap, insertar interacciones debajo del resumen
-                            if fin_res != -1:
-                                html = html[:fin_res+10] + "\n" + bloque_int + html[fin_res+10:]
+                                    insert_pos = fin_hm + 10
+
+                        # Finalmente insertar el bloque de contactos (interacciones)
+                        if insert_pos != -1:
+                            html = html[:insert_pos] + "\n" + bloque_int + html[insert_pos:]
 
             # 2B) Insertar "Antenas por rango horario" debajo de "Interacciones" (si existe); si no, debajo del resumen
             if sec_ant_rangos:
@@ -2223,7 +2231,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                     if i != -1:
                         j = html.find("</section>", i)
                         if j != -1:
-                            html = html[:j+10] + "\n" + sec_ant_rangos + html[j_int+10:]
+                            html = html[:j+10] + "\n" + sec_ant_rangos + html[j+10:]
                     else:
                         # si no hay ninguna de las dos, mándalo al final
                         if "</body>" in html:

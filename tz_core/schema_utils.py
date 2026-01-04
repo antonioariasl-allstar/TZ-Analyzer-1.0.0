@@ -6,6 +6,7 @@ import re
 import numpy as np
 
 import pandas as pd
+import warnings
 
 from .text_utils import normalize_header_key
 from .logging_utils import log as core_log
@@ -261,7 +262,13 @@ def _es_columna_valida_para(
         return True, ""
 
     if name == "fecha":
-        conv = pd.to_datetime(pd.Series(smps), errors="coerce", dayfirst=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Could not infer format*",
+                category=UserWarning,
+            )
+            conv = pd.to_datetime(pd.Series(smps), errors="coerce", dayfirst=True)
         if conv.isna().any():
             return False, f"Algunas muestras no parecen fechas; muestras: {', '.join(smps)}"
         return True, ""
