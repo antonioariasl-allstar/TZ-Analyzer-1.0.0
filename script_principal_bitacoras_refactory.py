@@ -125,7 +125,9 @@ from tz_core.html_generator import (
     generate_kpi_section,
     build_identification_rows,
     build_top_contacts_sections,
+    build_top_antennas_section,
     inject_technical_metadata,
+    resolve_top_antennas_n,
 )
 from tz_core.time_filters import (
     _solicitar_filtros_tiempo,
@@ -1790,161 +1792,87 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     except Exception:
         pass
 
-    # === HTML-TABLA-ESPACIADO-1: Ajustes de "Todos los contactos" (solo CSS) ===
+    # === HTML-INTERACCIONES-1: sección Interacciones recientes (dropdown por día) ===
     try:
-        _css_tc = """
-/* Tabla de 'Todos los contactos' con más respiración */
-#todos-contactos table.tbl{
-  border-collapse:separate !important;
-  border-spacing:18px 8px !important;
-  table-layout:fixed;
-  width:100%;
-}
-#todos-contactos table.tbl th,
-#todos-contactos table.tbl td{
-  padding:12px 20px !important;
-}
+        # Preferir la sección ya generada por produce_case_outputs; si no existe, construirla aquí.
+        sec_inter = (globals().get("HTML_SECCION_INTERACCIONES") or "").strip()
 
-/* # (angosta, derecha) */
-#todos-contactos table.tbl th:nth-child(1),
-#todos-contactos table.tbl td:nth-child(1){
-  width:56px !important;
-  text-align:right !important;
-}
+        if not sec_inter:
+            cfg_html = CONFIG.get("html", {}) if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else {}
+            cfg_cols = CONFIG.get("columnas", {}) if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else {}
+            try:
+                dias_cfg = int(cfg_html.get("interacciones_ultimos_dias", 3))
+            except Exception:
+                dias_cfg = 3
+            sec_inter = _construir_seccion_interacciones(df, dias_cfg, cfg_cols)
 
-/* Contacto (más ancha, con elipsis si se desborda) */
-#todos-contactos table.tbl th:nth-child(2),
-#todos-contactos table.tbl td:nth-child(2){
-  width:300px !important;
-  overflow:hidden !important;
-  text-overflow:ellipsis !important;
-  white-space:nowrap !important;
-}
-
-/* Conteo y Minutos (alineadas a la derecha, anchas) */
-#todos-contactos table.tbl th:nth-child(3),
-#todos-contactos table.tbl td:nth-child(3),
-#todos-contactos table.tbl th:nth-child(4),
-#todos-contactos table.tbl td:nth-child(4){
-  width:200px !important;
-  text-align:right !important;
-}
-
-/* Tarjetas visuales por fila (sombra sutil) */
-#todos-contactos table.tbl tbody tr{
-  background:#fff;
-  box-shadow:0 1px 0 #eee;
-}
-#todos-contactos table.tbl thead tr{
-  box-shadow:none;
-}
-"""
-        html = html.replace("</style>", _css_tc + "</style>", 1)
-        # === HTML-RESPONSIVE-1: Tablas en móvil (última columna se parte / scroll si hace falta) ===
-        _css_resp = """
-        <style>
-        @media (max-width: 640px) {
-            section table {
-            width: 100%;
-            border-collapse: collapse;
-            }
-            /* Forzar quiebre de línea en la ÚLTIMA columna (p. ej., Azimut) */
-            section table td:last-child,
-            section table th:last-child {
-            white-space: normal !important;
-            word-break: break-word !important;
-            overflow-wrap: anywhere !important;
-            max-width: 160px;
-            }
-            /* Tipografía un poco más compacta en celdas */
-            section table td,
-            section table th {
-            font-size: 14px;
-            line-height: 1.25;
-            }
-        }
-        @media (max-width: 480px) {
-            /* Si igual no cabe, permitir desplazamiento horizontal suave */
-            section table {
-            display: block;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            }
-            section table td,
-            section table th {
-            min-width: 80px;
-            }
-        }
-        </style>
-        """
-        html = html.replace("</style>", _css_resp + "</style>", 1)
-        # === HTML-RESPONSIVE-2: Mejoras de usabilidad táctil en móvil ===
-        _css_mobile_touch = """
-        <style>
-        html{ scroll-behavior: smooth; }
-        @media (max-width: 768px) {
-            /* Selector de día: más grande y de ancho completo */
-            #dia-selector{ display:block; width:100%; font-size:16px; padding:12px 14px; border-radius:8px; }
-            /* Botón Ver más: área táctil mínima 44px */
-            .ver-mas-btn{ padding:10px 14px !important; min-height:44px; font-size:15px; border-radius:8px; }
-            /* Botón fullscreen del mini-mapa: un poco más grande */
-            .tz-fs-btn{ padding:10px 12px !important; font-size:18px; }
-            /* Controles de zoom de Leaflet: más grandes para dedo */
-            .leaflet-control-zoom a{ width:44px; height:44px; line-height:44px; font-size:22px; }
-            .leaflet-control-zoom{ box-shadow:0 1px 4px rgba(0,0,0,.15); }
-            /* Links del menú TOC: más área clicable y separación vertical */
-            .toc a{ display:inline-block; padding:10px 12px; margin:4px 8px 6px 0; border-radius:999px; }
-            /* Tablas: más aire y legibilidad */
-            table.tbl th, table.tbl td{ padding:10px 12px; font-size:14px; line-height:1.35; }
-        }
-        </style>
-        """
-        html = html.replace("</style>", _css_mobile_touch + "</style>", 1)
-        
-
-    except Exception:
-        pass
-
-
-    # HTML-INTERACCIONES-1: inyectar sección (si fue calculada)
-    try:
-        _html_interacciones = globals().get("HTML_SECCION_INTERACCIONES", "")
-        if isinstance(_html_interacciones, str) and _html_interacciones:
-            if "</main>" in html:
-                html = html.replace("</main>", _html_interacciones + "</main>")
-            elif "</body>" in html:
-                html = html.replace("</body>", _html_interacciones + "</body>")
+        if sec_inter:
+            anchor = "<h2>Indicadores</h2>"
+            i = html.find(anchor)
+            if i != -1:
+                j = html.find("</section>", i)
+                if j != -1:
+                    html = html[:j+10] + "\n" + sec_inter + html[j+10:]
+                else:
+                    html += sec_inter
             else:
-                html += _html_interacciones
+                html += sec_inter
     except Exception:
         pass
 
-        # TODOS-CONTACTOS-HTML: inyectar sección si fue calculada
+    # === HTML-CONTACTOS-ALL-1: sección Todos los contactos ===
     try:
-        _html_all = globals().get("HTML_SECCION_TODOS_CONTACTOS", "")
-        if isinstance(_html_all, str) and _html_all:
-            if "</main>" in html:
-                html = html.replace("</main>", _html_all + "</main>")
-            elif "</body>" in html:
-                html = html.replace("</body>", _html_all + "</body>")
+        sec_todos = (globals().get("HTML_SECCION_TODOS_CONTACTOS") or "").strip()
+
+        if not sec_todos:
+            cfg_cols = CONFIG.get("columnas", {}) if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else {}
+            sec_todos = construir_seccion_todos_contactos(df, cfg_cols)
+
+        if sec_todos:
+            anchor = '<h2 id="interacciones">Contactos con más comunicación</h2>'
+            i = html.find(anchor)
+            if i != -1:
+                j = html.find("</section>", i)
+                if j != -1:
+                    html = html[:j+10] + "\n" + sec_todos + html[j+10:]
+                else:
+                    html += sec_todos
             else:
-                html += _html_all
+                html += sec_todos
     except Exception:
         pass
 
+    # === HTML-ANTENAS-SIMPLE-1: sección Top antenas (delegada al helper) ===
+    try:
+        sec_ant = build_top_antennas_section(
+            df,
+            globals().get("CONFIG"),
+            globals().get("OVERRIDE_TOPS"),
+        )
+
+        if sec_ant:
+            anchor = "<h2>Indicadores</h2>"
+            i = html.find(anchor)
+            if i != -1:
+                j = html.find("</section>", i)
+                if j != -1:
+                    html = html[:j+10] + "\n" + sec_ant + html[j+10:]
+                else:
+                    html += sec_ant
+            else:
+                html += sec_ant
+
+    except Exception:
+        pass
 
     # === HTML-ANTENAS-SIMPLE-1: sección Top antenas (computada aquí) ===
     try:
-        # Top N configurable (override -> config -> 3)
-        try:
-            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas') is not None:
-                _topN = int(OVERRIDE_TOPS.get('antenas'))
-            elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                _topN = int(CONFIG.get("top_antenas", CONFIG.get("html", {}).get("top_antenas_n", 3)))
-            else:
-                _topN = 3
-        except Exception:
-            _topN = 3
+        # Top N configurable (override -> config -> default 3)
+        _topN = resolve_top_antennas_n(
+            globals().get("CONFIG"),
+            globals().get("OVERRIDE_TOPS"),
+            default=3,
+        )
 
 
         # Helper para elegir columnas disponibles
@@ -2233,15 +2161,11 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                         sub_valid = tmp[valid_geo & valid_ant]
 
                         # --- Top N (respeta override/config) ---
-                        try:
-                            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
-                                _topN = int(OVERRIDE_TOPS.get('antenas'))
-                            elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                                _topN = int(CONFIG.get("top_antenas", CONFIG.get("html", {}).get("top_antenas_n", 3)))
-                            else:
-                                _topN = 3
-                        except Exception:
-                            _topN = 3
+                        _topN = resolve_top_antennas_n(
+                            globals().get("CONFIG"),
+                            globals().get("OVERRIDE_TOPS"),
+                            default=3,
+                        )
 
                         conteo = sub_valid[col_ant].value_counts(dropna=False)
                         top_series = conteo
@@ -2383,12 +2307,12 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
                     markers_data = []
                     if col_ant and (col_ant in df.columns):
                         try:
-                            # Obtener top_N del config
-                            _topN_markers = 5  # default
-                            if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('antenas'):
-                                _topN_markers = int(OVERRIDE_TOPS.get('antenas'))
-                            elif 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                                _topN_markers = int(CONFIG.get("top_antenas", CONFIG.get("html", {}).get("top_antenas_n", 5)))
+                            # Obtener top_N del config (respeta overrides) con default 5
+                            _topN_markers = resolve_top_antennas_n(
+                                globals().get("CONFIG"),
+                                globals().get("OVERRIDE_TOPS"),
+                                default=5,
+                            )
                             
                             _dfv = df.copy()
                             _dfv[col_ant] = _dfv[col_ant].astype(str).str.strip()

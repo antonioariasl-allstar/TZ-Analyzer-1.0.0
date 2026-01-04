@@ -141,3 +141,83 @@ def test_produce_outputs_handles_interaction_errors(tmp_path):
     assert result.contacts_html == "contacts"
     assert any("Informe HTML generado" in msg for msg in outputs)
     assert section_flag.get("inter") == ""
+
+
+def test_generar_informe_html_inserta_interacciones(tmp_path, monkeypatch):
+    import script_principal_bitacoras_refactory as monolith
+
+    # Forzar config mínima y sección precalculada
+    monkeypatch.setattr(monolith, "CONFIG", {}, raising=False)
+    monkeypatch.setattr(
+        monolith,
+        "HTML_SECCION_INTERACCIONES",
+        '<section id="interacciones-recientes">ok</section>',
+        raising=False,
+    )
+
+    df = pd.DataFrame(
+        {
+            "fecha": ["01/01/2020"],
+            "hora": ["00:00:00"],
+            "antena": ["A"],
+            "lat": [13.7],
+            "long": [-88.9],
+        }
+    )
+
+    out_dir = tmp_path
+    kml_path = out_dir / "caso.kml"
+    kml_path.write_text("kml", encoding="utf-8")
+
+    html_path = monolith.generar_informe_html(
+        df,
+        str(kml_path),
+        str(out_dir),
+        "caso",
+        hoja=None,
+        nombre_bitacora=None,
+    )
+
+    contenido = Path(html_path).read_text(encoding="utf-8")
+    assert "interacciones-recientes" in contenido
+
+
+def test_generar_informe_html_inserta_todos_contactos(tmp_path, monkeypatch):
+    import script_principal_bitacoras_refactory as monolith
+
+    # Forzar config mínima y sección precalculada
+    monkeypatch.setattr(monolith, "CONFIG", {}, raising=False)
+    monkeypatch.setattr(
+        monolith,
+        "HTML_SECCION_TODOS_CONTACTOS",
+        '<section id="todos-contactos">ok</section>',
+        raising=False,
+    )
+
+    df = pd.DataFrame(
+        {
+            "fecha": ["01/01/2020"],
+            "hora": ["00:00:00"],
+            "antena": ["A"],
+            "lat": [13.7],
+            "long": [-88.9],
+            "contacto": ["123"],
+            "duracion": [30],
+        }
+    )
+
+    out_dir = tmp_path
+    kml_path = out_dir / "caso.kml"
+    kml_path.write_text("kml", encoding="utf-8")
+
+    html_path = monolith.generar_informe_html(
+        df,
+        str(kml_path),
+        str(out_dir),
+        "caso",
+        hoja=None,
+        nombre_bitacora=None,
+    )
+
+    contenido = Path(html_path).read_text(encoding="utf-8")
+    assert "todos-contactos" in contenido

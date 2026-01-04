@@ -118,3 +118,6 @@ from .time_filters import (
 
 # runtime_utils - Metadata del entorno de ejecucion
 from .runtime_utils import collect_env_snapshot
+
+# html_generator - Helpers de HTML
+from .html_generator import resolve_top_antennas_n, build_top_antennas_section

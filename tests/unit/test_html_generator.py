@@ -132,3 +132,44 @@ def test_collect_env_snapshot_prefers_config(monkeypatch):
     assert snapshot["version_config"] == "cfg-x"
     assert snapshot["hostname"] == "unit-host"
     assert snapshot["usuario"] == "ci-user"
+
+
+def test_resolve_top_antennas_n_prefers_override_then_config():
+    cfg = {"top_antenas": 7, "html": {"top_antenas_n": 9}}
+    overrides = {"antenas": 5}
+
+    assert html_generator.resolve_top_antennas_n(cfg, overrides, default=3) == 5
+
+    # Sin override usa config
+    assert html_generator.resolve_top_antennas_n(cfg, None, default=3) == 7
+
+    # Sin top_antenas usa html.top_antenas_n
+    cfg2 = {"html": {"top_antenas_n": 4}}
+    assert html_generator.resolve_top_antennas_n(cfg2, None, default=3) == 4
+
+    # Fallback a default ante valores inválidos
+    cfg_bad = {"top_antenas": "no-int"}
+    assert html_generator.resolve_top_antennas_n(cfg_bad, None, default=11) == 11
+
+
+def test_build_top_antennas_section_respects_override_and_bbox():
+    df = html_generator.pd.DataFrame(
+        [
+            {"antena": "A1", "lat": 13.7, "long": -89.2, "azimut": 10},
+            {"antena": "A1", "lat": 13.71, "long": -89.21, "azimut": 10},
+            {"antena": "A2", "lat": 13.8, "long": -89.25, "azimut": 45},
+            {"antena": "A3", "lat": 13.9, "long": -89.3, "azimut": 90},
+        ]
+    )
+
+    cfg = {"top_antenas": 1}
+    overrides = {"antenas": 2}
+
+    html = html_generator.build_top_antennas_section(df, cfg, overrides)
+
+    assert "id=\"resumen-antenas\"" in html
+    # Override 2 → debe contener A1 y A2, pero no A3
+    assert "A1" in html and "A2" in html
+    assert "A3" not in html
+    # Link a maps presente
+    assert "google.com/maps" in html

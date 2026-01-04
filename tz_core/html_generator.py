@@ -26,6 +26,7 @@ import numpy as np
 
 from tz_core.logging_utils import log
 from tz_core.config_manager import cargar_config
+from tz_core.dataframe_utils import pick_first_existing_column
 from tz_core.html_helpers import (
     first_nonempty_in,
     unique_values_in,
@@ -36,6 +37,173 @@ from tz_core.html_helpers import (
     is_valid_imei,
 )
 from tz_core.runtime_utils import collect_env_snapshot
+
+
+def resolve_top_antennas_n(config: dict | None, overrides: dict | None, default: int = 3) -> int:
+    """Obtiene el Top N de antenas respetando overrides y config.
+
+    Precedencia: overrides.antenas → config["top_antenas"] → config["html"]["top_antenas_n"] → default.
+    Siempre devuelve un entero válido; ante errores o valores faltantes retorna `default`.
+    """
+    try:
+        if overrides and isinstance(overrides, dict):
+            if overrides.get("antenas") is not None:
+                return int(overrides.get("antenas"))
+
+        if config and isinstance(config, dict):
+            if config.get("top_antenas") is not None:
+                return int(config.get("top_antenas"))
+
+            html_cfg = config.get("html", {}) or {}
+            if html_cfg.get("top_antenas_n") is not None:
+                return int(html_cfg.get("top_antenas_n"))
+
+        return int(default)
+    except Exception:
+        return int(default)
+
+
+def build_top_antennas_section(
+    df: pd.DataFrame,
+    config: dict | None,
+    overrides: dict | None,
+) -> str:
+    """Genera la sección HTML de "Antenas más activadas" (Top N).
+
+    - Usa `resolve_top_antennas_n` para obtener N respetando overrides/config.
+    - Filtra antenas vacías/"0" y coordenadas inválidas o fuera del bbox SV.
+    - Devuelve HTML listo para insertar; en caso de error o datos insuficientes, devuelve "".
+    """
+    try:
+        if df is None or df.empty:
+            return ""
+
+        # Bounding box: config -> fallback SV
+        bbox = None
+        try:
+            if isinstance(config, dict):
+                bbox = (config.get("geografia", {}) or {}).get("sv_bbox")
+        except Exception:
+            bbox = None
+
+        if not (isinstance(bbox, dict) and all(k in bbox for k in ("lat_min", "lat_max", "lon_min", "lon_max"))):
+            bbox = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
+
+        top_n = resolve_top_antennas_n(config, overrides, default=3)
+
+        # Columnas
+        col_ant = pick_first_existing_column(df, ["antena", "nombre_antena", "cell_name"])
+        col_lat = pick_first_existing_column(df, ["lat", "latitud", "latitude"])
+        col_lon = pick_first_existing_column(df, ["long", "lon", "longitud", "lng", "longitude"])
+        col_az = pick_first_existing_column(df, ["azimut", "azimuth", "azi", "angulo"])
+
+        if not col_ant:
+            return ""
+
+        def _valid_latlon(lt, lg):
+            try:
+                lt = float(lt)
+                lg = float(lg)
+                if np.isnan(lt) or np.isnan(lg):
+                    return False
+                if abs(lt) < 1e-9 and abs(lg) < 1e-9:
+                    return False
+                return (bbox["lat_min"] <= lt <= bbox["lat_max"]) and (bbox["lon_min"] <= lg <= bbox["lon_max"])
+            except Exception:
+                return False
+
+        dfv = df.copy()
+        dfv[col_ant] = dfv[col_ant].astype(str).str.strip()
+        dfv = dfv[dfv[col_ant].notna() & (dfv[col_ant] != "") & (dfv[col_ant] != "0")]
+
+        if col_lat and col_lon and col_lat in dfv.columns and col_lon in dfv.columns:
+            dfv = dfv[dfv.apply(lambda r: _valid_latlon(r[col_lat], r[col_lon]), axis=1)]
+
+        if dfv.empty:
+            return ""
+
+        top = (
+            dfv.groupby(col_ant)
+            .size()
+            .reset_index(name="activaciones")
+            .sort_values("activaciones", ascending=False)
+        )
+        if int(top_n) > 0:
+            top = top.head(int(top_n))
+
+        filas = []
+        for _, r0 in top.iterrows():
+            ant = str(r0[col_ant])
+            sub = dfv[dfv[col_ant] == ant]
+
+            lt = float(sub[col_lat].astype(float).mean()) if (col_lat and col_lat in sub.columns) else None
+            lg = float(sub[col_lon].astype(float).mean()) if (col_lon and col_lon in sub.columns) else None
+
+            az_dom, desg = "—", "—"
+            if col_az and (col_az in sub.columns):
+                vc = (
+                    sub[col_az]
+                    .astype(str)
+                    .str.strip()
+                    .replace({"": np.nan, "nan": np.nan})
+                    .dropna()
+                    .value_counts()
+                )
+                if not vc.empty:
+                    az_dom = str(vc.index[0])
+                    parts = [
+                        f"Azimut {int(float(k))}: {int(v)} {'vez' if int(v)==1 else 'veces'}"
+                        for k, v in vc.head(3).items()
+                    ]
+                    desg = "<br>".join(parts) + (" …" if len(vc) > 3 else "")
+
+            if (lt is not None) and (lg is not None):
+                url = f"https://www.google.com/maps?q={lt:.6f},{lg:.6f}"
+                ant_fmt = f'<a href="{url}" target="_blank" rel="noopener">{ant}</a>'
+                lt_fmt, lg_fmt = f"{lt:.6f}", f"{lg:.6f}"
+            else:
+                ant_fmt, lt_fmt, lg_fmt = ant, "—", "—"
+
+            filas.append((ant_fmt, int(r0["activaciones"]), lt_fmt, lg_fmt, az_dom, desg))
+
+        out: list[str] = []
+        out.append('<section id="resumen-antenas">')
+        out.append(f'<h2>Antenas más activadas (Top {top_n})</h2>')
+        out.append('<p class="nota"><b>Nota:</b> En esta sección se muestra un top list de las antenas más activadas en el periodo analizado; seguidamente se muestra la ubicación de esas antenas segun sus coordenadas.</p>')
+        out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
+        out.append('<thead><tr>'
+                  '<th>#</th>'
+                  '<th>Antena</th>'
+                  '<th>Latitud</th>'
+                  '<th>Longitud</th>'
+                  '<th>Activaciones</th>'
+                  '<th>Azimut</th>'
+                  '</tr></thead><tbody>')
+        for idx, (ant_fmt, act, lt_fmt, lg_fmt, az_dom, desg) in enumerate(filas, start=1):
+            out.append('<tr>'
+                      f'<td>{idx}</td>'
+                      f'<td>{ant_fmt}</td>'
+                      f'<td>{lt_fmt}</td>'
+                      f'<td>{lg_fmt}</td>'
+                      f'<td>{act}</td>'
+                      f'<td>{desg}</td>'
+                      '</tr>')
+        out.append('</tbody></table></div>')
+        out.append(
+            """
+<style>
+#resumen-antenas .tabla-compacta { border-collapse: collapse; width:100%; font-size:1rem; }
+#resumen-antenas .tabla-compacta th, #resumen-antenas .tabla-compacta td { border:1px solid #ddd; padding:6px 8px; text-align:left; }
+#resumen-antenas .tabla-compacta th { background:#f2f2f2; }
+#resumen-antenas .tabla-scroll { overflow-x:auto; }
+</style>
+"""
+        )
+        out.append('</section>')
+        return "".join(out)
+    except Exception as exc:  # defensivo: no romper el flujo principal
+        log(f"[WARNING] build_top_antennas_section fallback: {exc}")
+        return ""
 
 def generate_html_header(theme_hex: str, nombre_salida: str) -> str:
     """
