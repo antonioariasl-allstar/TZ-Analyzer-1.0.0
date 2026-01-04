@@ -73,7 +73,7 @@ from simplekml import Kml
 from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
 from tz_core.kml_generator import generar_kml_puntos_libres
-from tz_core.mapping_wizard import wizard_qc_mapeo as _wizard_qc_mapeo
+from tz_core.mapping_wizard import WizardIO, wizard_qc_mapeo as _wizard_qc_mapeo
 from tz_core.html_helpers import fmt_datetime as fmt_dt
 from tz_core.logging_utils import (
     log as _log_impl,
@@ -155,6 +155,7 @@ def bootstrap_config() -> None:
 
 # Flag para modo wizard de mapeo manual (QC)
 MANUAL_QC_MAPPING = True
+WIZARD_IO_LOGGING_ENABLED = os.getenv("TZ_WIZARD_LOGGING", "1").lower() not in {"0", "false", "off"}
 
 # === SECCI�"N: WIZARD DE MAPEO DE COLUMNAS (detecci�n, mapeo manual, QC) ===
 # � M�DULO EXTRA&#205;DO EN EPIC 15 - 27/12/2025
@@ -187,6 +188,34 @@ MANUAL_QC_MAPPING = True
 #
 # COMMIT: Pendiente tras validaci�n paranoica completa
 # =========================================================================
+
+
+def _build_wizard_io(log_to_system: Optional[bool] = None) -> WizardIO:
+    """Crea un WizardIO que puede silenciar logs según bandera global o argumento."""
+
+    log_enabled = WIZARD_IO_LOGGING_ENABLED if log_to_system is None else bool(log_to_system)
+
+    def _wizard_input(message: str) -> str:
+        if log_enabled:
+            try:
+                log_debug(f"[Wizard Prompt] {message.strip()}")
+            except Exception:
+                pass
+
+        try:
+            return input(message)
+        except Exception:
+            return ""
+
+    def _wizard_output(message: str) -> None:
+        print(message)
+        if log_enabled:
+            try:
+                log_info(message)
+            except Exception:
+                pass
+
+    return WizardIO(input_fn=_wizard_input, output_fn=_wizard_output)
 
 
 # Wrappers de compatibilidad para logging
@@ -3946,7 +3975,13 @@ def main():
         df._orig_cols = list(df.columns)
         
         # 🚨 FUNCIÓN DE RIESGO EXTREMO - Ver warning arriba en línea 353
-        df, _mapeo = _wizard_qc_mapeo(df, esenciales=esenciales_qc, no_esenciales=no_esenciales_qc)
+        wizard_io = _build_wizard_io()
+        df, _mapeo = _wizard_qc_mapeo(
+            df,
+            esenciales=esenciales_qc,
+            no_esenciales=no_esenciales_qc,
+            io=wizard_io,
+        )
         # --- Compatibilidad lon/long para KPIs/HTML ---
         if "lon" in df.columns and "long" not in df.columns:
             df["long"] = df["lon"]
