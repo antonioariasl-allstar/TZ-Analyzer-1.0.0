@@ -352,7 +352,6 @@ TZ-ANALYZER v1.0.0 - SISTEMA COMPLETAMENTE MODULAR
 **📖 DOCUMENTACIÓN ÉPICA:** `docs/development/MODULARIZACION_EPICA_OCT2025.md`  
 **🧪 PROTOCOLO APLICADO:** Máxima paranoia + validación exhaustiva + arqueología git
 
-<<<<<<< HEAD
 ## 🏆 AUDITORÍA COMPLETA FINALIZADA (26-OCT-2025) ✅
 
 **Auditoría de 8 fases completada exitosamente:**
@@ -363,8 +362,6 @@ TZ-ANALYZER v1.0.0 - SISTEMA COMPLETAMENTE MODULAR
 - ✅ **Import fantasma limpiado** y estructura optimizada
 - ✅ **Calidad excepcional** del código confirmada
 
-## �️ ARQUITECTURA HÍBRIDA PERMANENTE ESTABLECIDA ✅
-=======
 ## 🏗️ ACTUALIZACIÓN ARQUITECTURAL - 27 OCT 2025 ✅
 
 **CONSOLIDACIÓN EXITOSA:** Eliminada duplicación tz_analyzer/, consolidado en tz_core/  
@@ -376,14 +373,13 @@ TZ-ANALYZER v1.0.0 - SISTEMA COMPLETAMENTE MODULAR
 
 **PROBLEMA:** Campo "Usuario" solo aparecía en carpeta `todas_las_antenas`, faltaba en `top_las_mas_activadas` y `top_por_rango_horario`  
 **CAUSA:** Inconsistencia entre `_armar_descripcion_compacta()` y template hardcodeado  
-**SOLUCIÓN:** Agregado `"usuario": None` a diccionario campos + unified template  
+**SOLUCIÓN:** Agregado "usuario": None a diccionario campos + unified template  
 **VALIDADO:** ✅ Usuario confirma fix funcionando perfectamente  
 **DOCUMENTACIÓN:** `docs/development/FIX_USUARIO_KML.md`
 
 ---
 
 ## 🏗️ ARQUITECTURA HÍBRIDA PERMANENTE ESTABLECIDA ✅
->>>>>>> 0187c289285ee8673d1ae20c21f599776ac0b009
 
 **Fecha:** 25 de octubre de 2025  
 **Commit:** 2b3503f  
