@@ -89,6 +89,11 @@
 - [03/01/2026] El wrapper `wizard_qc_mapeo` quedó cubierto con monkeypatch (instanciación y defaults), asegurando que siga delegando al `MappingWizard` modular; la suite asciende a 39 pruebas (`.venv312\Scripts\python.exe -m pytest tests/unit/test_mapping_wizard.py -q`).
 - [03/01/2026] `wizard_qc_mapeo` ahora acepta un `WizardIO` opcional para permitir inyectar IO personalizado desde el monolito o tests; las pruebas de monkeypatch validan tanto el camino explícito como los defaults (`.venv312\Scripts\python.exe -m pytest tests/unit/test_mapping_wizard.py -q`).
 - [03/01/2026] `script_principal_bitacoras_refactory.py` crea `_build_wizard_io()` para redirigir prompts/salidas del wizard al logging global (desactivable vía env `TZ_WIZARD_LOGGING=0`) y lo pasa en la llamada a `_wizard_qc_mapeo`, cerrando el loop entre el wrapper modular y el monolito.
+- [03/01/2026] Helper `_prepare_manual_mapping` encapsula la preparación de DF y listas canónicas antes del wizard, manteniendo intacto el sistema dual (`_orig_cols`) y dejando el flujo listo para instanciar `MappingWizard` de forma explícita.
+- [03/01/2026] Nuevo helper `_run_manual_mapping` instancia `MappingWizard` directo desde el monolito, evitando el wrapper `wizard_qc_mapeo` y permitiendo inyectar `WizardIO`/listas personalizadas en un solo paso.
+- [03/01/2026] `normalize_wizard_datetime_fields` vive en `tz_core/mapping_wizard.py` y reemplaza el bloque inline de normalización fecha/hora del monolito; ahora el script solo lo invoca tras el wizard, manteniendo los logs de advertencia con una función inyectable.
+- [03/01/2026] `finalize_manual_mapping_dataframe` sincroniza lon/long y fuerza los campos numéricos post-wizard; el monolito lo invoca inmediatamente después de `_run_manual_mapping`, eliminando la lógica inline de compatibilidad.
+- [03/01/2026] `_run_schema_location_assistant` extrae el asistente legacy de ubicación/esenciales y solo se ejecuta cuando `MANUAL_QC_MAPPING` es falso, evitando prompts duplicados en el flujo manual y dejando la rama QC liviana.
 
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 

@@ -18,6 +18,8 @@ from tz_core.mapping_wizard import (
     MappingWizard,
     WizardIO,
     apply_quick_remap_selection,
+    finalize_manual_mapping_dataframe,
+    normalize_wizard_datetime_fields,
     perform_quick_remap_batch,
     collect_quick_remap_operations,
     collect_essential_mapping_assignments,
@@ -131,6 +133,69 @@ def test_apply_wizard_assignments_handles_numeric_and_fallbacks():
     assert pd.isna(mapped.loc[1, "lat"])  # "foo" se convierte en NaN
     assert "antena" in mapped.columns and list(mapped["antena"]) == ["AR-101", "AR-102"]
     assert messages == []
+
+
+def test_normalize_wizard_datetime_fields_formats_outputs():
+    df = pd.DataFrame({
+        "fecha": ["31/12/2025 13:05:00", "02/01/2026 08:30:00", None],
+        "hora": ["1:5", "", ""],
+    })
+
+    result = normalize_wizard_datetime_fields(df.copy())
+
+    assert result.loc[0, "fecha"] == "31/12/2025"
+    assert result.loc[1, "fecha"] == "02/01/2026"
+    assert pd.isna(result.loc[2, "fecha"])
+    assert result.loc[0, "hora"] == "01:05:00"
+    assert result.loc[1, "hora"] == "08:30:00"
+    assert result.loc[2, "hora"] == "Sin Inf."
+
+
+def test_normalize_wizard_datetime_fields_warns_and_coerces_on_failure(monkeypatch):
+    df = pd.DataFrame({
+        "fecha": ["2025-12-31"],
+        "lat": ["10.0"],
+        "long": ["-89.2"],
+    })
+
+    def boom(*_args, **_kwargs):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(mapping_wizard_module.pd, "to_datetime", boom)
+
+    warnings: list[str] = []
+    normalize_wizard_datetime_fields(df, warn_writer=warnings.append)
+
+    assert warnings and "[WARN] Normalización fecha/hora" in warnings[0]
+    assert df.loc[0, "lat"] == 10.0
+    assert df.loc[0, "long"] == -89.2
+
+
+def test_finalize_manual_mapping_dataframe_syncs_lon_and_numeric():
+    df = pd.DataFrame({
+        "lon": ["-89.25", "foo"],
+        "lat": ["13.50", "bar"],
+        "azimut": ["45", "n/a"],
+    })
+
+    result = finalize_manual_mapping_dataframe(df.copy())
+
+    assert "long" in result.columns
+    assert result.loc[0, "long"] == -89.25
+    assert pd.isna(result.loc[1, "long"])
+    assert pd.isna(result.loc[1, "lat"])
+    assert result.loc[0, "azimut"] == 45.0
+    assert pd.isna(result.loc[1, "azimut"])
+
+
+def test_finalize_manual_mapping_dataframe_supports_custom_fields():
+    df = pd.DataFrame({
+        "custom": ["10", "bad"],
+    })
+
+    result = finalize_manual_mapping_dataframe(df.copy(), numeric_fields=["custom"])
+
+    assert pd.to_numeric(result["custom"], errors="coerce").isna().tolist() == [False, True]
 
 
 def test_confirm_loop_reuses_same_io_on_restart():

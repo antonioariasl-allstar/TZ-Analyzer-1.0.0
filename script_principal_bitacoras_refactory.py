@@ -62,7 +62,7 @@ import base64
 
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 # Terceros
@@ -73,7 +73,12 @@ from simplekml import Kml
 from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
 from tz_core.kml_generator import generar_kml_puntos_libres
-from tz_core.mapping_wizard import WizardIO, wizard_qc_mapeo as _wizard_qc_mapeo
+from tz_core.mapping_wizard import (
+    WizardIO,
+    MappingWizard,
+    normalize_wizard_datetime_fields,
+    finalize_manual_mapping_dataframe,
+)
 from tz_core.html_helpers import fmt_datetime as fmt_dt
 from tz_core.logging_utils import (
     log as _log_impl,
@@ -157,6 +162,11 @@ def bootstrap_config() -> None:
 MANUAL_QC_MAPPING = True
 WIZARD_IO_LOGGING_ENABLED = os.getenv("TZ_WIZARD_LOGGING", "1").lower() not in {"0", "false", "off"}
 
+ALIAS_VISIBLES = {
+    "tel": "tel_analizado",
+    "ubicacion": "direccion_antena",
+}
+
 # === SECCI�"N: WIZARD DE MAPEO DE COLUMNAS (detecci�n, mapeo manual, QC) ===
 # � M�DULO EXTRA&#205;DO EN EPIC 15 - 27/12/2025
 #
@@ -166,7 +176,7 @@ WIZARD_IO_LOGGING_ENABLED = os.getenv("TZ_WIZARD_LOGGING", "1").lower() not in {
 # MIGRACI�"N:
 # - C�digo original: L183-565 (382 l�neas de l�gica cr�tica)
 # - Nuevo m�dulo: tz_core/mapping_wizard.py (MappingWizard class)
-# - Import: from tz_core.mapping_wizard import wizard_qc_mapeo as _wizard_qc_mapeo
+# - Import: from tz_core.mapping_wizard import MappingWizard (uso directo vía helper)
 # - Compatibilidad: 100% - firma id�ntica, comportamiento preservado
 #
 # ARQUITECTURA NUEVA:
@@ -216,6 +226,254 @@ def _build_wizard_io(log_to_system: Optional[bool] = None) -> WizardIO:
                 pass
 
     return WizardIO(input_fn=_wizard_input, output_fn=_wizard_output)
+
+
+def _prepare_manual_mapping(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], List[str]]:
+    """Prepara DataFrame y listas canónicas para el wizard QC manual."""
+
+    esenciales_qc = [
+        "fecha",
+        "hora",
+        "tel",
+        "imei",
+        "interaccion",
+        "contacto",
+        "lat",
+        "long",
+        "azimut",
+        "antena",
+    ]
+    no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
+
+    df._orig_cols = list(df.columns)
+    return df, esenciales_qc, no_esenciales_qc
+
+
+def _run_manual_mapping(
+    df: pd.DataFrame,
+    *,
+    esenciales: Optional[List[str]] = None,
+    no_esenciales: Optional[List[str]] = None,
+    wizard_io: Optional[WizardIO] = None,
+) -> Tuple[pd.DataFrame, Dict[str, Tuple[str, Any]]]:
+    """Instancia MappingWizard con defaults y devuelve (df_mapeado, asignaciones)."""
+
+    df_ready, default_esenciales, default_no_esenciales = _prepare_manual_mapping(df)
+    wizard = MappingWizard(
+        df_ready,
+        esenciales if esenciales is not None else default_esenciales,
+        no_esenciales if no_esenciales is not None else default_no_esenciales,
+        io=wizard_io or _build_wizard_io(),
+    )
+    return wizard.run()
+
+
+def _run_schema_location_assistant(
+    df: pd.DataFrame,
+    cols_originales: List[str],
+) -> pd.DataFrame:
+    """Asistente interactivo de ubicación/esenciales usado solo en modo automático."""
+
+    try:
+        schema_cfg = (CONFIG.get("schema") or {}) if isinstance(CONFIG, dict) else {}
+        fields_meta = schema_cfg.get("fields", {}) or {}
+        location_alts = schema_cfg.get("location_alternatives", [["lat", "lon"], ["antena"]])
+        subject_mode = (schema_cfg.get("subject_default_mode") or "tel").lower()
+        target_alias = {"lon": "long", "duracion_seg": "duracion"}
+
+        cols = list(dict.fromkeys(cols_originales + list(df.columns)))
+        present = set(cols)
+
+        if not has_location_coverage(present, location_alts, target_alias):
+            print("\n[WIZARD] Falta UBICACIÓN. Elegí alternativa:")
+            for idx, alt in enumerate(location_alts, 1):
+                alt_view = " + ".join([target_alias.get(x, x) for x in alt])
+                print(f"  [{idx}] {alt_view}")
+            sel = input("→ Opción (#, Enter=1): ").strip()
+            try:
+                pos = int(sel) if sel else 1
+            except Exception:
+                pos = 1
+            pos = max(1, min(pos, len(location_alts)))
+            choice = location_alts[pos - 1]
+
+            for tgt in choice:
+                canonical = target_alias.get(tgt, tgt)
+                if canonical in present:
+                    continue
+                label = ALIAS_VISIBLES.get(tgt, tgt)
+                print(f"\n[WIZARD] Elegí la columna para '{label}':")
+                for idx, column in enumerate(cols, 1):
+                    print(f"  [{idx}] {column}")
+                sel_col = input("→ Columna (# o Enter=omitir): ").strip()
+                if not sel_col:
+                    continue
+                try:
+                    k2 = int(sel_col)
+                except Exception:
+                    continue
+                if not (1 <= k2 <= len(cols)):
+                    continue
+                source = cols[k2 - 1]
+                if source != canonical:
+                    if source in df.columns:
+                        df = df.rename(columns={source: canonical})
+                    else:
+                        for existing in list(df.columns):
+                            if _norm_head(existing) == _norm_head(source):
+                                df = df.rename(columns={existing: canonical})
+                                break
+                present.add(canonical)
+
+        missing = collect_missing_required_fields(
+            present,
+            subject_mode=subject_mode,
+            fields_meta=fields_meta,
+            target_alias=target_alias,
+        )
+        if missing:
+            print("\n[WIZARD] Faltan campos esenciales:", ", ".join(missing))
+            print("Elegí la columna correspondiente (número). Enter = saltar.\nColumnas disponibles:")
+            for idx, column in enumerate(cols, 1):
+                print(f"  [{idx}] {column}")
+            for canonical in missing:
+                label = ALIAS_VISIBLES.get(canonical, canonical)
+                sel = input(f"→ ¿Cuál columna corresponde a '{label}'? (# o Enter): ").strip()
+                if not sel:
+                    continue
+                try:
+                    pick = int(sel)
+                except Exception:
+                    continue
+                if not (1 <= pick <= len(cols)):
+                    continue
+                source = cols[pick - 1]
+                real_target = target_alias.get(canonical, canonical)
+                if source != real_target:
+                    if source in df.columns:
+                        df = df.rename(columns={source: real_target})
+                    else:
+                        for existing in list(df.columns):
+                            if _norm_head(existing) == _norm_head(source):
+                                df = df.rename(columns={existing: real_target})
+                                break
+                present.add(real_target)
+
+        try:
+            to_dump = CONFIG if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else None
+            if to_dump is not None:
+                with open("config.json", "w", encoding="utf-8") as handle:
+                    json.dump(to_dump, handle, ensure_ascii=False, indent=2)
+                print("[WIZARD] Validación completada. Config guardada (sin cambios de sinónimos).")
+                df = dedupe_columns(df)
+
+            def _smoke_schema_postmap(df_check: pd.DataFrame) -> Tuple[bool, str]:
+                esenciales = (CONFIG or {}).get("entradas", {}).get("columnas_esenciales", []) or []
+                faltan = [col for col in esenciales if col not in df_check.columns]
+                if faltan:
+                    return False, f"Faltan columnas esenciales tras el mapeo: {', '.join(faltan)}"
+
+                if "lat" in df_check.columns and "long" in df_check.columns:
+                    try:
+                        lt = pd.to_numeric(df_check["lat"], errors="coerce")
+                        lg = pd.to_numeric(df_check["long"], errors="coerce")
+                        mask_valid = (~lt.isna()) & (~lg.isna()) & (lt != 0) & (lg != 0)
+                        if not mask_valid.any():
+                            return False, "No quedaron coordenadas válidas (lat/long) tras el mapeo."
+                    except Exception:
+                        return False, "Coordenadas inválidas tras el mapeo."
+                return True, ""
+
+            def _ask_map_col(_df: pd.DataFrame, colname: str) -> Optional[pd.DataFrame]:
+                if colname in _df.columns:
+                    return _df
+                print(f"\n[WIZARD] Falta columna esencial de ubicación: '{colname}'. Elegí la columna correspondiente (número). Enter=omitir.")
+                cols_list = list(_df.columns)
+                for idx, column in enumerate(cols_list, 1):
+                    print(f"  [{idx}] {column}")
+                sel = input("→ ¿Cuál columna corresponde? (# o Enter): ").strip()
+                if not sel:
+                    return _df
+                try:
+                    pick = int(sel)
+                except Exception:
+                    return _df
+                if not (1 <= pick <= len(cols_list)):
+                    return _df
+                source = cols_list[pick - 1]
+                if source != colname and source in _df.columns:
+                    user_syn = (CONFIG or {}).get("synonyms_user", {}) or {}
+
+                    def _persist_user_synonym(canonical: str, encabezado: str) -> None:
+                        global CONFIG, RENAME_MAP
+                        try:
+                            CONFIG = cfg_add_user_synonym(CONFIG, canonical, encabezado)
+                            RENAME_MAP = cfg_build_rename_map(CONFIG)
+                        except Exception as exc:
+                            log(f"[WARN][synonyms] No se pudo persistir el sinónimo: {exc}")
+
+                    mapped_df = confirm_column_mapping_with_preview(
+                        _df,
+                        source,
+                        colname,
+                        preview_fn=preview_column_mapping,
+                        muestras_fn=_muestras_columna,
+                        validator_fn=_es_columna_valida_para,
+                        post_map_validator=_smoke_schema_postmap,
+                        input_fn=input,
+                        output_fn=print,
+                        synonyms_user=user_syn,
+                        persist_synonym_fn=_persist_user_synonym,
+                        logger=log,
+                    )
+                    if mapped_df is None:
+                        return None
+                    _df = mapped_df
+
+                validate_schema_or_abort(_df)
+                return _df
+
+            for need in ("lat", "long", "antena"):
+                updated = _ask_map_col(df, need)
+                if updated is None:
+                    return df
+                df = updated
+
+            df = dedupe_columns(df)
+
+            # Validamos contra los nombres canónicos que usa el asistente.
+            faltan_ub = [col for col in ("lat", "long") if col not in df.columns]
+            if faltan_ub:
+                print("\n[ERROR] No se puede continuar: faltan columnas esenciales de ubicación -> " + ", ".join(faltan_ub))
+                print("Revise los encabezados de la hoja o use el wizard para mapearlos correctamente.")
+                sys.exit(2)
+
+            try:
+                if ("lat" in df.columns) and ("long" in df.columns) and ("antena" not in df.columns):
+                    def _fmt_coord(value: Any) -> str:
+                        try:
+                            return f"{float(value):.6f}"
+                        except Exception:
+                            return ""
+
+                    lat_key = df["lat"].map(_fmt_coord)
+                    lon_key = df["long"].map(_fmt_coord)
+                    mask = (lat_key != "") & (lon_key != "")
+                    pairs = pd.Series(list(zip(lat_key, lon_key)), index=df.index)
+                    uniq_pairs = pd.unique(pairs[mask])
+                    mapdict = {pair: f"Antena {idx}" for idx, pair in enumerate(uniq_pairs, start=1)}
+                    log(f"Antena fallback: se crearon {len(mapdict)} grupos por par (lat,long).")
+                    df["antena"] = np.where(mask, pairs.map(mapdict), "Antena —")
+                    df = dedupe_columns(df)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    except Exception:
+        print("[WIZARD] Aviso: no se pudo escribir config.json; se continúa sin persistir.")
+
+    return df
 
 
 # Wrappers de compatibilidad para logging
@@ -3562,13 +3820,6 @@ def main():
         "lon": "long",
         "duracion_seg": "duracion",
     }
-    # --- Alias VISIBLES para etiquetas del wizard (no cambian claves internas) ---
-    ALIAS_VISIBLES = {
-        "tel": "tel_analizado",
-        "ubicacion": "direccion_antena",
-    }
-
-
     # Construir tabla de sinónimos normalizados -> nombre_canonico_target
     syn2target = build_schema_synonym_map(schema_fields, target_alias=_target_alias)
 
@@ -3591,295 +3842,8 @@ def main():
             original_columns=cols_originales,
         )
 
-             # WIZARD (esenciales + selector de UBICACIÓN) y persistencia de sinónimos (modo estricto)
-    try:
-
-        # 1) Schema y alias
-        SCHEMA = (CONFIG.get("schema") or {})
-        fields_meta = SCHEMA.get("fields", {}) or {}
-        location_alts = SCHEMA.get("location_alternatives", [["lat","lon"],["antena"]])
-        subject_mode = (SCHEMA.get("subject_default_mode") or "tel").lower()
-        _target_alias = {"lon": "long", "duracion_seg": "duracion"}
-
-        # 2) Estado actual
-        # lista completa para el wizard (unión: originales + actuales)
-        cols = list(dict.fromkeys(cols_originales + list(df.columns)))
-
-        present = set(cols)
-
-        # 3) Si falta ubicación completa, NO preguntar (modo QC manual)
-        if not has_location_coverage(
-            present,
-            location_alts,
-            _target_alias,
-        ):
-            if MANUAL_QC_MAPPING:
-                print("\n[WIZARD] Falta UBICACIÓN → modo asistido desactivado. Usando 'lat + long' automáticamente (QC).")
-                choice = None  # QC manual: se mapea lat/lon dentro del wizard QC, no aquí
-            else:
-                print("\n[WIZARD] Falta UBICACIÓN. Elegí alternativa:")
-                for i, alt in enumerate(location_alts, 1):
-                    alt_view = " + ".join([_target_alias.get(x, x) for x in alt])
-                    print(f"  [{i}] {alt_view}")
-                sel = input("→ Opción (#, Enter=1): ").strip()
-                try:
-                    k = int(sel) if sel else 1
-                except Exception:
-                    k = 1
-                k = max(1, min(k, len(location_alts)))
-                choice = location_alts[k-1]
-                # (si no es QC manual, aquí sí pide columnas…)
-
-
-            # Pedir columnas para la alternativa elegida
-            for tgt in choice:
-                t_tgt = _target_alias.get(tgt, tgt)
-                if t_tgt in present:
-                    continue
-                tgt_label = ALIAS_VISIBLES.get(tgt, tgt)
-                print(f"\n[WIZARD] Elegí la columna para '{tgt_label}':")
-                for i, c in enumerate(cols, 1):
-                    print(f"  [{i}] {c}")
-                sel2 = input(f"→ Columna para '{tgt_label}' (# o Enter=omitir): ").strip()
-
-                if not sel2:
-                    continue
-                try:
-                    k2 = int(sel2)
-                    if 1 <= k2 <= len(cols):
-                        src = cols[k2-1]
-                        if src != t_tgt:
-                            if src in df.columns:
-                                # caso normal: el nombre elegido todavía existe en df
-                                df = df.rename(columns={src: t_tgt})
-                            else:
-                                # caso tolerante: quizá ya fue renombrada antes; buscamos por nombre normalizado
-                                for c in list(df.columns):
-                                    if _norm_head(c) == _norm_head(src):
-                                        df = df.rename(columns={c: t_tgt})
-                                        break
-                            present.add(t_tgt)
-
-                except Exception:
-                    pass
-
-       # 4) Resolver otros esenciales faltantes (no-ubicación)
-        missing = collect_missing_required_fields(
-            present,
-            subject_mode=subject_mode,
-            fields_meta=fields_meta,
-            target_alias=_target_alias,
-        )
-        if missing:
-            if MANUAL_QC_MAPPING:
-                print("\n[WIZARD] QC activo: faltan canónicos esenciales (no se pedirá aquí):", ", ".join(missing))
-                # No abortamos ni preguntamos; dejamos marcadores para que el pipeline no truene.
-                cols, present = _apply_qc_placeholders(
-                    df,
-                    missing,
-                    cols_originales,
-                    _target_alias,
-                    logger=log,
-                )
-            else:
-                print("\n[WIZARD] Faltan campos esenciales:", ", ".join(missing))
-                print("Elegí la columna correspondiente (número). Enter = saltar.\nColumnas disponibles:")
-                for i, c in enumerate(cols, 1):
-                    print(f"  [{i}] {c}")
-                for tgt in missing:
-                    tgt_label = ALIAS_VISIBLES.get(tgt, tgt)
-                    sel = input(f"→ ¿Cuál columna corresponde a '{tgt_label}'? (# o Enter): ").strip()
-                    if not sel:
-                        continue
-                    try:
-                        k = int(sel)
-                        if 1 <= k <= len(cols):
-                            src = cols[k-1]
-                            real_tgt = _target_alias.get(tgt, tgt)
-                            if src != real_tgt:
-                                if src in df.columns:
-                                    df = df.rename(columns={src: real_tgt})
-                                else:
-                                    for c in list(df.columns):
-                                        if _norm_head(c) == _norm_head(src):
-                                            df = df.rename(columns={c: real_tgt})
-                                            break
-                            present.add(real_tgt)
-                    except Exception:
-                        pass
-
-
-        # 6) Persistir sinónimos aprendidos (solo si renombramos algo)
-        # Nota: para simplificar, guardamos únicamente cuando exista CONFIG y schema
-        try:
-            to_dump = CONFIG if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else None
-            if to_dump is not None:
-                # reconstruir fields_meta desde CONFIG (por si cambió)
-                schema_now = to_dump.setdefault("schema", {})
-                fields_now = schema_now.setdefault("fields", {})
-                # agregar cualquier nombre original que haya quedado como columna y sea sinónimo útil
-                # (no hacemos here mapeo inverso avanzado para mantenerlo estable)
-                # Guardado sencillo: no tocamos nada si no hay cambios explícitos
-                with open("config.json", "w", encoding="utf-8") as f:
-                    json.dump(to_dump, f, ensure_ascii=False, indent=2)
-                print("[WIZARD] Validación completada. Config guardada (sin cambios de sinónimos).")
-                df = dedupe_columns(df)
-                
-                # === WIZARD: HELPERS DE VALIDACIÓN (inicio) ================================
-                def _smoke_schema_postmap(df):
-                    """
-                    Chequeo express después de mapear:
-                    - Revisa esenciales definidos en config.entradas.columnas_esenciales.
-                    - Valida lat/long si están presentes (numéricos y no (0,0) en bbox).
-                    """
-                    esenciales = (CONFIG or {}).get("entradas", {}).get("columnas_esenciales", []) or []
-                    faltan = [c for c in esenciales if c not in df.columns]
-                    if faltan:
-                        return False, f"Faltan columnas esenciales tras el mapeo: {', '.join(faltan)}"
-
-                    if "lat" in df.columns and "long" in df.columns:
-                        import numpy as np
-                        try:
-                            lt = pd.to_numeric(df["lat"], errors="coerce")
-                            lg = pd.to_numeric(df["long"], errors="coerce")
-                            # al menos una fila válida
-                            mask_valid = (~lt.isna()) & (~lg.isna()) & (lt != 0) & (lg != 0)
-                            if not mask_valid.any():
-                                return False, "No quedaron coordenadas válidas (lat/long) tras el mapeo."
-                        except Exception:
-                            return False, "Coordenadas inválidas tras el mapeo."
-                    return True, ""
-                
-                # WIZARD UBICACIÓN POR CAMPO + VALIDACIÓN DURA (lat, long, antena)
-                try:
-                    def _ask_map_col(_df, colname: str):
-                        # si ya existe, no preguntar
-                        if colname in _df.columns:
-                            return _df
-                        print(f"\n[WIZARD] Falta columna esencial de ubicación: '{colname}'. Elegí la columna correspondiente (número). Enter=omitir.")
-                        cols_list = list(_df.columns)
-                        for i, c in enumerate(cols_list, 1):
-                            print(f"  [{i}] {c}")
-                        sel = input(f"→ ¿Cuál columna corresponde a '{colname}'? (# o Enter): ").strip()
-                        if not sel:
-                            return _df
-                        try:
-                            k = int(sel)
-                            if 1 <= k <= len(cols_list):
-                                src = cols_list[k-1]
-                                # === WIZARD: MAPEO ROBUSTO CON PREVIEW + CHECKS (inicio) ===================
-                                if src != colname and src in _df.columns:
-                                    user_syn = (CONFIG or {}).get("synonyms_user", {}) or {}
-
-                                    def _persist_user_synonym(canonico, encabezado):
-                                        global CONFIG, RENAME_MAP
-                                        try:
-                                            CONFIG = cfg_add_user_synonym(CONFIG, canonico, encabezado)
-                                            RENAME_MAP = cfg_build_rename_map(CONFIG)
-                                        except Exception as e:
-                                            log(f"[WARN][synonyms] No se pudo persistir el sinónimo: {e}")
-
-                                    _mapped_df = confirm_column_mapping_with_preview(
-                                        _df,
-                                        src,
-                                        colname,
-                                        preview_fn=preview_column_mapping,
-                                        muestras_fn=_muestras_columna,
-                                        validator_fn=_es_columna_valida_para,
-                                        post_map_validator=_smoke_schema_postmap,
-                                        input_fn=input,
-                                        output_fn=print,
-                                        synonyms_user=user_syn,
-                                        persist_synonym_fn=_persist_user_synonym,
-                                        logger=log,
-                                    )
-                                    if _mapped_df is None:
-                                        return None
-                                    _df = _mapped_df
-
-                                validate_schema_or_abort(_df)
-                        except Exception:
-                            pass
-                        return _df
-
-                    # Preguntar individualmente por cada campo de ubicación
-                    for need in ("lat", "long", "antena"):
-                        df = _ask_map_col(df, need)
-
-                    # Quitar duplicadas si quedaron tras renombrar
-                    df = dedupe_columns(df)
-
-                    # Validación dura: sin lat/lon → en QC no abortamos, intentamos coalesce y seguimos
-                    faltan_ub = [x for x in ("lat", "lon") if x not in df.columns]  # OJO: usamos 'lon' como canónica
-                    if faltan_ub:
-                        if MANUAL_QC_MAPPING:
-                            print("\n[WIZARD] QC activo: faltan columnas de ubicación -> " + ", ".join(faltan_ub))
-
-                            # Intento de coalesce automático (hoja PROCESADA y variantes)
-                            if "lat" not in df.columns and "latitud_inicial_objetivo" in df.columns:
-                                df["lat"] = df["latitud_inicial_objetivo"]
-                            # Aceptamos 'long' o 'longitud_inicial_objetivo' como fuente de 'lon'
-                            if "lon" not in df.columns:
-                                if "longitud_inicial_objetivo" in df.columns:
-                                    df["lon"] = df["longitud_inicial_objetivo"]
-                                elif "long" in df.columns:
-                                    df["lon"] = df["long"]
-
-                            # Si aún faltan, no abortamos: ponemos placeholder para que el wizard QC lo resuelva
-                            for c in ("lat", "lon"):
-                                if c not in df.columns:
-                                    df[c] = None
-                            print("[WIZARD] Continuamos; el mapeo manual definirá 'lat'/'lon'.")
-                        else:
-                            print("\n[ERROR] No se puede continuar: faltan columnas esenciales de ubicación -> " + ", ".join(faltan_ub))
-                            print("Revise los encabezados de la hoja o use el wizard para mapearlos correctamente.")
-                            sys.exit(2)
-
-                    # ANTENA FALLBACK — autogenerar nombres si hay lat/long pero falta 'antena'
-                    try:
-                        if ("lat" in df.columns) and ("long" in df.columns) and ("antena" not in df.columns):
-                            def _fmt_coord(x):
-                                try:
-                                    return f"{float(x):.6f}"
-                                except Exception:
-                                    return ""
-
-                            lat_key = df["lat"].map(_fmt_coord)
-                            lon_key = df["long"].map(_fmt_coord)
-
-                            # válidas: ambas coords presentes (no blanco)
-                            mask = (lat_key != "") & (lon_key != "")
-
-                            # pares (lat,long) en el orden de aparición
-                            pairs = pd.Series(list(zip(lat_key, lon_key)), index=df.index)
-                            uniq_pairs = pd.unique(pairs[mask])
-
-                            # mapa estable: primer par visto = Antena 1, siguiente = Antena 2, etc.
-                            mapdict = {p: f"Antena {i}" for i, p in enumerate(uniq_pairs, start=1)}
-                            log(f"Antena fallback: se crearon {len(mapdict)} grupos por par (lat,long).")
-
-                            df["antena"] = np.where(
-                                mask,
-                                pairs.map(mapdict),
-                                "Antena —"
-                            )
-
-                            # por si quedó alguna duplicación posterior
-                            df = dedupe_columns(df)
-
-                    except Exception:
-                        pass
-
-
-                    # Nota: si no hay 'antena' pero sí lat/long, seguimos (Step 3 creará nombres 'Antena N').
-                except Exception:
-                    pass
-
-        except Exception:
-            print("[WIZARD] Aviso: no se pudo escribir config.json; se continúa sin persistir.")
-
-    except Exception:
-        pass
+    if not MANUAL_QC_MAPPING:
+        df = _run_schema_location_assistant(df, cols_originales)
 
 
     # NORMALIZADOR-1: aplicar correcciones de codificación y abreviaturas en columnas de texto
@@ -3966,89 +3930,12 @@ def main():
     # --- WIZARD QC MANUAL ---
     if MANUAL_QC_MAPPING:
         print("\n[QC] Iniciando wizard QC (mapeo manual).")
-        esenciales_qc = ["fecha", "hora", "tel", "imei", "interaccion", "contacto", "lat", "long", "azimut", "antena"]
-        no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
-        
-        # Esta línea preserva las columnas DESPUÉS de la normalización inicial
-        # pero ANTES del wizard. Es parte del sistema dual de columnas.
-        # Ver docs/SISTEMA_DUAL_COLUMNAS.md y docs/WIZARD_QC_PELIGRO_EXTREMO.md
-        df._orig_cols = list(df.columns)
-        
         # 🚨 FUNCIÓN DE RIESGO EXTREMO - Ver warning arriba en línea 353
         wizard_io = _build_wizard_io()
-        df, _mapeo = _wizard_qc_mapeo(
-            df,
-            esenciales=esenciales_qc,
-            no_esenciales=no_esenciales_qc,
-            io=wizard_io,
-        )
-        # --- Compatibilidad lon/long para KPIs/HTML ---
-        if "lon" in df.columns and "long" not in df.columns:
-            df["long"] = df["lon"]
-        elif "long" in df.columns and "lon" not in df.columns:
-            df["lon"] = df["long"]
+        df, _mapeo = _run_manual_mapping(df, wizard_io=wizard_io)
+        df = finalize_manual_mapping_dataframe(df)
 
-    # --- Normalización estricta de fecha y hora (solo formato, sin cambiar mapeo) ---
-    try:
-        # 1) Parsear FECHA a datetime y dejarla como dd/mm/YYYY (solo fecha)
-        _f_dt = None
-        if "fecha" in df.columns:
-            _f_dt = pd.to_datetime(df["fecha"], errors="coerce", dayfirst=True)
-            df["fecha"] = _f_dt.dt.strftime("%d/%m/%Y")  # siempre string solo fecha
-
-        # 2) Construir HORA robusta (HH:MM:SS)
-        if "hora" in df.columns:
-            # intentar parsear 'hora' como datetime (muchas vienen 'fecha+hora' camufladas)
-            _h_dt = pd.to_datetime(df["hora"], errors="coerce", dayfirst=True)
-            _h_out = pd.Series("", index=df.index, dtype=object)
-
-            # 2a) Para las que sí parsearon como datetime: tomar solo la hora
-            mask_h_ok = _h_dt.notna()
-            if mask_h_ok.any():
-                _h_out.loc[mask_h_ok] = _h_dt.loc[mask_h_ok].dt.strftime("%H:%M:%S")
-
-            # 2b) Para las que NO parsearon, intentar con prefijo fecha dummy (texto tipo "2:2" o "02:02")
-            mask_h_bad = ~mask_h_ok & df["hora"].astype(str).str.strip().ne("")
-            if mask_h_bad.any():
-                _h_try2 = pd.to_datetime(
-                    "1970-01-01 " + df.loc[mask_h_bad, "hora"].astype(str).str.strip(),
-                    errors="coerce", dayfirst=True
-                )
-                mask_h2_ok = _h_try2.notna()
-                if mask_h2_ok.any():
-                    _h_out.loc[mask_h_bad[mask_h_bad].index[mask_h2_ok]] = _h_try2.loc[mask_h2_ok].dt.strftime("%H:%M:%S")
-
-            # 2c) Para las que siguen vacías: si 'fecha' traía hora embebida, derivarla desde 'fecha'
-            if _f_dt is not None:
-                mask_empty = _h_out.eq("")
-                if mask_empty.any():
-                    _h_from_f = _f_dt.dt.strftime("%H:%M:%S")
-                    _h_out.loc[mask_empty & _f_dt.notna()] = _h_from_f.loc[mask_empty & _f_dt.notna()]
-
-            # 2d) Si aún quedó vacío, dejar "Sin Inf."
-            _h_out = _h_out.replace("", "Sin Inf.")
-            df["hora"] = _h_out
-
-        else:
-            # No existe columna 'hora': si 'fecha' tenía hora embebida, crearla; si no, "Sin Inf."
-            if _f_dt is not None:
-                df["hora"] = _f_dt.dt.strftime("%H:%M:%S").where(_f_dt.notna(), "Sin Inf.")
-            else:
-                df["hora"] = "Sin Inf."
-
-    except Exception as __e:
-        print(f"[WARN] Normalización fecha/hora: {__e}")
-
-
-
-        # Asegurar numéricos
-        df["lat"] = pd.to_numeric(df["lat"], errors="coerce") if "lat" in df.columns else None
-        if "long" in df.columns:
-            df["long"] = pd.to_numeric(df["long"], errors="coerce")
-
-        # Post–mapeo: si faltan alias/usuario/abonado, ofrecer cargarlos como valor único (solo en QC manual)
-
-
+    df = normalize_wizard_datetime_fields(df, warn_writer=lambda msg: print(msg))
     # === Overrides Top N (Modos 1 y 2) ===
     if opcion in ("1", "2") and not MANUAL_QC_MAPPING:
         try:
@@ -4539,7 +4426,10 @@ def main():
 
 
         # 5) Mensajes finales (KML/KMZ/errores)
-        print(f"KML generado en: {archivo_kml}")
+        solo_kmz = bool(CONFIG.get("salida", {}).get("solo_kmz", False))
+        if not solo_kmz:
+            print(f"KML generado en: {archivo_kml}")
+
         if bool(CONFIG.get("salida", {}).get("separar_kml_kmz", False)):
             kml_dir = os.path.dirname(archivo_kml)
             base_dir = os.path.dirname(kml_dir) if os.path.basename(kml_dir).lower() == "kml" else kml_dir

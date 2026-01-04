@@ -110,6 +110,84 @@ def apply_wizard_assignments(
     return result
 
 
+def normalize_wizard_datetime_fields(
+    df: pd.DataFrame,
+    warn_writer: Optional[Callable[[str], None]] = None,
+) -> pd.DataFrame:
+    """Normaliza columnas 'fecha'/'hora' respetando el formato QC tradicional."""
+
+    warn = warn_writer or (lambda _msg: None)
+
+    try:
+        fecha_dt: Optional[pd.Series] = None
+
+        if "fecha" in df.columns:
+            fecha_dt = pd.to_datetime(df["fecha"], errors="coerce", dayfirst=True)
+            df["fecha"] = fecha_dt.dt.strftime("%d/%m/%Y")
+
+        if "hora" in df.columns:
+            hora_dt = pd.to_datetime(df["hora"], errors="coerce", dayfirst=True)
+            hora_out = pd.Series("", index=df.index, dtype=object)
+
+            mask_ok = hora_dt.notna()
+            if mask_ok.any():
+                hora_out.loc[mask_ok] = hora_dt.loc[mask_ok].dt.strftime("%H:%M:%S")
+
+            hora_text = df["hora"].astype(str).str.strip()
+            mask_bad = ~mask_ok & hora_text.ne("")
+            if mask_bad.any():
+                prefixed = "1970-01-01 " + hora_text.loc[mask_bad]
+                hora_try = pd.to_datetime(prefixed, errors="coerce", dayfirst=True)
+                mask_try = hora_try.notna()
+                if mask_try.any():
+                    target_idx = hora_text.loc[mask_bad].index[mask_try]
+                    hora_out.loc[target_idx] = hora_try.loc[mask_try].dt.strftime("%H:%M:%S").values
+
+            if fecha_dt is not None:
+                mask_empty = hora_out.eq("")
+                if mask_empty.any():
+                    hora_from_fecha = fecha_dt.dt.strftime("%H:%M:%S")
+                    fill_mask = mask_empty & fecha_dt.notna()
+                    hora_out.loc[fill_mask] = hora_from_fecha.loc[fill_mask]
+
+            df["hora"] = hora_out.replace("", "Sin Inf.")
+        else:
+            if fecha_dt is not None:
+                hora_from_fecha = fecha_dt.dt.strftime("%H:%M:%S")
+                df["hora"] = hora_from_fecha.where(fecha_dt.notna(), "Sin Inf.")
+            else:
+                df["hora"] = "Sin Inf."
+
+    except Exception as exc:
+        warn(f"[WARN] Normalización fecha/hora: {exc}")
+        if "lat" in df.columns:
+            df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
+        if "long" in df.columns:
+            df["long"] = pd.to_numeric(df["long"], errors="coerce")
+
+    return df
+
+
+def finalize_manual_mapping_dataframe(
+    df: pd.DataFrame,
+    *,
+    numeric_fields: Optional[Sequence[str]] = None,
+) -> pd.DataFrame:
+    """Ajustes post-wizard: sincroniza lon/long y fuerza campos numéricos."""
+
+    if "lon" in df.columns and "long" not in df.columns:
+        df["long"] = df["lon"]
+    elif "long" in df.columns and "lon" not in df.columns:
+        df["lon"] = df["long"]
+
+    target_numeric = numeric_fields or ("lat", "lon", "long", "azimut")
+    for column in target_numeric:
+        if column in df.columns:
+            df[column] = pd.to_numeric(df[column], errors="coerce")
+
+    return df
+
+
 def apply_quick_remap_selection(
     df: pd.DataFrame,
     canonical: str,
