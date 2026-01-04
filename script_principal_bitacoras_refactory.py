@@ -107,7 +107,7 @@ from tz_core.ui_utils import (
     summarize_outputs,
     suggest_case_name,
 )
-from tz_core.manual_flow import normalize_and_validate_schema
+from tz_core.manual_flow import normalize_and_validate_schema, apply_time_filter_prompt
 from tz_core.text_utils import (
     _fix_mojibake_text,
     _aplicar_reemplazos_regex
@@ -3643,6 +3643,23 @@ def main():
 
     df, errores = validar_datos(df, columnas_esenciales)
 
+    # --- Submenú Filtro de tiempo (post-mapeo, antes de nombres) ---
+    time_filters = apply_time_filter_prompt(
+        option=opcion,
+        df=df,
+        solicitar_fn=_solicitar_filtros_tiempo,
+        aplicar_fn=_aplicar_filtros_tiempo,
+        output_fn=print,
+    )
+    df = time_filters.dataframe
+
+    if time_filters.enabled:
+        if df.empty:
+            print("No hay registros después de aplicar el filtro. Saliendo...")
+            return
+        if time_filters.summary:
+            print(f"[INFO] Filtro aplicado: {time_filters.summary}")
+
     # Salidas
     nombre_base = os.path.splitext(os.path.basename(archivo_entrada))[0]
 
@@ -3670,29 +3687,15 @@ def main():
         output_fn=print,
         now_fn=datetime.now,
     )
-    filtros_ctx = filtros if (opcion == "2" and "filtros" in locals()) else None
     suggestion = suggest_case_name(
         df=df,
         identity=identity,
-        filters=filtros_ctx,
+        filters=time_filters.filters if time_filters.enabled else None,
         timestamp_fn=datetime.now,
         sanitize_fn=_sanear_nombre_archivo_local,
     )
     modo_bitacora = identity.mode
     base_auto = suggestion.base_name
-
-    # --- Submenú Filtro de tiempo (post-mapeo, antes de nombres) ---
-    sel = locals().get('resp') or locals().get('opcion') or ""
-    if str(sel) == "2":
-        try:
-            filtros = _solicitar_filtros_tiempo()
-            df, _resumen_filtro = _aplicar_filtros_tiempo(df, filtros)
-            if df.empty:
-                print("No hay registros después de aplicar el filtro. Saliendo...")
-                return
-            print(f"[INFO] Filtro aplicado: {_resumen_filtro}")
-        except Exception as __e:
-            print(f"[WARN] No se pudo aplicar el filtro temporal: {__e}")
 
     # [QC] Alias / Usuario / Abonado (post-mapeo; opcional)
 
@@ -3767,12 +3770,12 @@ def main():
             informe_html = None
 
     # Log mínimo para Modo 2
-    if opcion == "2":
+    if time_filters.enabled and time_filters.summary:
         try:
             log_min = os.path.join(carpeta_salida, "log_minimo.txt")
             write_minimal_filter_log(
                 df,
-                _resumen_filtro,
+                time_filters.summary,
                 log_min,
                 logger=log,
             )
