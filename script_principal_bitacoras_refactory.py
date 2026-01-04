@@ -501,6 +501,7 @@ from tz_core.file_utils import (
     relocate_kmz_file,
 )
 from tz_core.output_pipeline import produce_case_outputs
+from tz_core.html_toc import apply_toc
 from tz_core.ingestion_pipeline import run_ingestion_pipeline
 
 # Importar constantes desde tz_core para consistencia
@@ -1612,61 +1613,8 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     except Exception:
         _h1 = ""
 
-        # === HTML-TOC-1: índice de navegación sticky (sin KML/KMZ) ===
-    try:
-        # 1) Asegurar IDs de secciones para poder enlazar
-        html = html.replace('<section class="meta">', '<section id="meta" class="meta">')
-        html = html.replace('<section>\n    <h2>Top antenas</h2>', '<section id="top-antenas">\n    <h2>Top antenas</h2>')
-        html = html.replace('<h2 id="interacciones">Interacciones y contactos</h2>', '<h2 id="interacciones">Contactos con más comunicación</h2>')
-        html = html.replace('<h2>Contactos con más comunicación</h2>', '<h2 id="interacciones">Contactos con más comunicación</h2>')
-        html = html.replace('<h2>Antenas por rango horario</h2>', '<h2 id="rangos">Antenas por rango horario</h2>')
-        # "Todos los contactos" ya sale con id="todos-contactos" cuando existe
-
-        # 2) Construir links solo de las secciones presentes (orden deseado)
-        _links = []
-        if 'id="meta"' in html:
-            _links.append('<a href="#meta">Metadatos</a>')
-        if 'id="resumen-antenas"' in html:
-            _links.append('<a href="#resumen-antenas">Antenas más activadas</a>')
-        # Heatmap integrado visualmente en "Antenas más activadas"; no añadimos enlace separado al TOC.
-        if 'id="interacciones"' in html:
-            _links.append('<a href="#interacciones">Contactos con más comunicación</a>')
-        # Aceptar dos posibles IDs para rangos horarios
-        _id_rangos = None
-        if 'id="antenas-rangos"' in html:
-            _id_rangos = 'antenas-rangos'
-        elif 'id="rangos"' in html:
-            _id_rangos = 'rangos'
-        if _id_rangos:
-            _links.append(f'<a href="#{_id_rangos}">Antenas por rango horario</a>')
-        # Incluir enlace a Historial de cambios si existe
-        if 'id="historial-cambios"' in html:
-            _links.append('<a href="#historial-cambios">Historial de cambios de antena</a>')
-        if 'id="interacciones-recientes"' in html:
-            _links.append('<a href="#interacciones-recientes">Interacciones recientes</a>')
-        if 'id="top-antenas"' in html:
-            _links.append('<a href="#top-antenas">Todas las antenas</a>')
-        if 'id="todos-contactos"' in html:
-            _links.append('<a href="#todos-contactos">Todos los contactos</a>')
-
-        if _links:
-            _toc_html = '<nav id="toc" class="toc" style="z-index:999; background:#fff; border-bottom:1px solid #e5e7eb; box-shadow:0 2px 6px rgba(0,0,0,.06); padding:8px 12px;">' + ' ... '.join(_links) + '</nav>'
-
-            # 3) CSS para la barra sticky (desactivada en móvil)
-            _css_toc = """
-.toc{position:sticky;top:0;background:#fff;padding:8px 0 10px;margin:6px 0 10px;border-bottom:1px solid #eee;z-index:999}
-.toc a{margin-right:10px;text-decoration:none;color:var(--accent);font-size:13px}
-.toc a:hover{text-decoration:underline}
-@media (max-width: 768px) {
-  .toc{position:relative;top:auto;}
-}
-"""
-            # Inyectar CSS dentro del <style>
-            html = html.replace("</style>", _css_toc + "</style>", 1)
-            # 4) Insertar el TOC inmediatamente después del </header>
-            html = html.replace("</header>", "</header>\n  " + _toc_html, 1)
-    except Exception:
-        pass
+    # Índice de navegación: delegar en helper centralizado
+    html = apply_toc(html)
 
     # === HTML-BRANDING-1: Marca de agua (usa config.branding) ===
     try:
