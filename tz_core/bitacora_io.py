@@ -44,4 +44,22 @@ def seleccionar_carpeta(titulo: str = "Seleccionar carpeta de salida") -> Option
     return ruta if ruta else os.getcwd()
 
 
-__all__ = ["seleccionar_archivo", "seleccionar_carpeta"]
+# Re-exportar utilidades de hojas/Excel desde data_loader para centralizar I/O
+from tz_core.data_loader import (  # noqa: E402
+    obtener_hojas_visibles,
+    listar_todas_hojas,
+    seleccionar_hoja_visible,
+    seleccionar_hoja,
+    cargar_excel_con_normalizacion,
+)
+
+
+__all__ = [
+    "seleccionar_archivo",
+    "seleccionar_carpeta",
+    "obtener_hojas_visibles",
+    "listar_todas_hojas",
+    "seleccionar_hoja_visible",
+    "seleccionar_hoja",
+    "cargar_excel_con_normalizacion",
+]

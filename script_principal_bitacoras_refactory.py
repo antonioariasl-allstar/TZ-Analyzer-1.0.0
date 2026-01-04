@@ -72,7 +72,15 @@ from simplekml import Kml
 
 # Módulos locales
 from validaciones import validar_datos, guardar_errores
-from tz_core.bitacora_io import seleccionar_archivo, seleccionar_carpeta
+from tz_core.bitacora_io import (
+    seleccionar_archivo,
+    seleccionar_carpeta,
+    obtener_hojas_visibles,
+    listar_todas_hojas,
+    seleccionar_hoja_visible,
+    seleccionar_hoja,
+    cargar_excel_con_normalizacion,
+)
 from tz_core.kml_generator import generar_kml_puntos_libres
 from tz_core.mapping_wizard import (
     WizardIO,
@@ -2852,7 +2860,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
 
 # --- Anti-hojas: ignorar ocultas y elegir visible ---
-from tz_core.data_loader import obtener_hojas_visibles, listar_todas_hojas, seleccionar_hoja_visible, seleccionar_hoja, cargar_excel_con_normalizacion
 
 # =========================
 # Flujo principal
