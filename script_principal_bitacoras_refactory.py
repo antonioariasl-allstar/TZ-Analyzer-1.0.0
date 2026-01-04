@@ -501,6 +501,7 @@ from tz_core.file_utils import (
     relocate_kmz_file,
 )
 from tz_core.output_pipeline import produce_case_outputs
+from tz_core.ingestion_pipeline import run_ingestion_pipeline
 
 # Importar constantes desde tz_core para consistencia
 RANGOS_SV = RANGOS_SV_MODULAR
@@ -3111,7 +3112,7 @@ def main():
     except Exception:
         schema_fields = {}
 
-    df = normalize_and_validate_schema(
+    ingestion = run_ingestion_pipeline(
         df=df,
         config=CONFIG,
         original_columns=cols_originales,
@@ -3120,32 +3121,18 @@ def main():
         wizard_io_factory=_build_wizard_io,
         persist_synonym_fn=_persist_user_synonym,
         validate_schema_fn=validate_schema_or_abort,
+        validar_datos_fn=validar_datos,
+        time_filter_option=opcion,
+        solicitar_filtros_fn=_solicitar_filtros_tiempo,
+        aplicar_filtros_fn=_aplicar_filtros_tiempo,
         logger=log,
         output_fn=print,
+        run_manual_mapping_fn=_run_manual_mapping,
     )
-    columnas_esenciales = ["antena", "lat", "long"]
 
-    # --- WIZARD QC MANUAL ---
-    if MANUAL_QC_MAPPING:
-        print("\n[QC] Iniciando wizard QC (mapeo manual).")
-        # 🚨 FUNCIÓN DE RIESGO EXTREMO - Ver warning arriba en línea 353
-        wizard_io = _build_wizard_io()
-        df, _mapeo = _run_manual_mapping(df, wizard_io=wizard_io)
-        df = finalize_manual_mapping_dataframe(df)
-
-    df = normalize_wizard_datetime_fields(df, warn_writer=lambda msg: print(msg))
-
-    df, errores = validar_datos(df, columnas_esenciales)
-
-    # --- Submenú Filtro de tiempo (post-mapeo, antes de nombres) ---
-    time_filters = apply_time_filter_prompt(
-        option=opcion,
-        df=df,
-        solicitar_fn=_solicitar_filtros_tiempo,
-        aplicar_fn=_aplicar_filtros_tiempo,
-        output_fn=print,
-    )
-    df = time_filters.dataframe
+    df = ingestion.dataframe
+    errores = ingestion.errores
+    time_filters = ingestion.time_filters
 
     if time_filters.enabled:
         if df.empty:

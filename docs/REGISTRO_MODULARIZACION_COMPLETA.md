@@ -26,6 +26,8 @@
 - `tz_core/format_utils.py` ahora delega la limpieza de IMEI y duraciones a los nuevos helpers para mantener una sola fuente de verdad.
 - Identificación y top contactos en `tz_core/html_generator.py` ahora normalizan MSISDN/IMEI y parsean duraciones con los helpers compartidos para evitar valores sin limpiar o parsers duplicados.
 - `tz_core/analytics.py` ahora considera las columnas `_contacto` y `_contacto_raw` al generar la sección “Todos los contactos”, garantizando que se muestre cuando solo exista la columna normalizada.
+- Se creó el tag de respaldo `backup-monolito-2026-01-04` en `main` para tener punto seguro de retorno antes de continuar el ataque al monolito.
+- Nuevo módulo `tz_core/ingestion_pipeline.py` centraliza la orquestación de mapeo de schema, QC manual opcional, normalización fecha/hora y filtros de tiempo; el monolito delega esta fase para reducir riesgo y duplicación.
 
 ### 📦 MÓDULOS CREADOS EN tz_core/
 
