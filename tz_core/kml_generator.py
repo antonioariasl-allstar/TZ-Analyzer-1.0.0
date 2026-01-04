@@ -41,6 +41,7 @@ from tz_core.time_utils import clasificar_rango_sv, RANGOS_SV
 from tz_core.color_utils import hex_to_kml_color
 from tz_core.format_utils import agregar_bloque, armar_descripcion_compacta
 from tz_core.logging_utils import log
+from tz_core.bitacora_normalization import normalize_imei, normalize_msisdn
 
 # Separador HTML compacto (usado en descripciones)
 HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
@@ -408,6 +409,8 @@ def generar_kml(
         rango = clasificar_rango_sv(row.get("hora", None))
 
         # Almacenar item con todos los campos necesarios
+        tel_val = normalize_msisdn(row.get("tel", None)) or row.get("tel", None)
+        imei_val = normalize_imei(row.get("imei", None)) or row.get("imei", None)
         items.append({
             "antena": nombre_punto,
             "antena_completa": row.get("antena", None),
@@ -420,8 +423,8 @@ def generar_kml(
             "alias": _first_available(row, "alias", "alias_usuario"),
             "usuario": _first_available(row, "nombre_usuario", "usuario"),
             "abonado": row.get("abonado", None),
-            "tel": row.get("tel", None),
-            "imei": row.get("imei", None),
+            "tel": tel_val,
+            "imei": imei_val,
             "tel_contacto": row.get("tel_contacto", row.get("contacto", None)),
             "fecha": row.get("fecha", None),
             "hora": row.get("hora", None),
@@ -634,8 +637,10 @@ def generar_kml(
                 return "SinInf"
 
             # Extraer campos comunes del grupo
-            numero = getv_group('tel','numero','msisdn_origen','msisdn','telefono')
-            imei = getv_group('imei','imei_origen')
+            numero_raw = getv_group('tel','numero','msisdn_origen','msisdn','telefono')
+            imei_raw = getv_group('imei','imei_origen')
+            numero = normalize_msisdn(numero_raw) or numero_raw
+            imei = normalize_imei(imei_raw) or imei_raw
             alias = getv_group('alias','alias_usuario')
             usuario = getv_group('nombre_usuario','usuario')
             abonado = getv_group('abonado','nombre_abonado')

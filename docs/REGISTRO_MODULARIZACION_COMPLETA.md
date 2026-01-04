@@ -140,6 +140,12 @@
 # [+ más funciones HTML]
 ```
 
+#### 🔒 **Normalización TEL/IMEI**
+- Se centraliza la limpieza de MSISDN/IMEI en bitácoras y KML usando `normalize_msisdn` / `normalize_imei`.
+- KML ahora escribe números sin sufijos ".0" ni espacios y consolida contactos en carpetas TOP.
+- Flujos HTML reutilizan `normalize_imei` para formatear IMEI sin notación científica.
+- Flujo manual normaliza `tel` tras mapear columnas candidatas.
+
 #### 📍 **coord_utils.py** - Procesamiento Coordenadas
 ```python
 # Funciones extraídas previamente:

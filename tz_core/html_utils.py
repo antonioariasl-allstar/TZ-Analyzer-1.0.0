@@ -25,6 +25,8 @@ FECHA MIGRACIÓN: 27 octubre 2025
 
 from typing import List, Optional
 
+from tz_core.bitacora_normalization import normalize_imei
+
 
 def row_html(label: str, single: Optional[str], n: int, lst: List[str], 
              extra: int, mono: bool = False) -> str:
@@ -74,6 +76,9 @@ def fmt_imei_item(x: str) -> str:
         >>> fmt_imei_item("abc123")
         'abc123'
     """
+    normalized = normalize_imei(x)
+    if normalized:
+        return normalized
     try:
         f = float(str(x))
         if f.is_integer():

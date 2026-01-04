@@ -27,6 +27,8 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 import pandas as pd
 
+from tz_core.bitacora_normalization import normalize_imei
+
 
 # ================================================================
 # 📅 FUNCIONES DE FORMATEO DE FECHA/HORA
@@ -139,6 +141,9 @@ def fmt_imei_item(x: str) -> str:
     
     EXTRAÍDO DE: generar_informe_html línea 3426
     """
+    normalized = normalize_imei(x)
+    if normalized:
+        return normalized
     try:
         f = float(str(x))
         if f.is_integer():

@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import pandas as pd
 
 from tz_core.dataframe_utils import _coalesce_duplicates, apply_schema_renames
+from tz_core.bitacora_normalization import normalize_msisdn
 from tz_core.schema_utils import build_schema_synonym_map, run_schema_location_assistant
 from tz_core.logging_utils import write_minimal_filter_log
 from tz_core.text_utils import normalizar_columnas_texto
@@ -108,6 +109,9 @@ def normalize_and_validate_schema(
                 df["tel"] = df[candidate]
                 output_fn(f"[QC] tel <- {candidate}")
                 break
+
+    if "tel" in df.columns:
+        df["tel"] = df["tel"].map(lambda v: normalize_msisdn(v) or v)
 
     if not manual_qc_mapping and "interaccion" not in df.columns:
         for candidate in ("tipo", "tipo2", "contacto", "usuario"):
