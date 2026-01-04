@@ -98,8 +98,16 @@ from tz_core.logging_utils import (
     write_minimal_filter_log,
 )
 from tz_core.ui_utils import (
-    solicitar_overrides_topn
+    solicitar_overrides_topn,
+    collect_manual_mode_context,
+    gather_dataset_metadata,
+    prompt_case_identity,
+    collect_top_overrides,
+    prompt_output_routing,
+    summarize_outputs,
+    suggest_case_name,
 )
+from tz_core.manual_flow import normalize_and_validate_schema
 from tz_core.text_utils import (
     _fix_mojibake_text,
     _aplicar_reemplazos_regex
@@ -268,212 +276,18 @@ def _run_manual_mapping(
     return wizard.run()
 
 
-def _run_schema_location_assistant(
-    df: pd.DataFrame,
-    cols_originales: List[str],
-) -> pd.DataFrame:
-    """Asistente interactivo de ubicación/esenciales usado solo en modo automático."""
+def _persist_user_synonym(canonical: str, encabezado: str) -> None:
+    """Actualiza CONFIG/RENAME_MAP cuando el asistente agrega sinónimos manuales."""
 
+    global CONFIG, RENAME_MAP
     try:
-        schema_cfg = (CONFIG.get("schema") or {}) if isinstance(CONFIG, dict) else {}
-        fields_meta = schema_cfg.get("fields", {}) or {}
-        location_alts = schema_cfg.get("location_alternatives", [["lat", "lon"], ["antena"]])
-        subject_mode = (schema_cfg.get("subject_default_mode") or "tel").lower()
-        target_alias = {"lon": "long", "duracion_seg": "duracion"}
-
-        cols = list(dict.fromkeys(cols_originales + list(df.columns)))
-        present = set(cols)
-
-        if not has_location_coverage(present, location_alts, target_alias):
-            print("\n[WIZARD] Falta UBICACIÓN. Elegí alternativa:")
-            for idx, alt in enumerate(location_alts, 1):
-                alt_view = " + ".join([target_alias.get(x, x) for x in alt])
-                print(f"  [{idx}] {alt_view}")
-            sel = input("→ Opción (#, Enter=1): ").strip()
-            try:
-                pos = int(sel) if sel else 1
-            except Exception:
-                pos = 1
-            pos = max(1, min(pos, len(location_alts)))
-            choice = location_alts[pos - 1]
-
-            for tgt in choice:
-                canonical = target_alias.get(tgt, tgt)
-                if canonical in present:
-                    continue
-                label = ALIAS_VISIBLES.get(tgt, tgt)
-                print(f"\n[WIZARD] Elegí la columna para '{label}':")
-                for idx, column in enumerate(cols, 1):
-                    print(f"  [{idx}] {column}")
-                sel_col = input("→ Columna (# o Enter=omitir): ").strip()
-                if not sel_col:
-                    continue
-                try:
-                    k2 = int(sel_col)
-                except Exception:
-                    continue
-                if not (1 <= k2 <= len(cols)):
-                    continue
-                source = cols[k2 - 1]
-                if source != canonical:
-                    if source in df.columns:
-                        df = df.rename(columns={source: canonical})
-                    else:
-                        for existing in list(df.columns):
-                            if _norm_head(existing) == _norm_head(source):
-                                df = df.rename(columns={existing: canonical})
-                                break
-                present.add(canonical)
-
-        missing = collect_missing_required_fields(
-            present,
-            subject_mode=subject_mode,
-            fields_meta=fields_meta,
-            target_alias=target_alias,
-        )
-        if missing:
-            print("\n[WIZARD] Faltan campos esenciales:", ", ".join(missing))
-            print("Elegí la columna correspondiente (número). Enter = saltar.\nColumnas disponibles:")
-            for idx, column in enumerate(cols, 1):
-                print(f"  [{idx}] {column}")
-            for canonical in missing:
-                label = ALIAS_VISIBLES.get(canonical, canonical)
-                sel = input(f"→ ¿Cuál columna corresponde a '{label}'? (# o Enter): ").strip()
-                if not sel:
-                    continue
-                try:
-                    pick = int(sel)
-                except Exception:
-                    continue
-                if not (1 <= pick <= len(cols)):
-                    continue
-                source = cols[pick - 1]
-                real_target = target_alias.get(canonical, canonical)
-                if source != real_target:
-                    if source in df.columns:
-                        df = df.rename(columns={source: real_target})
-                    else:
-                        for existing in list(df.columns):
-                            if _norm_head(existing) == _norm_head(source):
-                                df = df.rename(columns={existing: real_target})
-                                break
-                present.add(real_target)
-
+        CONFIG = cfg_add_user_synonym(CONFIG, canonical, encabezado)
+        RENAME_MAP = cfg_build_rename_map(CONFIG)
+    except Exception as exc:
         try:
-            to_dump = CONFIG if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else None
-            if to_dump is not None:
-                with open("config.json", "w", encoding="utf-8") as handle:
-                    json.dump(to_dump, handle, ensure_ascii=False, indent=2)
-                print("[WIZARD] Validación completada. Config guardada (sin cambios de sinónimos).")
-                df = dedupe_columns(df)
-
-            def _smoke_schema_postmap(df_check: pd.DataFrame) -> Tuple[bool, str]:
-                esenciales = (CONFIG or {}).get("entradas", {}).get("columnas_esenciales", []) or []
-                faltan = [col for col in esenciales if col not in df_check.columns]
-                if faltan:
-                    return False, f"Faltan columnas esenciales tras el mapeo: {', '.join(faltan)}"
-
-                if "lat" in df_check.columns and "long" in df_check.columns:
-                    try:
-                        lt = pd.to_numeric(df_check["lat"], errors="coerce")
-                        lg = pd.to_numeric(df_check["long"], errors="coerce")
-                        mask_valid = (~lt.isna()) & (~lg.isna()) & (lt != 0) & (lg != 0)
-                        if not mask_valid.any():
-                            return False, "No quedaron coordenadas válidas (lat/long) tras el mapeo."
-                    except Exception:
-                        return False, "Coordenadas inválidas tras el mapeo."
-                return True, ""
-
-            def _ask_map_col(_df: pd.DataFrame, colname: str) -> Optional[pd.DataFrame]:
-                if colname in _df.columns:
-                    return _df
-                print(f"\n[WIZARD] Falta columna esencial de ubicación: '{colname}'. Elegí la columna correspondiente (número). Enter=omitir.")
-                cols_list = list(_df.columns)
-                for idx, column in enumerate(cols_list, 1):
-                    print(f"  [{idx}] {column}")
-                sel = input("→ ¿Cuál columna corresponde? (# o Enter): ").strip()
-                if not sel:
-                    return _df
-                try:
-                    pick = int(sel)
-                except Exception:
-                    return _df
-                if not (1 <= pick <= len(cols_list)):
-                    return _df
-                source = cols_list[pick - 1]
-                if source != colname and source in _df.columns:
-                    user_syn = (CONFIG or {}).get("synonyms_user", {}) or {}
-
-                    def _persist_user_synonym(canonical: str, encabezado: str) -> None:
-                        global CONFIG, RENAME_MAP
-                        try:
-                            CONFIG = cfg_add_user_synonym(CONFIG, canonical, encabezado)
-                            RENAME_MAP = cfg_build_rename_map(CONFIG)
-                        except Exception as exc:
-                            log(f"[WARN][synonyms] No se pudo persistir el sinónimo: {exc}")
-
-                    mapped_df = confirm_column_mapping_with_preview(
-                        _df,
-                        source,
-                        colname,
-                        preview_fn=preview_column_mapping,
-                        muestras_fn=_muestras_columna,
-                        validator_fn=_es_columna_valida_para,
-                        post_map_validator=_smoke_schema_postmap,
-                        input_fn=input,
-                        output_fn=print,
-                        synonyms_user=user_syn,
-                        persist_synonym_fn=_persist_user_synonym,
-                        logger=log,
-                    )
-                    if mapped_df is None:
-                        return None
-                    _df = mapped_df
-
-                validate_schema_or_abort(_df)
-                return _df
-
-            for need in ("lat", "long", "antena"):
-                updated = _ask_map_col(df, need)
-                if updated is None:
-                    return df
-                df = updated
-
-            df = dedupe_columns(df)
-
-            # Validamos contra los nombres canónicos que usa el asistente.
-            faltan_ub = [col for col in ("lat", "long") if col not in df.columns]
-            if faltan_ub:
-                print("\n[ERROR] No se puede continuar: faltan columnas esenciales de ubicación -> " + ", ".join(faltan_ub))
-                print("Revise los encabezados de la hoja o use el wizard para mapearlos correctamente.")
-                sys.exit(2)
-
-            try:
-                if ("lat" in df.columns) and ("long" in df.columns) and ("antena" not in df.columns):
-                    def _fmt_coord(value: Any) -> str:
-                        try:
-                            return f"{float(value):.6f}"
-                        except Exception:
-                            return ""
-
-                    lat_key = df["lat"].map(_fmt_coord)
-                    lon_key = df["long"].map(_fmt_coord)
-                    mask = (lat_key != "") & (lon_key != "")
-                    pairs = pd.Series(list(zip(lat_key, lon_key)), index=df.index)
-                    uniq_pairs = pd.unique(pairs[mask])
-                    mapdict = {pair: f"Antena {idx}" for idx, pair in enumerate(uniq_pairs, start=1)}
-                    log(f"Antena fallback: se crearon {len(mapdict)} grupos por par (lat,long).")
-                    df["antena"] = np.where(mask, pairs.map(mapdict), "Antena —")
-                    df = dedupe_columns(df)
-            except Exception:
-                pass
+            log(f"[WARN][synonyms] No se pudo persistir el sinónimo: {exc}")
         except Exception:
             pass
-
-    except Exception:
-        print("[WIZARD] Aviso: no se pudo escribir config.json; se continúa sin persistir.")
-
-    return df
 
 
 # Wrappers de compatibilidad para logging
@@ -646,13 +460,20 @@ from tz_core.schema_utils import (
     _es_numero,
     _en_bbox_sv,
     _es_columna_valida_para,
+    run_schema_location_assistant,
 )
 from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
 from tz_core.dataframe_utils import dedupe_columns, _pick_col, _coalesce_duplicates, apply_schema_renames
 from tz_core.analytics import construir_seccion_todos_contactos, generar_historial_cambios_antena
-from tz_io.file_io import escribe_hashes_txt, copiar_logo_a_salida, _copiar_logo_a_salida
+from tz_core.file_utils import (
+    escribe_hashes_txt,
+    copiar_logo_a_salida,
+    _copiar_logo_a_salida,
+    relocate_kmz_file,
+)
+from tz_core.output_pipeline import produce_case_outputs
 
 # Importar constantes desde tz_core para consistencia
 RANGOS_SV = RANGOS_SV_MODULAR
@@ -3611,74 +3432,47 @@ def main():
 
     # ===== Menú de modos (único) =====
     log("Mostrando menú principal de opciones...")
-    while True:
-        print("\nSeleccione el modo de trabajo:")
-        print("[1] Procesar bitácora completa")
-        print("[2] Procesar por tiempo (día / rango de días / rango de horas)")
-        print("[3] Ingresar antenas manualmente")
-        resp = input("Opción (1/2/3, Enter=1): ").strip() or "1"
-        log(f"Usuario seleccionó opción: '{resp}'")
 
-        if resp == "3":
-            log("Iniciando modo manual de antenas...")
-            _modo_manual()        # Al terminar manual, volvemos a mostrar el menú
-            log("Regresando del modo manual al menú principal")
-            continue
+    def _run_manual_mode() -> None:
+        log("Iniciando modo manual de antenas...")
+        _modo_manual()
+        log("Regresando del modo manual al menú principal")
 
-        if resp in ("1", "2"):
-            opcion = resp
-            log(f"Modo válido seleccionado: {opcion}")
-            # Preguntar color SIEMPRE para modos 1/2
-            log("Solicitando configuración de tema de colores...")
-            CONFIG = solicitar_color_tema(CONFIG)
-            log("Configuración de colores completada")
-            break
+    def _pick_color(cfg):
+        log("Solicitando configuración de tema de colores...")
+        return solicitar_color_tema(cfg)
 
-        log(f"Opción inválida recibida: '{resp}', mostrando menú nuevamente")
-        print("[QC] Opción inválida, intenta de nuevo.")
+    context = collect_manual_mode_context(
+        config=CONFIG,
+        input_fn=input,
+        output_fn=print,
+        color_picker=_pick_color,
+        manual_mode_callback=_run_manual_mode,
+    )
+    opcion = context.option
+    CONFIG = context.config
+    log(f"Modo válido seleccionado: {opcion}")
+    log("Configuración de colores completada")
     
-    # ===== Modo Excel (bitácora) =====
-    log("Iniciando selección de archivo de entrada...")
-    archivo_entrada = seleccionar_archivo()
-    if not archivo_entrada:
-        log("ERROR: Usuario no seleccionó archivo, terminando ejecución")
-        print("No se seleccionó un archivo. Saliendo.")
+    dataset = gather_dataset_metadata(
+        log_fn=log,
+        select_file=seleccionar_archivo,
+        select_sheet=seleccionar_hoja_visible,
+        load_dataframe=cargar_excel_con_normalizacion,
+        output_fn=print,
+    )
+    if not dataset:
         return
-    
-    log(f"Archivo seleccionado exitosamente: {archivo_entrada}")
+
+    archivo_entrada = dataset.archivo
+    hoja = dataset.hoja
+    df = dataset.dataframe
 
     # La carpeta se elegirá al final (previsualización)
     carpeta_salida = None
 
-    # Selección de hoja visible (si hay varias)
-    log("Iniciando selección de hoja de Excel...")
-    hoja = seleccionar_hoja_visible(archivo_entrada)
-    log(f"Hoja seleccionada: {hoja}")
-
-    # Carga del Excel con sistema dual de columnas (FASE 5.3a modular)
-    log(f"Iniciando carga de datos desde {archivo_entrada}...")
-    try:
-        df, hoja_usada = cargar_excel_con_normalizacion(archivo_entrada, hoja)
-        log(f"Excel cargado exitosamente: {len(df)} filas, hoja usada: {hoja_usada}")
-    except Exception as e:
-        log(f"ERROR CRÍTICO al cargar Excel: {type(e).__name__}: {e}")
-        print(f"Error al leer el Excel: {e}")
-        return
-
-    # Normalización adicional de encabezados (heredada del sistema dual)
-    log("Aplicando normalización de columnas...")
-    df.columns = (
-        df.columns.astype(str)
-          .str.normalize('NFD').str.encode('ascii', 'ignore').str.decode('ascii')
-          .str.lower()
-          .str.replace(r'[\s\-\/\.]+', '_', regex=True)   # espacios, guiones, diagonales y puntos -> _
-          .str.replace(r'__+', '_', regex=True)           # colapsar múltiples _
-          .str.strip('_')                                 # quitar _ al inicio/fin
-    )
-
     # Snapshot de columnas originales (antes de cualquier mapeo/rename)
-    cols_originales = list(df.columns)
-    log(f"Columnas después de normalización: {cols_originales}")
+    cols_originales = list(dataset.columnas)
 
 
     # === VALIDACIÓN DE SCHEMA (aborto elegante) — INICIO =======================
@@ -3814,118 +3608,19 @@ def main():
     except Exception:
         schema_fields = {}
 
-    # Canonicos que el script realmente usa internamente (target)
-    # Nota: el script usa "long" (no "lon") y "duracion" (no "duracion_seg")
-    _target_alias = {
-        "lon": "long",
-        "duracion_seg": "duracion",
-    }
-    # Construir tabla de sinónimos normalizados -> nombre_canonico_target
-    syn2target = build_schema_synonym_map(schema_fields, target_alias=_target_alias)
-
-    # Aplicar renombrados automáticos (exacto + fuzzy)
-    df, rename_map = apply_schema_renames(
-        df,
-        syn2target,
+    df = normalize_and_validate_schema(
+        df=df,
+        config=CONFIG,
+        original_columns=cols_originales,
         manual_qc_mapping=MANUAL_QC_MAPPING,
-        fuzzy_cutoff=0.84,
+        alias_visibles=ALIAS_VISIBLES,
+        wizard_io_factory=_build_wizard_io,
+        persist_synonym_fn=_persist_user_synonym,
+        validate_schema_fn=validate_schema_or_abort,
+        logger=log,
+        output_fn=print,
     )
-
-    if MANUAL_QC_MAPPING or not rename_map:
-        print("[QC] Sin renombrar encabezados ni coalesce (QC manual activo).")
-
-    # Ejecutar dedup/coalesce con preferencia ligera (por si te interesa priorizar algún origen)
-    if not MANUAL_QC_MAPPING:
-        df = _coalesce_duplicates(
-            df,
-            prefer=["hora", "fecha", "lat", "long", "lon", "azimut", "tel", "imei", "antena"],
-            original_columns=cols_originales,
-        )
-
-    if not MANUAL_QC_MAPPING:
-        df = _run_schema_location_assistant(df, cols_originales)
-
-
-    # NORMALIZADOR-1: aplicar correcciones de codificación y abreviaturas en columnas de texto
-    try:
-        _reglas_norm = None
-        if 'CONFIG' in globals() and isinstance(CONFIG, dict):
-            _reglas_norm = (CONFIG.get("normalizador", {}) or {}).get("reemplazos", None)
-    except Exception:
-        _reglas_norm = None
-
-    df = normalizar_columnas_texto(df, reglas=_reglas_norm)
-
-    # Validación
     columnas_esenciales = ["antena", "lat", "long"]
-    # --- QC: coalesce de fecha/hora y limpieza de duplicados antes de validar ---
-    # 1) Normalizar 'fecha' tomando inicio si existe
-    if "fecha" not in df.columns:
-        if "fecha_inicial" in df.columns:
-            df["fecha"] = df["fecha_inicial"]
-        elif "fecha_final" in df.columns:
-            df["fecha"] = df["fecha_final"]
-
-    # 2) Normalizar 'hora' tomando inicio si existe
-    if "hora" not in df.columns:
-        if "hora_inicial" in df.columns:
-            df["hora"] = df["hora_inicial"]
-        elif "hora_final" in df.columns:
-            df["hora"] = df["hora_final"]
-
-    # 3) Asegurar canónica 'lon' si vino como 'long' o similares
-    if "lon" not in df.columns:
-        if "longitud_inicial_objetivo" in df.columns:
-            df["lon"] = df["longitud_inicial_objetivo"]
-        elif "long" in df.columns:
-            df["lon"] = df["long"]
-
-    # 4) Eliminar columnas duplicadas por nombre (pandas permite duplicados)
-    df = df.loc[:, ~df.columns.duplicated(keep="first")]
-
-    # --- PROCESADA: completar canónicos mínimos antes de validar ---
-    # tel
-    if "tel" not in df.columns:
-        for c in ("msisdn_origen","msisdn","telefono","tel"):
-            if c in df.columns:
-                df["tel"] = df[c]
-                print("[QC] tel <-", c)
-                break
-
-    # interaccion (solo si NO estamos en mapeo manual)
-    if not MANUAL_QC_MAPPING and "interaccion" not in df.columns:
-        for c in ("tipo","tipo2","contacto","usuario"):
-            if c in df.columns:
-                df["interaccion"] = df[c]
-                print("[QC] interaccion <-", c)
-                break
-
-    # antena (solo si NO estamos en mapeo manual)
-    if not MANUAL_QC_MAPPING and "antena" not in df.columns:
-        for c in ("siteid","cod_celda_inicial","celda"):
-            if c in df.columns:
-                df["antena"] = df[c]
-                print("[QC] antena <-", c)
-                break
-
-
-    # --- QC: verificación rápida y tipado numérico ---
-    print("[QC] mapeo:", {
-        "tel": "tel" in df.columns,
-        "interaccion": "interaccion" in df.columns,
-        "antena": "antena" in df.columns
-    })
-    if "tel" in df.columns and "interaccion" in df.columns and "antena" in df.columns:
-        print("[QC] no-nulos:", {
-            "tel": int(df["tel"].notna().sum()),
-            "interaccion": int(df["interaccion"].notna().sum()),
-            "antena": int(df["antena"].notna().sum())
-        })
-
-    # Asegurar que lat/lon/azimut sean numéricos (evita KPI=0 por NaN)
-    for c in ("lat", "lon", "azimut"):
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
 
     # --- WIZARD QC MANUAL ---
     if MANUAL_QC_MAPPING:
@@ -3967,209 +3662,24 @@ def main():
         """
         return sanear_nombre_archivo(s, nombre_base)
 
-    def _first_nonempty(colname):
-        if not colname or colname not in df.columns:
-            return None
-        serie = df[colname].dropna().astype(str).str.strip()
-        serie = serie[serie != ""]
-        return serie.iloc[0] if not serie.empty else None
-
-    # Tel / Alias
-    tel_col   = next((c for c in ["tel","telefono","numero","msisdn","a_number","origen","from","callingnumber","num"] if c in df.columns), None)
-    alias_col = next((c for c in ["alias","alias_usuario","apodo"] if c in df.columns), None)
-    tel_val   = _first_nonempty(tel_col)
-    alias_val = _first_nonempty(alias_col)
-
-    tel_part   = tel_val if tel_val else "multi" if df.get("tel", pd.Series()).nunique(dropna=True) > 1 else "sin_tel"
-    alias_part = alias_val if alias_val else "sin_alias"
-
-    # Rango de fechas (ISO yyyyMMdd)
     from datetime import datetime
-    if "fecha" in df.columns:
-        fechas_parsed = pd.to_datetime(df["fecha"], errors="coerce", dayfirst=True)
-        fechas_valid = fechas_parsed.dropna()
-        if not fechas_valid.empty:
-            fmin = fechas_valid.min().strftime("%d-%m-%Y")
-            fmax = fechas_valid.max().strftime("%d-%m-%Y")
-            rango = fmin if fmin == fmax else f"{fmin}__{fmax}"
-        else:
-            rango = datetime.now().strftime("%d-%m-%Y")
-    else:
-        rango = datetime.now().strftime("%d-%m-%Y")
 
-
-    # Timestamp de generación
-    # Etiqueta de filtro para el nombre de salida (solo Modo 2)
-    suf = ""
-    if opcion == "2":
-        try:
-            t = filtros.get("tipo") if 'filtros' in locals() else None
-            if t == "dia":
-                d = pd.to_datetime(filtros.get("dia"), dayfirst=True, errors="coerce")
-                if pd.notna(d):
-                    suf = f"__dia_{d.strftime('%Y-%m-%d')}"
-            elif t == "rango_dias":
-                d1 = pd.to_datetime(filtros.get("desde"), dayfirst=True, errors="coerce")
-                d2 = pd.to_datetime(filtros.get("hasta"), dayfirst=True, errors="coerce")
-                if pd.notna(d1) and pd.notna(d2):
-                    suf = f"__rd_{d1.strftime('%Y-%m-%d')}__{d2.strftime('%Y-%m-%d')}"
-            elif t == "rango_horas_dia":
-                d = pd.to_datetime(filtros.get("dia"), dayfirst=True, errors="coerce")
-                h1 = (filtros.get("hora_ini") or "00:00")[:5].replace(":", "-")
-                h2 = (filtros.get("hora_fin") or "00:00")[:5].replace(":", "-")
-                if pd.notna(d) and h1 and h2:
-                    suf = f"__hrdia_{d.strftime('%Y-%m-%d')}__{h1}__{h2}"
-            elif t == "rango_horas":
-                h1 = (filtros.get("hora_ini") or "00:00")[:5].replace(":", "-")
-                h2 = (filtros.get("hora_fin") or "00:00")[:5].replace(":", "-")
-                if h1 and h2:
-                    suf = f"__hr_{h1}__{h2}"
-        except Exception:
-            pass
-
-    stamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
-    base_auto = _sanear_nombre_archivo_local(f"{tel_part}_{alias_part}_{rango}{suf}_EXCEL_{stamp}")
-
-    # Evitar que el usuario ponga un color hex por error como nombre
-    # [QC] Confirmar tipo de bitácora (afecta solo nombres de archivos y carpetas)
-    print("\n[QC] Confirmar si esta bitácora es por número de Teléfono o IMEI para nombrar archivos")
-    print("I = IMEI")
-    print("T = Número telefónico")
-    print("Enter = Que TZ Analyzer decida")
-    tipo_bitacora = input("→ Opción (I/T/Enter): ").strip().upper() or ""
-
-    # Definir modo según respuesta del usuario o detección automática
-    modo_bitacora = "AUTO"
-    if tipo_bitacora == "I":
-        modo_bitacora = "IMEI"
-    elif tipo_bitacora == "T":
-        modo_bitacora = "TEL"
-    else:
-        # Detección automática basada en unicidad de columnas
-        imeis_unicos = df["imei"].nunique() if "imei" in df.columns else 0
-        tels_unicos = df["tel"].nunique() if "tel" in df.columns else 0
-        if imeis_unicos == 1 and tels_unicos != 1:
-            modo_bitacora = "IMEI"
-        elif tels_unicos == 1 and imeis_unicos != 1:
-            modo_bitacora = "TEL"
-        else:
-            modo_bitacora = "AUTO"
-
-    print(f"[QC] Tipo de bitácora establecido: {modo_bitacora}")
-
-    # [BASE-NAME v1] Sugerido según modo_bitacora (solo nombres; sin período ni "EXCEL")
-    def _limpiar_alias(s):
-        try:
-            s = str(s).strip()
-            if not s:
-                return ""
-            s = s.replace(" ", "_")
-            return s[:12]
-        except Exception:
-            return ""
-
-    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-
-    # alias corto (si existe)
-    alias_val = None
-    if "alias" in df.columns:
-        try:
-            _a = [x for x in df["alias"].astype(str).str.strip().unique() if x]
-            alias_val = _a[0] if _a else None
-        except Exception:
-            alias_val = None
-    alias_short = _limpiar_alias(alias_val)
-
-    # principal según elección
-    primary = None
-    prefix = "AUTO"
-
-    if "modo_bitacora" in locals():
-        if modo_bitacora == "IMEI":
-            prefix = "IMEI"
-            if "imei" in df.columns:
-                try:
-                    vals = [str(x).strip() for x in df["imei"].dropna().astype(str) if str(x).strip()]
-                    vals = sorted(set(vals))
-                    if vals:
-                        primary = vals[0]
-                except Exception:
-                    pass
-        elif modo_bitacora == "TEL":
-            prefix = "TEL"
-            if "tel" in df.columns:
-                try:
-                    vals = [str(x).strip() for x in df["tel"].dropna().astype(str) if str(x).strip()]
-                    vals = sorted(set(vals))
-                    if vals:
-                        primary = vals[0]
-                except Exception:
-                    pass
-
-    # construir base_auto final (este valor es el que verá el input)
-    if primary:
-        base_auto = f"{prefix}_{primary}{('_' + alias_short) if alias_short else ''}_{stamp}"
-    else:
-        base_auto = f"CASO{('_' + alias_short) if alias_short else ''}_{stamp}"
-
-    # --- PREVISUALIZACIÓN (antes de nombrar) ---
-    ts = datetime.now().strftime("%Y-%m-%d_%H-%M")
-
-    kml_habilitado = not CONFIG.get("salida", {}).get("solo_kmz", False)
-
-    def _pick_id(df, col):
-        if col not in df.columns:
-            return "DESCONOCIDO"
-        serie = df[col].astype(str).str.strip()
-        # Quitar vacíos, “0”, “None”, “null”, “—”
-        serie = serie[~serie.isin(["", "0", "None", "none", "NULL", "null", "—", "--"])]
-        if serie.empty:
-            return "DESCONOCIDO"
-        # Más frecuente (modo) como identificador estable
-        try:
-            return serie.mode().iat[0]
-        except Exception:
-            return serie.iloc[0]
-
-    # Elegir identificador principal según tipo de bitácora
-    # === principal_id con soporte multiN (IMEI/TEL) ===
-    if modo_bitacora == "IMEI":
-        col = "imei"
-    else:
-        col = "tel"
-
-    try:
-        if col in df.columns:
-            serie = df[col].astype(str).str.strip()
-            serie = serie[~serie.isin(["", "0", "None", "none", "NULL", "null", "—", "--"])]
-            uniques = serie.unique()  # evitar pd.unique() para no depender de 'pd' local
-            n = len(uniques)
-            if n > 1:
-                principal_id = f"multi{n}"
-            elif n == 1:
-                principal_id = uniques[0]
-            else:
-                principal_id = "DESCONOCIDO"
-        else:
-            principal_id = "DESCONOCIDO"
-    except Exception:
-        # Fallback seguro si algo raro pasa
-        principal_id = _pick_id(df, col)
-
-    # Alias (si no existe, usar 'SinAlias')
-    alias_id = _pick_id(df, "alias")
-    if alias_id == "DESCONOCIDO":
-        ts = datetime.now().strftime("%Y-%m-%d_%H-%M")
-
-        alias_id = (alias_val or "").strip()
-
-        # timestamp local para el BASE (comparto formato con el resto)
-        ts = datetime.now().strftime("%Y-%m-%d_%H-%M")
-
-    if alias_id:
-        base_auto = f"{modo_bitacora}_{principal_id}_{alias_id}_{ts}"
-    else:
-        base_auto = f"{modo_bitacora}_{principal_id}_{ts}"
+    identity = prompt_case_identity(
+        df=df,
+        input_fn=input,
+        output_fn=print,
+        now_fn=datetime.now,
+    )
+    filtros_ctx = filtros if (opcion == "2" and "filtros" in locals()) else None
+    suggestion = suggest_case_name(
+        df=df,
+        identity=identity,
+        filters=filtros_ctx,
+        timestamp_fn=datetime.now,
+        sanitize_fn=_sanear_nombre_archivo_local,
+    )
+    modo_bitacora = identity.mode
+    base_auto = suggestion.base_name
 
     # --- Submenú Filtro de tiempo (post-mapeo, antes de nombres) ---
     sel = locals().get('resp') or locals().get('opcion') or ""
@@ -4187,17 +3697,20 @@ def main():
     # [QC] Alias / Usuario / Abonado (post-mapeo; opcional)
 
     # [QC] Preguntas de TOPs (antenas/contactos) — antes de la previsualización
-    try:
-        _raw_top_ant = input("→ Top de antenas (Enter=10; 0=sin límite): ").strip()
-        top_antenas = 10 if _raw_top_ant == "" else max(0, int(_raw_top_ant))
-    except Exception:
-        top_antenas = 10
+    def _default_top(key, fallback):
+        try:
+            return int(CONFIG.get("html", {}).get(key, fallback))
+        except Exception:
+            return fallback
 
-    try:
-        _raw_top_cto = input("→ Top de contactos (Enter=10; 0=sin límite): ").strip()
-        top_contactos = 10 if _raw_top_cto == "" else max(0, int(_raw_top_cto))
-    except Exception:
-        top_contactos = 10
+    selection = collect_top_overrides(
+        input_fn=input,
+        output_fn=print,
+        default_antennas=_default_top("top_antenas_n", 10),
+        default_contacts=_default_top("top_contactos_n", 10),
+    )
+    top_antenas = selection.antennas
+    top_contactos = selection.contacts
 
     # Propagar a CONFIG si existe (para que HTML/KMZ usen estos valores)
     if "CONFIG" in globals() and isinstance(CONFIG, dict):
@@ -4210,48 +3723,22 @@ def main():
     except Exception:
         pass
 
-    print("[QC] Carpeta sugerida por TZ Analyzer:")
-    print(f"  📁 {base_auto}\n")
-
-    print("[QC] Se generarán estos archivos:")
-    print(f"  - {base_auto}_informe.html")
-    print(f"  - {base_auto}_mapeo.kmz")
-    print(f"  - {base_auto}_hashes.txt")
-    print(f"  - {base_auto}_errores.txt\n")
-
-    print("Si desea cambiar el nombre base, escríbalo ahora (solo base, sin extensión).")
-    resp = input(f"Nombre base del KML (Enter = {base_auto}): ").strip()
-    nombre_salida = (resp or base_auto)
-
-    if re.fullmatch(r'#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?', resp or ''):
-        print("Eso parece un color hex, no un nombre de archivo. Usaré el sugerido.")
-        resp = ""
-
-    nombre_salida = _sanear_nombre_archivo_local(resp) if resp else base_auto
-
-    # --- Selección de carpeta al final (estilo i2) ---
-    try:
-        carpeta_base = seleccionar_carpeta()
-    except Exception:
-        carpeta_base = None
-    if not carpeta_base:
-        carpeta_base = os.getcwd()
-    print(f"[QC] Carpeta destino: {carpeta_base}")
-
-
-    # Subcarpeta del caso = nombre_salida (sin acortador)
-    nombre_carpeta = nombre_salida
-    carpeta_salida = os.path.join(carpeta_base, nombre_carpeta)
-    os.makedirs(carpeta_salida, exist_ok=True)
-
-    if CONFIG.get("salida", {}).get("separar_kml_kmz", False):
-        carpeta_kml = os.path.join(carpeta_salida, "kml")
-        os.makedirs(carpeta_kml, exist_ok=True)
-        archivo_kml = os.path.join(carpeta_kml, f"{nombre_salida}_mapeo.kml")
-        archivo_kmz = os.path.join(carpeta_kml, f"{nombre_salida}_mapeo.kmz")
-    else:
-        archivo_kml = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kml")
-        archivo_kmz = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
+    routing = prompt_output_routing(
+        base_name=base_auto,
+        input_fn=input,
+        output_fn=print,
+        sanitize_fn=_sanear_nombre_archivo_local,
+        select_folder=seleccionar_carpeta,
+        cwd_fn=os.getcwd,
+        ensure_dir=lambda path: os.makedirs(path, exist_ok=True),
+        separate_kml=bool(CONFIG.get("salida", {}).get("separar_kml_kmz", False)),
+    )
+    nombre_salida = routing.base_name
+    carpeta_base = routing.base_folder
+    carpeta_salida = routing.output_folder
+    archivo_kml = routing.kml_path
+    archivo_kmz = routing.kmz_path
+    carpeta_kml = routing.kml_folder
 
     # HTML opcional (solo si lo activás en config.json con html.generar_en_modo_manual = true)
     if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
@@ -4259,16 +3746,12 @@ def main():
             print("[INFO] Generación HTML modular no disponible. Usar generar_en_modo_manual=false en config.json")
             # --- Normalizar ubicación del KMZ (por si quedó fuera de BASE) ---
             try:
-                kmz_esperado = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
-                kmz_fuera    = os.path.join(carpeta_base,  f"{nombre_salida}_mapeo.kmz")
-                if os.path.isfile(kmz_fuera):
-                    if os.path.isfile(kmz_esperado):
-                        try:
-                            os.remove(kmz_esperado)
-                        except Exception:
-                            pass
-                    os.replace(kmz_fuera, kmz_esperado)
-                    log(f"[DEBUG] KMZ reubicado a: {kmz_esperado}")
+                relocate_kmz_file(
+                    case_name=nombre_salida,
+                    source_folder=carpeta_base,
+                    target_folder=carpeta_salida,
+                    logger=log,
+                )
             except Exception as _e:
                 print(f"[WARN] No se pudo reubicar KMZ: {_e}")
 
@@ -4313,136 +3796,39 @@ def main():
     
     # === BLOQUE HTML/SECCIONES (repuesto) ===
     try:
-        # 1) Parámetros para "Interacciones de los últimos días"
-        try:
-            _dias_cfg = 3
-            if 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                _dias_cfg = int(CONFIG.get("html", {}).get("interacciones_ultimos_dias", 3))
-        except Exception:
-            _dias_cfg = 3
-
-        try:
-            _cols_cfg = CONFIG.get("columnas", {}) if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else {}
-        except Exception:
-            _cols_cfg = {}
-
-        # 2) Construir sección de interacciones (se inyecta en el HTML)
-        try:
+        def _store_interacciones(html):
             global HTML_SECCION_INTERACCIONES
-            HTML_SECCION_INTERACCIONES = _construir_seccion_interacciones(
-                df, dias=_dias_cfg, columnas_config=_cols_cfg
-            )
-            log(f"[DEBUG] Interacciones: {len(HTML_SECCION_INTERACCIONES)} chars")
-        except Exception as e:
-            log(f"[ERROR] Interacciones falló: {e}")
-            HTML_SECCION_INTERACCIONES = ""
+            HTML_SECCION_INTERACCIONES = html or ""
 
-        # 2b) Construir sección "Todos los contactos"
-        try:
+        def _store_contactos(html):
             global HTML_SECCION_TODOS_CONTACTOS
-            HTML_SECCION_TODOS_CONTACTOS = construir_seccion_todos_contactos(
-                df, columnas_config=_cols_cfg
-            )
-        except Exception:
-            HTML_SECCION_TODOS_CONTACTOS = ""
+            HTML_SECCION_TODOS_CONTACTOS = html or ""
 
-
-        # 3) Generar el HTML
-        try:
-            informe_html = generar_informe_html(
-                df, archivo_kml, carpeta_salida, nombre_salida, hoja,
-                os.path.basename(archivo_entrada)
-            )
-            print(f"Informe HTML generado en: {informe_html}")
-        except Exception as e:
-            print(f"[ERROR] No se pudo generar el HTML: {e}")
-            informe_html = None
-        # --- Normalizar ubicación del KMZ (por si quedó fuera de BASE) ---
-        try:
-            kmz_esperado = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
-            kmz_fuera    = os.path.join(carpeta_base,  f"{nombre_salida}_mapeo.kmz")
-            if os.path.isfile(kmz_fuera):
-                if os.path.isfile(kmz_esperado):
-                    try:
-                        os.remove(kmz_esperado)
-                    except Exception:
-                        pass
-                os.replace(kmz_fuera, kmz_esperado)
-        except Exception as _e:
-            print(f"[WARN] No se pudo reubicar KMZ: {_e}")
-        # --- FIN normalización KMZ ---
-
-
-        # === HASHES.txt (entrada/salidas/config/log) — INICIO =======================
-        try:
-            pares = []
-
-            # 1) Entrada (usa la primera variable que exista)
-            for _cand in ("ruta_archivo_entrada", "archivo_entrada"):
-                _v = locals().get(_cand) or globals().get(_cand)
-                if isinstance(_v, str) and os.path.exists(_v):
-                    pares.append((os.path.abspath(_v), os.path.basename(_v)))
-                    break
-
-            # 2) HTML recién generado
-            if isinstance(informe_html, str) and os.path.exists(informe_html):
-                pares.append((os.path.abspath(informe_html), os.path.basename(informe_html)))
-
-            # 3) KMZ (derivado del path base del KML)
-            _kmz_added = False; _k_ref = None
-            for _cand_k in ("archivo_salida_kml", "archivo_kml"):
-                _k = locals().get(_cand_k) or globals().get(_cand_k)
-                if _k:
-                    _k_ref = _k
-                    _kmz = os.path.splitext(_k)[0] + ".kmz"
-                    if os.path.exists(_kmz):
-                        pares.append((os.path.abspath(_kmz), os.path.basename(_kmz)))
-                        _kmz_added = True
-                    break
-
-
-            # 5) Log actual (si existe)
-            _log_file = globals().get("LOG_FILE")
-            if _log_file and os.path.exists(_log_file):
-                pares.append((os.path.abspath(_log_file), os.path.basename(_log_file)))
-
-            # 6) Carpeta destino (prefiero la del HTML; si no, la del KML/KMZ; si no, cwd)
-            _dest_dir = None
-            if isinstance(informe_html, str) and informe_html:
-                _dest_dir = os.path.dirname(informe_html)
-            elif _kmz_added and _k_ref:
-                _dest_dir = os.path.dirname(_k_ref)
-            if not _dest_dir:
-                _dest_dir = os.getcwd()
-
-            _hashes_path = os.path.join(_dest_dir, f"{nombre_salida}_hashes.txt")
-            escribe_hashes_txt(_hashes_path, pares)
-            try: log(f"[hashes] Generado {os.path.basename(_hashes_path)}")
-            except Exception: pass
-        except Exception as e:
-            try: log(f"[WARN][hashes] No se pudo generar HASHES.txt: {e}")
-            except Exception: pass
-        # === HASHES.txt — FIN ========================================================
-
-
-        # 5) Mensajes finales (KML/KMZ/errores)
-        solo_kmz = bool(CONFIG.get("salida", {}).get("solo_kmz", False))
-        if not solo_kmz:
-            print(f"KML generado en: {archivo_kml}")
-
-        if bool(CONFIG.get("salida", {}).get("separar_kml_kmz", False)):
-            kml_dir = os.path.dirname(archivo_kml)
-            base_dir = os.path.dirname(kml_dir) if os.path.basename(kml_dir).lower() == "kml" else kml_dir
-            kmz_dir = os.path.join(base_dir, "kmz")
-            kmz_path = os.path.join(kmz_dir, os.path.splitext(os.path.basename(archivo_kml))[0] + ".kmz")
-        else:
-            kmz_path = os.path.splitext(archivo_kml)[0] + ".kmz"
-
-        if os.path.exists(kmz_path):
-            print(f"KMZ generado en: {kmz_path}")
-        print(f"Filas descartadas por coordenadas inválidas: {desc_coords}")
-        print(f"Reporte de errores generado en: {archivo_errores}")
-
+        resultado_salidas = produce_case_outputs(
+            df=df,
+            config=CONFIG,
+            nombre_salida=nombre_salida,
+            archivo_kml=archivo_kml,
+            carpeta_base=carpeta_base,
+            carpeta_salida=carpeta_salida,
+            archivo_entrada=archivo_entrada,
+            hoja=hoja,
+            error_report_path=archivo_errores,
+            discarded_coords=desc_coords,
+            build_interactions_section=_construir_seccion_interacciones,
+            build_contacts_section=construir_seccion_todos_contactos,
+            generar_html_fn=generar_informe_html,
+            relocate_kmz_fn=relocate_kmz_file,
+            write_hashes_fn=escribe_hashes_txt,
+            summarize_fn=summarize_outputs,
+            logger=log,
+            output_fn=print,
+            path_exists=os.path.exists,
+            cwd_fn=os.getcwd,
+            log_file_path=globals().get("LOG_FILE"),
+            set_interactions_section=_store_interacciones,
+            set_contacts_section=_store_contactos,
+        )
     except Exception as e:
         print(f"[ERROR] Bloque HTML/KML falló: {e}")
 if __name__ == "__main__":

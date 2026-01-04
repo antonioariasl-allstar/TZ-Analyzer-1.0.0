@@ -21,6 +21,7 @@ from tz_io.file_io import (
     _escribe_hashes_txt,  # alias
     _copiar_logo_a_salida  # alias
 )
+from tz_core.file_utils import relocate_kmz_file
 
 
 class TestEscribeHashesTxt:
@@ -234,6 +235,70 @@ class TestCopiarLogoASalida:
         result = copiar_logo_a_salida(str(logo_src), str(dest_dir))
         
         assert result is None
+
+
+class TestRelocateKmzFile:
+    """Tests para la relocalización de archivos KMZ."""
+
+    def test_relocate_kmz_moves_file(self, tmp_path):
+        source_dir = tmp_path / "source"
+        target_dir = tmp_path / "target"
+        source_dir.mkdir()
+        target_dir.mkdir()
+
+        kmz_name = "caso_demo_mapeo.kmz"
+        src_file = source_dir / kmz_name
+        src_file.write_bytes(b"kmz content")
+
+        messages = []
+
+        result = relocate_kmz_file(
+            case_name="caso_demo",
+            source_folder=str(source_dir),
+            target_folder=str(target_dir),
+            logger=messages.append,
+        )
+
+        assert result == str(target_dir / kmz_name)
+        assert not src_file.exists()
+        assert (target_dir / kmz_name).read_bytes() == b"kmz content"
+        assert messages, "Debe registrar mensaje de depuración"
+
+    def test_relocate_kmz_overwrites_existing(self, tmp_path):
+        source_dir = tmp_path / "source"
+        target_dir = tmp_path / "target"
+        source_dir.mkdir()
+        target_dir.mkdir()
+
+        kmz_name = "caso_demo_mapeo.kmz"
+        src_file = source_dir / kmz_name
+        src_file.write_bytes(b"nuevo contenido")
+
+        target_file = target_dir / kmz_name
+        target_file.write_bytes(b"viejo contenido")
+
+        result = relocate_kmz_file(
+            case_name="caso_demo",
+            source_folder=str(source_dir),
+            target_folder=str(target_dir),
+        )
+
+        assert result == str(target_file)
+        assert not src_file.exists()
+        assert target_file.read_bytes() == b"nuevo contenido"
+
+    def test_relocate_kmz_missing_source(self, tmp_path):
+        target_dir = tmp_path / "target"
+        target_dir.mkdir()
+
+        result = relocate_kmz_file(
+            case_name="caso_demo",
+            source_folder=str(tmp_path / "source"),
+            target_folder=str(target_dir),
+        )
+
+        assert result is None
+        assert not any(target_dir.iterdir())
 
 
 class TestCompatibilidadAliases:

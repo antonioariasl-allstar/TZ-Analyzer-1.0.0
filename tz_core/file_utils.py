@@ -14,7 +14,7 @@ para mejorar reutilización y testing.
 
 import os
 import shutil
-from typing import List, Tuple, Optional
+from typing import Callable, List, Tuple, Optional
 from .utils import sha256_de_archivo
 
 
@@ -88,6 +88,54 @@ def copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> Optional[str]:
         return None
 
 
+def relocate_kmz_file(
+    *,
+    case_name: str,
+    source_folder: str,
+    target_folder: str,
+    logger: Optional[Callable[[str], None]] = None,
+    exists_fn: Callable[[str], bool] = os.path.isfile,
+    remove_fn: Callable[[str], None] = os.remove,
+    move_fn: Callable[[str, str], None] = os.replace,
+) -> Optional[str]:
+    """Ensure the KMZ generated in a temporary folder lives alongside the KML."""
+
+    if not case_name:
+        return None
+
+    filename = f"{case_name}_mapeo.kmz"
+    src = os.path.join(source_folder, filename)
+    dst = os.path.join(target_folder, filename)
+
+    if not exists_fn(src):
+        return None
+
+    try:
+        os.makedirs(target_folder, exist_ok=True)
+    except Exception:
+        pass
+
+    try:
+        if exists_fn(dst):
+            remove_fn(dst)
+    except Exception:
+        pass
+
+    try:
+        move_fn(src, dst)
+    except Exception:
+        return None
+
+    if logger:
+        try:
+            logger(f"[DEBUG] KMZ reubicado a: {dst}")
+        except Exception:
+            pass
+
+    return dst
+
+
 # Aliases para compatibilidad con script principal
 _escribe_hashes_txt = escribe_hashes_txt
 _copiar_logo_a_salida = copiar_logo_a_salida
+_relocate_kmz_file = relocate_kmz_file

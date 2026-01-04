@@ -345,6 +345,20 @@ def generar_kml(
 
     # === PREPARAR ITEMS (un dict por cada fila válida) ===
     desc_spec = config["kml"]["description"]
+
+    def _first_available(row_obj, *cols):
+        """Return first column with a meaningful value for backwards compatibility."""
+        for col in cols:
+            if not col:
+                continue
+            val = row_obj.get(col, None)
+            if pd.isna(val):
+                continue
+            if isinstance(val, str):
+                if not val.strip() or val.strip().lower() in {"nan", "none"}:
+                    continue
+            return val
+        return None
     items = []
 
     for _, row in df.iterrows():
@@ -403,8 +417,8 @@ def generar_kml(
             "azimut_f": azimut_float,
             "azimut_i": azimut_int,
             "rango": rango,
-            "alias": row.get("alias", None),
-            "usuario": row.get("nombre_usuario", None),
+            "alias": _first_available(row, "alias", "alias_usuario"),
+            "usuario": _first_available(row, "nombre_usuario", "usuario"),
             "abonado": row.get("abonado", None),
             "tel": row.get("tel", None),
             "imei": row.get("imei", None),
