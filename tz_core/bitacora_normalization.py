@@ -1,0 +1,123 @@
+"""
+Normalización y validación ligera para el flujo de bitácoras.
+
+Helpers puros (sin I/O ni globals) para texto, hora, fecha y lat/lon.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Iterable, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+
+
+def normalize_time_strings(series: pd.Series) -> pd.Series:
+    """Normaliza strings de hora a HH:MM:SS si cumplen patrón, conserva NaN en otros casos."""
+    pat = re.compile(r"^(\d{2}):(\d{2}):(\d{2})$")
+    s = series.astype(str).str.strip()
+    mask = s.apply(lambda v: bool(pat.match(v)))
+    out = pd.Series(pd.NA, index=series.index, dtype="string")
+    out[mask] = s[mask]
+    return out
+
+
+def normalize_dates(series: pd.Series, *, dayfirst: bool = True) -> pd.Series:
+    """Parsea fechas tolerante; devuelve strings dd/mm/yyyy para válidos y NaN para inválidos."""
+    parsed = pd.to_datetime(series, errors="coerce", dayfirst=dayfirst)
+    out = pd.Series(pd.NA, index=series.index, dtype="string")
+    mask = parsed.notna()
+    out[mask] = parsed[mask].dt.strftime("%d/%m/%Y")
+    return out
+
+
+def validate_time_sample(series: pd.Series) -> Tuple[bool, list[str]]:
+    """Devuelve si las primeras muestras cumplen HH:MM:SS y las muestras evaluadas."""
+    pat = re.compile(r"^\d{2}:\d{2}:\d{2}$")
+    sample = series.astype(str).str.strip().str[:8].head(5)
+    ok = sample.apply(lambda v: pat.match(v) is not None).all()
+    return bool(ok), sample.tolist()
+
+
+def validate_date_parsable(series: pd.Series, *, dayfirst: bool = True) -> Tuple[bool, list[str]]:
+    """Intenta parsear fechas; devuelve si hay alguna válida y muestras."""
+    try:
+        parsed = pd.to_datetime(series, errors="coerce", dayfirst=dayfirst)
+        return parsed.notna().any(), [str(v) for v in series.head(5).tolist()]
+    except Exception:
+        return False, [str(v) for v in series.head(5).tolist()]
+
+
+def coalesce_cols(df: pd.DataFrame, *names: Optional[str]) -> Optional[str]:
+    """Devuelve el primer nombre presente en el DataFrame (case-sensitive)."""
+    for name in names:
+        if name and name in df.columns:
+            return name
+    return None
+
+
+def validate_latlon(
+    df: pd.DataFrame,
+    *,
+    lat_col: str = "lat",
+    lon_cols: Iterable[str] = ("long", "lon"),
+    bbox: Optional[dict] = None,
+) -> bool:
+    """Verifica al menos una fila con lat/lon numéricas razonables dentro de bbox.
+
+    bbox espera llaves lat_min, lat_max, lon_min, lon_max. Si no viene, usa un
+    fallback básico para El Salvador.
+    """
+    box = bbox or {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
+    try:
+        if lat_col not in df.columns:
+            return False
+        lon_col = coalesce_cols(df, *lon_cols)
+        if not lon_col:
+            return False
+
+        lt = pd.to_numeric(df[lat_col], errors="coerce")
+        lg = pd.to_numeric(df[lon_col], errors="coerce")
+        mask = (
+            (~lt.isna())
+            & (~lg.isna())
+            & (lt != 0)
+            & (lg != 0)
+            & lt.between(box["lat_min"], box["lat_max"])
+            & lg.between(box["lon_min"], box["lon_max"])
+        )
+        return bool(mask.any())
+    except Exception:
+        return False
+
+
+def sanitize_latlon(
+    df: pd.DataFrame,
+    lat_col: str = "lat",
+    lon_col: str = "long",
+    *,
+    zero_is_invalid: bool = True,
+    bbox: Optional[dict] = None,
+) -> pd.DataFrame:
+    """Devuelve copia con lat/lon numéricas, NaN para valores fuera de rango o cero/0,0."""
+    box = bbox or {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
+    out = df.copy()
+    out[lat_col] = pd.to_numeric(out.get(lat_col, pd.Series(dtype=float)), errors="coerce")
+    out[lon_col] = pd.to_numeric(out.get(lon_col, pd.Series(dtype=float)), errors="coerce")
+    mask_zero = (out[lat_col].fillna(0) == 0) & (out[lon_col].fillna(0) == 0) if zero_is_invalid else pd.Series(False, index=out.index)
+    mask_out = ~out[lat_col].between(box["lat_min"], box["lat_max"]) | ~out[lon_col].between(box["lon_min"], box["lon_max"])
+    invalid = mask_zero | mask_out
+    out.loc[invalid, [lat_col, lon_col]] = np.nan
+    return out
+
+
+__all__ = [
+    "normalize_time_strings",
+    "normalize_dates",
+    "validate_time_sample",
+    "validate_date_parsable",
+    "coalesce_cols",
+    "validate_latlon",
+    "sanitize_latlon",
+]

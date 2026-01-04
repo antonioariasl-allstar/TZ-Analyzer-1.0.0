@@ -464,6 +464,11 @@ from tz_core.text_utils import (
     _fix_mojibake_text,
     normalize_header_key,
 )
+from tz_core.bitacora_normalization import (
+    validate_time_sample as _valida_formato_hora,
+    validate_date_parsable as _valida_fecha_parsible,
+    validate_latlon as _valida_latlon,
+)
 from tz_core.schema_utils import (
     build_schema_synonym_map,
     has_location_coverage,

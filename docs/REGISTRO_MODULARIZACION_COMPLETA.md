@@ -15,6 +15,7 @@
 - `dedupe_columns` en `tz_core/dataframe_utils.py` se refinó para eliminar FutureWarnings y mantener tipos correctos; suite completa de tests en verde (232/234, 2 skip).
 - Se creó `tz_core/bitacora_io.py` para centralizar selección de archivo/carpeta con fallback de consola; el monolito ahora usa estos selectores.
 - bitacora_io ahora centraliza también selección de hoja y construcción de rutas de salida (`ensure_dir`, `seleccionar_carpeta_salida`, `resolver_rutas_salida`), reduciendo lógica repetida en el monolito.
+- Nuevo módulo `tz_core/bitacora_normalization.py` con validadores puros de hora/fecha y lat/lon; el monolito los usa en la validación de schema en lugar de helpers inline.
 
 ### 📦 MÓDULOS CREADOS EN tz_core/
 
