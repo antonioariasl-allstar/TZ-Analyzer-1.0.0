@@ -21,6 +21,9 @@
 - Se reutiliza `sanitize_latlon` en la sección de interacciones HTML para validar coordenadas sin duplicar lógica ni aplicar funciones fila por fila.
 - La tabla de “Top antenas” usa `sanitize_latlon` para limpiar y validar coordenadas antes de contar y enlazar antenas.
 - Se restauró la sección de interacciones (tabla + mini-mapa) corrigiendo el validador por fila que faltaba tras la sanitización centralizada.
+- Nuevos helpers en `tz_core/bitacora_normalization.py`: `parse_duration_seconds`, `normalize_imei` y `normalize_msisdn` para limpiar identificadores y duraciones de forma consistente.
+- Se reutiliza `parse_duration_seconds` en la sección de interacciones del monolito y en `tz_core/html_generator.py`, eliminando parsers inline duplicados.
+- `tz_core/format_utils.py` ahora delega la limpieza de IMEI y duraciones a los nuevos helpers para mantener una sola fuente de verdad.
 
 ### 📦 MÓDULOS CREADOS EN tz_core/
 

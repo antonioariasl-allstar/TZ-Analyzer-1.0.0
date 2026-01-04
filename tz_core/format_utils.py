@@ -25,6 +25,8 @@ import re
 from decimal import Decimal
 from typing import Any, Optional
 
+from tz_core.bitacora_normalization import normalize_imei, parse_duration_seconds
+
 # Import de validation_utils para _a_float
 try:
     from .validation_utils import _a_float
@@ -87,33 +89,20 @@ def _formatear_valor_para_burbuja(col: str, val: Any) -> str:
 
     # imei -> cadena limpia sin .0 ni notación científica
     if col == "imei":
+        cleaned = normalize_imei(val)
+        if cleaned is not None:
+            return cleaned
         s_clean = str(val).strip()
-        try:
-            # caso 123456789012345.0 -> 123456789012345
-            m = re.fullmatch(r'(\d+)\.0+', s_clean)
-            if m:
-                return m.group(1)
-            # caso notación científica: 3.579E14 -> 357900000000000
-            if re.fullmatch(r'\d+(?:\.\d+)?[eE][+-]?\d+', s_clean):
-                d = Decimal(s_clean)
-                s_clean = format(d, 'f').rstrip('0').rstrip('.')
-                return s_clean
-            # si ya son solo dígitos, devolver tal cual
-            if re.fullmatch(r'\d+', s_clean):
-                return s_clean
-        except Exception:
-            # ante cualquier cosa rara, devuelve lo que venga
-            return s_clean
         return s_clean
 
     # duracion -> si es numérica (segundos) => HH:MM:SS; si ya trae "HH:MM[:SS]" se deja
     if col == "duracion":
         if ":" in s:
             return s
-        f = _a_float(val)
-        if f is None:
+        secs = parse_duration_seconds(val, default=None)
+        if secs is None:
             return s
-        f = int(round(f))
+        f = int(round(secs))
         h = f // 3600
         m = (f % 3600) // 60
         sec = f % 60

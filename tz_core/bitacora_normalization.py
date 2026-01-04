@@ -11,6 +11,7 @@ from typing import Iterable, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from decimal import Decimal
 
 
 def normalize_time_strings(series: pd.Series) -> pd.Series:
@@ -120,4 +121,114 @@ __all__ = [
     "coalesce_cols",
     "validate_latlon",
     "sanitize_latlon",
+    "parse_duration_seconds",
+    "normalize_imei",
+    "normalize_msisdn",
 ]
+
+
+def parse_duration_seconds(value: object, *, default: float = 0.0) -> float:
+    """Parsea una duración expresada en segundos o HH:MM[:SS] a segundos (float).
+
+    - Strings vacíos/None retornan ``default``.
+    - Si recibe ya un número, intenta convertirlo a float.
+    - Tolerante a formatos "HH:MM" o "HH:MM:SS".
+    """
+    if value is None:
+        return float(default)
+    try:
+        if isinstance(value, (int, float, np.number)) and not pd.isna(value):
+            return float(value)
+    except Exception:
+        pass
+
+    s = str(value).strip()
+    if not s or s.lower() in {"nan", "none"}:
+        return float(default)
+
+    if s.isdigit():
+        try:
+            return float(s)
+        except Exception:
+            return float(default)
+
+    parts = s.split(":")
+    try:
+        parts_int = [int(p) for p in parts]
+        if len(parts_int) == 3:
+            return float(parts_int[0] * 3600 + parts_int[1] * 60 + parts_int[2])
+        if len(parts_int) == 2:
+            return float(parts_int[0] * 60 + parts_int[1])
+    except Exception:
+        return float(default)
+
+    return float(default)
+
+
+def _normalize_decimal_string(value: object) -> Optional[str]:
+    """Normaliza números pasados como float/Decimal/string evitando notación científica.
+
+    Devuelve un string con dígitos solamente (sin signo) si se puede normalizar, de lo contrario None.
+    """
+    if value is None:
+        return None
+    try:
+        if isinstance(value, (int, np.integer)):
+            return str(int(value))
+        if isinstance(value, (float, np.floating, Decimal)):
+            d = Decimal(str(value))
+            return format(d, "f").rstrip("0").rstrip(".") or None
+    except Exception:
+        pass
+    s = str(value).strip()
+    if not s:
+        return None
+    try:
+        d = Decimal(s)
+        return format(d, "f").rstrip("0").rstrip(".") or None
+    except Exception:
+        return None
+
+
+def normalize_imei(value: object) -> Optional[str]:
+    """Devuelve IMEI como string de dígitos, sin sufijos ".0" ni notación científica.
+
+    Retorna None si no puede sanearse a una cadena numérica.
+    """
+    cleaned = _normalize_decimal_string(value)
+    if cleaned is None:
+        return None
+    cleaned = cleaned.replace(" ", "")
+    if cleaned.isdigit():
+        return cleaned
+    return None
+
+
+def normalize_msisdn(value: object, *, allow_plus: bool = True) -> Optional[str]:
+    """Normaliza números telefónicos/MSISDN a string estable.
+
+    - Elimina espacios, guiones, paréntesis y puntos.
+    - Si viene como float, evita notación científica.
+    - Permite prefijo "+" si ``allow_plus`` es True.
+    Retorna None si no queda ningún dígito.
+    """
+    if value is None:
+        return None
+
+    # Si es numérico, primero normalizar evitando notación científica
+    cleaned_num = _normalize_decimal_string(value)
+    if cleaned_num is not None:
+        base = cleaned_num
+    else:
+        base = str(value)
+
+    s = base.strip()
+    if not s:
+        return None
+
+    prefix_plus = s.startswith("+") and allow_plus
+    # Eliminar separadores comunes
+    s = s.replace("+", "").replace(" ", "").replace("-", "").replace("(", "").replace(")", "").replace(".", "")
+    if not s.isdigit():
+        return None
+    return ("+" + s) if prefix_plus else s

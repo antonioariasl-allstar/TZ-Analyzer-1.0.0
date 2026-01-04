@@ -38,6 +38,7 @@ from tz_core.html_helpers import (
 )
 from tz_core.runtime_utils import collect_env_snapshot
 from tz_core.time_utils import to_datetime_silent
+from tz_core.bitacora_normalization import parse_duration_seconds
 
 
 def resolve_top_antennas_n(config: dict | None, overrides: dict | None, default: int = 3) -> int:
@@ -1148,24 +1149,7 @@ def construir_seccion_interacciones(df, dias=3, columnas_config=None, CONFIG=Non
         if pd.api.types.is_numeric_dtype(ser_dur):
             df_local['_dur_sec'] = pd.to_numeric(ser_dur, errors='coerce').fillna(0)
         else:
-            # Parse formatos comunes
-            def _parse_dur(x):
-                x = str(x).strip()
-                if not x or x.lower() in ('nan', 'none'):
-                    return 0
-                if x.isdigit():
-                    return float(x)
-                parts = x.split(':')
-                try:
-                    parts = [int(p) for p in parts]
-                    if len(parts) == 3:
-                        return parts[0]*3600 + parts[1]*60 + parts[2]
-                    if len(parts) == 2:
-                        return parts[0]*60 + parts[1]
-                except Exception:
-                    pass
-                return 0
-            df_local['_dur_sec'] = ser_dur.map(_parse_dur)
+            df_local['_dur_sec'] = ser_dur.map(parse_duration_seconds)
     else:
         df_local['_dur_sec'] = 0
 
