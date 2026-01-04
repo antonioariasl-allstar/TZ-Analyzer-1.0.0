@@ -276,8 +276,15 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
 
         cols_cfg = columnas_config or {}
         candidatos = [
-            cols_cfg.get("tel_contacto"), "tel_contacto", "contacto",
-            "telefono_contacto", "numero_contacto", "destino", "origen"
+            cols_cfg.get("tel_contacto"),
+            "tel_contacto",
+            "contacto",
+            "_contacto",
+            "_contacto_raw",
+            "telefono_contacto",
+            "numero_contacto",
+            "destino",
+            "origen",
         ]
         c_col = next((c for c in candidatos if c and c in df.columns), None)
         if not c_col:
