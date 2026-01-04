@@ -173,3 +173,33 @@ def test_build_top_antennas_section_respects_override_and_bbox():
     assert "A3" not in html
     # Link a maps presente
     assert "google.com/maps" in html
+
+
+def test_build_antennas_by_hour_section_basic():
+    df = html_generator.pd.DataFrame(
+        [
+            {"antena": "A1", "hora": "06:30:00", "lat": 13.7, "long": -89.2, "azimut": 10},
+            {"antena": "A2", "hora": "13:00:00", "lat": 13.71, "long": -89.21, "azimut": 20},
+            {"antena": "A3", "hora": "02:00:00", "lat": 13.8, "long": -89.25, "azimut": 30},
+        ]
+    )
+
+    html = html_generator.build_antennas_by_hour_section(df, {"html": {"top_antenas_n": 2}}, overrides=None)
+
+    assert 'id="antenas-rangos"' in html
+    assert "Mañana" in html and "Tarde" in html and "Madrugada" in html
+    assert "google.com/maps" in html
+
+
+def test_build_antennas_by_hour_section_respects_override():
+    df = html_generator.pd.DataFrame(
+        [
+            {"antena": "A1", "hora": "10:00", "lat": 13.7, "long": -89.2},
+            {"antena": "A2", "hora": "10:30", "lat": 13.71, "long": -89.21},
+            {"antena": "A3", "hora": "10:45", "lat": 13.8, "long": -89.25},
+        ]
+    )
+
+    html = html_generator.build_antennas_by_hour_section(df, None, overrides={"antenas": 1})
+
+    assert html.count("<tr><td class='mono'>") == 1

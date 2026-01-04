@@ -126,6 +126,7 @@ from tz_core.html_generator import (
     build_identification_rows,
     build_top_contacts_sections,
     build_top_antennas_section,
+    build_antennas_by_hour_section,
     inject_technical_metadata,
     resolve_top_antennas_n,
 )
@@ -2047,175 +2048,11 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
         sec_ant_rangos = ""
         sec_heatmap = ""
         try:
-            # --- 1) Detección robusta de columnas ---
-            cols_low = {c.lower(): c for c in df.columns}
-            def pick(*names):
-                for n in names:
-                    c = cols_low.get(n)
-                    if c: return c
-                # búsqueda suavecita por contiene
-                for c in df.columns:
-                    lc = c.lower()
-                    if any(n in lc for n in names):
-                        return c
-                return None
-
-            col_ant = pick("antena", "antenanombre", "antena_nombre")
-            col_lat = pick("lat", "latitud")
-            col_lon = pick("lon", "long", "longitud")
-            col_hora = pick("hora", "time")
-            col_fecha_hora = pick("fecha y hora", "fechahora", "datetime", "timestamp")
-
-            # Si no hay columna de antena, no armamos nada
-            if col_ant:
-                # --- 2) Obtener la hora (0..23) de forma robusta ---
-                def _to_hour_series():
-                    if col_hora is not None:
-                        import warnings
-                        with warnings.catch_warnings():
-                            warnings.filterwarnings("ignore", message="Could not infer format*", category=UserWarning)
-                            s = pd.to_datetime(df[col_hora], errors="coerce").dt.hour
-
-                        if s.isna().mean() > 0.5:
-                            def _hh(x):
-                                try:
-                                    x = str(x)
-                                    hh = int(x.split(":")[0])
-                                    return hh
-                                except:
-                                    return np.nan
-                            s = df[col_hora].map(_hh)
-                        return s
-                    if col_fecha_hora is not None:
-                        return pd.to_datetime(df[col_fecha_hora], errors="coerce").dt.hour
-                    return None
-
-
-                hours = _to_hour_series()
-
-                                # Mañana 06–11:59, Tarde 12–17:59, Noche 18–23:59, Madrugada 00–05:59
-                def _lab(h):
-                    if h is None or np.isnan(h): return None
-                    h = int(h)
-                    if 6 <= h <= 11:        return "Mañana (06:00–11:59)"
-                    if 12 <= h <= 17:       return "Tarde (12:00–17:59)"
-                    if 18 <= h <= 23:       return "Noche (18:00–23:59)"
-                    return "Madrugada (00:00–05:59)"
-
-                labels_orden = [
-                    "Madrugada (00:00–05:59)",
-                    "Mañana (06:00–11:59)",
-                    "Tarde (12:00–17:59)",
-                    "Noche (18:00–23:59)",
-                ]
-
-
-                # --- 4) Utilidades de pretty/geo ---
-                def _fmt(x):
-                    try:
-                        x = float(x)
-                        return f"{x:.6f}"
-                    except:
-                        return "—"
-
-                def _first_valid_geo(sub_ant):
-                    if col_lat and col_lon:
-                        tmp = sub_ant[[col_lat, col_lon]].dropna()
-                        if not tmp.empty:
-                            t2 = tmp[(tmp[col_lat]!=0) | (tmp[col_lon]!=0)]
-                            if not t2.empty:
-                                r = t2.iloc[0]
-                                return float(r[col_lat]), float(r[col_lon])
-                    return (None, None)
-
-                # --- 5) Armar HTML ---
-                out = []
-                out.append('<section id="antenas-rangos">')
-                out.append('<h2>Antenas por rango horario</h2>')
-                out.append('<p class="nota"><b>Nota:</b> Si desea verificar la ubicación de una antena, puede hacer clic en el nombre para abrir su posición en Google Maps.</p>')
-                out.append('<style>#antenas-rangos h3.sub{background:#f7f7f7;border:1px solid #e6e6e6;border-radius:6px;padding:.5rem .75rem;margin:1rem 0 .5rem}#antenas-rangos .mono{font-family:ui-monospace,Menlo,Consolas,monospace}#antenas-rangos .nowrap{white-space:nowrap}</style>')
-                if hours is not None:
-                    rangos = hours.map(_lab)
-                    for lab in labels_orden:
-                        mask = rangos == lab
-                        total = int(mask.sum())
-                        if total == 0:
-                            continue
-                        sub = df[mask]
-
-                        # --- Filtrar antenas y coordenadas válidas antes del Top N ---
-                        tmp = sub.copy()
-                        # validar lat/lon si existen
-                        tmp["_lat"] = pd.to_numeric(tmp.get(col_lat, pd.Series(dtype=float)), errors="coerce")
-                        tmp["_lon"] = pd.to_numeric(tmp.get(col_lon, pd.Series(dtype=float)), errors="coerce")
-                        valid_geo = (
-                            tmp["_lat"].between(-90, 90) &
-                            tmp["_lon"].between(-180, 180) &
-                            ~((tmp["_lat"].abs() < 1e-9) & (tmp["_lon"].abs() < 1e-9))
-                        )
-                        # limpiar nombre de antena
-                        ant_str = tmp[col_ant].astype(str).str.strip()
-                        valid_ant = (ant_str != "") & (ant_str != "0") & (~ant_str.str.match(r"(?i)(sin\s*inf\.?|s/i)$"))
-
-                        # dataframe ya depurado (sin .copy() innecesario - solo lectura después)
-                        sub_valid = tmp[valid_geo & valid_ant]
-
-                        # --- Top N (respeta override/config) ---
-                        _topN = resolve_top_antennas_n(
-                            globals().get("CONFIG"),
-                            globals().get("OVERRIDE_TOPS"),
-                            default=3,
-                        )
-
-                        conteo = sub_valid[col_ant].value_counts(dropna=False)
-                        top_series = conteo
-                        if int(_topN) > 0:
-                            top_series = conteo.head(int(_topN))
-
-
-                        out.append(f'<h3 class="sub">{lab} <span class="sub">({total} activaciones)</span></h3>')
-                        out.append('<table class="tbl"><thead><tr><th>#</th><th>Antena</th><th>Latitud</th><th>Longitud</th><th>Conteo</th><th>Azimuts frecuentes</th></tr></thead><tbody>')
-
-                        for i, (ant, cnt) in enumerate(top_series.items(), start=1):
-                            sub_ant = sub_valid[sub_valid[col_ant] == ant]
-
-                            # Geo (primera coord válida)
-                            lat, lon = _first_valid_geo(sub_ant)
-                            lat_s = _fmt(lat) if lat is not None else "—"
-                            lon_s = _fmt(lon) if lon is not None else "—"
-
-                            # Link a Maps si hay geo
-                            if lat is not None and lon is not None:
-                                ant_html = f'<a href="https://www.google.com/maps?q={lat_s},{lon_s}" target="_blank" rel="noopener">{ant}</a>'
-                            else:
-                                ant_html = f"{ant}"
-
-                            # Azimuts frecuentes (Top 3)
-                            az_s = "—"
-                            if "azimut" in sub_ant.columns:
-                                try:
-                                    azv = pd.to_numeric(sub_ant["azimut"], errors="coerce").round().dropna().astype(int)
-                                    vc = azv.value_counts().head(3)
-                                    if not vc.empty:
-                                        parts = [f"Azimut {int(k)}: {int(v)} {'vez' if int(v)==1 else 'veces'}" for k, v in vc.items()]
-                                        az_s = "<br>".join(parts)
-                                except Exception:
-                                    pass
-
-                            out.append(
-                                f"<tr><td class='mono'>{i}</td>"
-                                f"<td>{ant_html}</td>"
-                                f"<td class='mono nowrap'>{lat_s}</td>"
-                                f"<td class='mono nowrap'>{lon_s}</td>"
-                                f"<td class='mono'>{int(cnt):,}</td>"
-                                f"<td>{az_s}</td></tr>"
-    )
-
-                        out.append("</tbody></table>")
-
-                out.append("</section>")
-                sec_ant_rangos = "\n".join(out)
-                log(f"[DEBUG] Antenas por horario: {len(sec_ant_rangos)} chars")
+            sec_ant_rangos = build_antennas_by_hour_section(
+                df,
+                globals().get("CONFIG"),
+                globals().get("OVERRIDE_TOPS"),
+            )
         except Exception:
             sec_ant_rangos = ""
 

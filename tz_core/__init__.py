@@ -120,4 +120,8 @@ from .time_filters import (
 from .runtime_utils import collect_env_snapshot
 
 # html_generator - Helpers de HTML
-from .html_generator import resolve_top_antennas_n, build_top_antennas_section
+from .html_generator import (
+    resolve_top_antennas_n,
+    build_top_antennas_section,
+    build_antennas_by_hour_section,
+)
