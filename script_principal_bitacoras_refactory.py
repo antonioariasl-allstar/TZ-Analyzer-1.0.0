@@ -468,6 +468,7 @@ from tz_core.bitacora_normalization import (
     validate_time_sample as _valida_formato_hora,
     validate_date_parsable as _valida_fecha_parsible,
     validate_latlon as _valida_latlon,
+    sanitize_latlon,
 )
 from tz_core.schema_utils import (
     build_schema_synonym_map,
@@ -1304,9 +1305,10 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
     # --- Métricas rápidas ---
     total = int(len(df))
-    # coords válidas
-    lat_num = pd.to_numeric(df.get("lat", pd.Series(dtype=float)), errors="coerce")
-    lon_num = pd.to_numeric(df.get("long", pd.Series(dtype=float)), errors="coerce")
+    bbox_global = {"lat_min": -90.0, "lat_max": 90.0, "lon_min": -180.0, "lon_max": 180.0}
+    df_coords = sanitize_latlon(df, bbox=bbox_global)
+    lat_num = df_coords.get("lat", pd.Series(dtype=float))
+    lon_num = df_coords.get("long", pd.Series(dtype=float))
     valid_coord = int((lat_num.notna() & lon_num.notna()).sum())
     coord_validas = int(valid_coord)
     coord_invalidas = int(total - coord_validas)
@@ -1317,17 +1319,10 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
         invalid_names = {"", "0", "null", "none", "nan", "sin inf", "sin inf.", "s/i"}
         m_name = ~s_ant.str.lower().isin(invalid_names)
 
-        latn = pd.to_numeric(df.get("lat", pd.Series(dtype=float)), errors="coerce")
-        lonn = pd.to_numeric(df.get("long", pd.Series(dtype=float)), errors="coerce")
-        m_coord = (
-            latn.notna() & lonn.notna() &
-            ~((latn.fillna(0) == 0) & (lonn.fillna(0) == 0)) &
-            latn.between(-90, 90) & lonn.between(-180, 180)
-        )
+        m_coord = lat_num.notna() & lon_num.notna()
         activaciones_total = len(df)
         coord_validas   = int(m_coord.sum())
         coord_invalidas = int(activaciones_total - coord_validas)
-
 
         ant_series_f = s_ant[m_name & m_coord]
         ant_uniq = int(ant_series_f.nunique()) if not ant_series_f.empty else 0

@@ -16,6 +16,7 @@
 - Se creó `tz_core/bitacora_io.py` para centralizar selección de archivo/carpeta con fallback de consola; el monolito ahora usa estos selectores.
 - bitacora_io ahora centraliza también selección de hoja y construcción de rutas de salida (`ensure_dir`, `seleccionar_carpeta_salida`, `resolver_rutas_salida`), reduciendo lógica repetida en el monolito.
 - Nuevo módulo `tz_core/bitacora_normalization.py` con validadores puros de hora/fecha y lat/lon; el monolito los usa en la validación de schema en lugar de helpers inline.
+- `generar_informe_html` reutiliza `sanitize_latlon` para métricas de coordenadas, asegurando filtros consistentes.
 
 ### 📦 MÓDULOS CREADOS EN tz_core/
 
