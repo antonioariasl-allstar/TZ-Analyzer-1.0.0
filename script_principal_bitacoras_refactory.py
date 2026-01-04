@@ -484,6 +484,13 @@ from tz_core.color_utils import hex_to_kml_color, color_mock
 from tz_core.validation_utils import tiene_valor, es_num, a_float
 from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
 from tz_core.dataframe_utils import dedupe_columns, _pick_col, _coalesce_duplicates, apply_schema_renames
+from tz_core.bitacora_utils import (
+    coalesce_cols as _coalesce_cols,
+    fmt_lista as _fmt_lista,
+    valida_formato_hora as _valida_formato_hora,
+    valida_fecha_parsible as _valida_fecha_parsible,
+    valida_latlon as _valida_latlon,
+)
 from tz_core.analytics import construir_seccion_todos_contactos, generar_historial_cambios_antena
 from tz_core.file_utils import (
     escribe_hashes_txt,
@@ -3059,44 +3066,6 @@ def main():
 
 
     # === VALIDACIÓN DE SCHEMA (aborto elegante) — INICIO =======================
-    def _coalesce_cols(df, *nombres):
-        """Devuelve el primer nombre de columna que exista en df (case-sensitive actual)."""
-        for n in nombres:
-            if n in df.columns:
-                return n
-        return None
-
-    def _fmt_lista(xs): 
-        return ", ".join(xs) if xs else "(ninguna)"
-
-    def _valida_formato_hora(serie):
-        pat = re.compile(r"^\d{2}:\d{2}:\d{2}$")
-        sample = serie.astype(str).str.strip().str[:8].head(5)
-        ok = sample.apply(lambda v: pat.match(v) is not None).all()
-        return ok, sample.tolist()
-
-    def _valida_fecha_parsible(serie):
-        try:
-            s = pd.to_datetime(serie, errors="coerce", dayfirst=True)
-            return s.notna().any(), [str(v) for v in serie.head(5).tolist()]
-        except Exception:
-            return False, [str(v) for v in serie.head(5).tolist()]
-
-    def _valida_latlon(df):
-        """Al menos una fila con lat/long numéricas razonables (no 0,0; dentro de bbox SV)."""
-        bbox = (CONFIG or {}).get("geografia", {}).get("sv_bbox", None)
-        if not (isinstance(bbox, dict) and all(k in bbox for k in ("lat_min","lat_max","lon_min","lon_max"))):
-            bbox = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}  # fallback SV
-        try:
-            lt = pd.to_numeric(df["lat"], errors="coerce")
-            lg = pd.to_numeric(df[_coalesce_cols(df, "long", "lon")], errors="coerce")
-            mask = (~lt.isna()) & (~lg.isna()) & (lt != 0) & (lg != 0) \
-                & (lt.between(bbox["lat_min"], bbox["lat_max"])) \
-                & (lg.between(bbox["lon_min"], bbox["lon_max"]))
-            return bool(mask.any())
-        except Exception:
-            return False
-
     def validate_schema_or_abort(df):
         """
         Verifica:
@@ -3155,7 +3124,8 @@ def main():
 
         # lat/long
         if _coalesce_cols(df, "lat") and _coalesce_cols(df, "long", "lon"):
-            if not _valida_latlon(df):
+            bbox = (CONFIG or {}).get("geografia", {}).get("sv_bbox", None)
+            if not _valida_latlon(df, bbox=bbox):
                 problemas.append("- 'lat/long' no tienen registros válidos (no 0,0; dentro de SV).")
 
         if problemas:
