@@ -515,7 +515,7 @@ def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> 
 
 HTML_SECCION_INTERACCIONES = ""
 
-from tz_core.time_utils import _to_datetime_series, _fmt_hms
+from tz_core.time_utils import to_datetime_silent, _to_datetime_series, _fmt_hms
 
 def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
 
@@ -1366,13 +1366,13 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
         dt = None
         try:
             if "hora" in df.columns and df["hora"].notna().any():
-                dt = pd.to_datetime(
+                dt = to_datetime_silent(
                     df["fecha"].astype(str).str.strip() + " " + df["hora"].astype(str).str.strip(),
                     dayfirst=True, errors="coerce"
                 ).dropna()
             else:
                 # Solo fecha: tomar 00:00 para el inicio y 23:59 para el fin
-                fechas = pd.to_datetime(df["fecha"], dayfirst=True, errors="coerce").dropna()
+                fechas = to_datetime_silent(df["fecha"], dayfirst=True, errors="coerce").dropna()
                 if not fechas.empty:
                     fmin = fechas.min().normalize()                        # 00:00
                     fmax = (fechas.max().normalize() + pd.Timedelta(hours=23, minutes=59))
@@ -1436,7 +1436,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
             # timestamp (fecha + hora si existe)
             if "fecha" in df_a.columns:
                 hora_str = df_a.get("hora", "").astype(str).str[:8]
-                ts = pd.to_datetime(
+                ts = to_datetime_silent(
                     df_a["fecha"].astype(str).str.strip() + " " + hora_str,
                     errors="coerce", dayfirst=True
                 )
@@ -1518,15 +1518,15 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
         # Datetime robusto
         df_dt = df.copy()
         if "fecha" in df.columns and "hora" in df.columns:
-            df_dt["_dt"] = pd.to_datetime(
+            df_dt["_dt"] = to_datetime_silent(
                 df["fecha"].astype(str).str.strip() + " " + df["hora"].astype(str).str[:8],
                 dayfirst=True, errors="coerce"
             )
         elif "fecha" in df.columns:
-            df_dt["_dt"] = pd.to_datetime(df["fecha"], dayfirst=True, errors="coerce")
+            df_dt["_dt"] = to_datetime_silent(df["fecha"], dayfirst=True, errors="coerce")
         elif "hora" in df.columns:
             today = pd.Timestamp.today().normalize()
-            df_dt["_dt"] = pd.to_datetime(
+            df_dt["_dt"] = to_datetime_silent(
                 today.strftime("%Y-%m-%d") + " " + df["hora"].astype(str).str[:8],
                 errors="coerce"
             )

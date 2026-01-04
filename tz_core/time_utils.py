@@ -13,6 +13,7 @@ from typing import Optional, List, Dict, Tuple, Any
 
 import pandas as pd
 import numpy as np
+import warnings
 
 # Definición de rangos horarios para clasificación "SV" (usado en carpetas de KML)
 # Formato: clave -> (nombre_carpeta, hora_inicio, hora_fin)
@@ -127,6 +128,18 @@ def minutes_from_any(hora: Any) -> Optional[int]:
         return None
 
 
+def to_datetime_silent(value: Any, **kwargs) -> pd.Series:
+    """Wrapper de pd.to_datetime que silencia el warning de formato no inferido."""
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Could not infer format*",
+            category=UserWarning,
+        )
+        return pd.to_datetime(value, **kwargs)
+
+
 def construir_rangos_cfg(rangos_cfg: List[Dict[str, Any]]) -> List[Tuple[str, int, int]]:
     """
     Convierte configuración de rangos a formato de minutos.
@@ -207,7 +220,7 @@ def to_datetime_series(df: Any) -> pd.Series:
         raise TypeError("df debe ser un pandas DataFrame")
     if "fecha" in df.columns and "hora" in df.columns:
         try:
-            return pd.to_datetime(
+            return to_datetime_silent(
                 df["fecha"].astype(str).str.strip() + " " + df["hora"].astype(str).str.strip(),
                 dayfirst=True,
                 errors="coerce",
@@ -216,11 +229,11 @@ def to_datetime_series(df: Any) -> pd.Series:
             pass
     for column in ["datetime", "fecha_hora", "timestamp", "fec_hor", "fechaHora"]:
         if column in df.columns:
-            series = pd.to_datetime(df[column], dayfirst=True, errors="coerce")
+            series = to_datetime_silent(df[column], dayfirst=True, errors="coerce")
             if series.notna().any():
                 return series
     if "fecha" in df.columns:
-        return pd.to_datetime(df["fecha"], dayfirst=True, errors="coerce")
+        return to_datetime_silent(df["fecha"], dayfirst=True, errors="coerce")
     return pd.Series(pd.NaT, index=df.index)
 
 
