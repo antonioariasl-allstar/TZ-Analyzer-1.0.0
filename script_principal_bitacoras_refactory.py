@@ -1503,41 +1503,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
             )
 
 
-        # --- Contactos recientes (últimos 5 días del período) ---
-        # Detectar columnas
-        contacto_cols = [
-            "tel_contacto","contacto","destino","b_number","bnumber",
-            "numero_contacto","callednumber","to","receptor","receptor_numero","numero_destino"
-        ]
-        tipo_cols = ["interaccion","tipo_interaccion","interaction","tipo"]
-        dur_cols  = ["duracion","duration","segundos","tiempo"]
-
-        c_col = next((c for c in contacto_cols if c in df.columns), None)
-        t_col = next((c for c in tipo_cols if c in df.columns), None)
-        d_col = next((c for c in dur_cols  if c in df.columns), None)
-
-        # Datetime robusto
-        df_dt = df.copy()
-        if "fecha" in df.columns and "hora" in df.columns:
-            df_dt["_dt"] = to_datetime_silent(
-                df["fecha"].astype(str).str.strip() + " " + df["hora"].astype(str).str[:8],
-                dayfirst=True, errors="coerce"
-            )
-        elif "fecha" in df.columns:
-            df_dt["_dt"] = to_datetime_silent(df["fecha"], dayfirst=True, errors="coerce")
-        elif "hora" in df.columns:
-            today = pd.Timestamp.today().normalize()
-            df_dt["_dt"] = to_datetime_silent(
-                today.strftime("%Y-%m-%d") + " " + df["hora"].astype(str).str[:8],
-                errors="coerce"
-            )
-        else:
-            df_dt["_dt"] = pd.NaT
-
-        max_dt = df_dt["_dt"].max()
-        recent_html = build_recent_contacts_section(df)
-
-
     # === TOPC (para títulos "Top N" en HTML) ===
     try:
         if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) and OVERRIDE_TOPS.get('contactos'):
@@ -1826,150 +1791,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     except Exception:
         pass
 
-    # === HTML-ANTENAS-SIMPLE-1: sección Top antenas (computada aquí) ===
-    try:
-        # Top N configurable (override -> config -> default 3)
-        _topN = resolve_top_antennas_n(
-            globals().get("CONFIG"),
-            globals().get("OVERRIDE_TOPS"),
-            default=3,
-        )
-
-
-        # Helper para elegir columnas disponibles
-        def _pick_col(_df, candidatos):
-            for c in candidatos:
-                if c in _df.columns:
-                    return c
-            return None
-
-        col_ant = _pick_col(df, ["antena", "nombre_antena", "cell_name"])
-        col_lat = _pick_col(df, ["lat", "latitud", "latitude"])
-        col_lon = _pick_col(df, ["long", "lon", "longitud", "lng", "longitude"])
-        col_az  = _pick_col(df, ["azimut", "azimuth", "azi", "angulo"])
-
-        # BBOX El Salvador (o desde CONFIG si existe)
-        try:
-            _bbox = CONFIG.get("geografia", {}).get("sv_bbox", None) if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else None
-        except Exception:
-            _bbox = None
-        if not (isinstance(_bbox, dict) and all(k in _bbox for k in ("lat_min","lat_max","lon_min","lon_max"))):
-            _bbox = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
-
-        def _valid_latlon(lt, lg):
-            try:
-                lt = float(lt); lg = float(lg)
-                if np.isnan(lt) or np.isnan(lg):
-                    return False
-                if abs(lt) < 1e-9 and abs(lg) < 1e-9:
-                    return False
-                return (_bbox["lat_min"] <= lt <= _bbox["lat_max"]) and (_bbox["lon_min"] <= lg <= _bbox["lon_max"])
-            except Exception:
-                return False
-
-        sec_ant = ""
-        if col_ant:
-            dfv = df.copy()
-            dfv[col_ant] = dfv[col_ant].astype(str).str.strip()
-            # quitar antena '0' o vacías
-            dfv = dfv[dfv[col_ant].notna() & (dfv[col_ant] != "") & (dfv[col_ant] != "0")]
-            # validar coords si existen
-            if (col_lat in dfv.columns) and (col_lon in dfv.columns):
-                dfv = dfv[dfv.apply(lambda r: _valid_latlon(r[col_lat], r[col_lon]), axis=1)]
-
-            if not dfv.empty:
-                top = (dfv.groupby(col_ant)
-                        .size()
-                        .reset_index(name="activaciones")
-                        .sort_values("activaciones", ascending=False))
-                if int(_topN) > 0:
-                    top = top.head(int(_topN))
-
-                filas = []
-                for _, r0 in top.iterrows():
-                    ant = str(r0[col_ant])
-                    sub = dfv[dfv[col_ant] == ant]
-
-                    # lat/lon promedio
-                    lt = float(sub[col_lat].astype(float).mean()) if (col_lat in sub.columns) else None
-                    lg = float(sub[col_lon].astype(float).mean()) if (col_lon in sub.columns) else None
-
-                    # azimut dominante + desglose corto
-                    az_dom, desg = "—", "—"
-                    if col_az and (col_az in sub.columns):
-                        vc = (sub[col_az].astype(str).str.strip()
-                                        .replace({"": np.nan, "nan": np.nan})
-                                        .dropna()
-                                        .value_counts())
-                        if not vc.empty:
-                            az_dom = str(vc.index[0])
-                            parts = [f"Azimut {int(float(k))}: {int(v)} {'vez' if int(v)==1 else 'veces'}"
-                                     for k, v in vc.head(3).items()]
-                            desg = "<br>".join(parts) + (" …" if len(vc) > 3 else "")
-
-                    # mapa
-                    if (lt is not None) and (lg is not None):
-                        url = f"https://www.google.com/maps?q={lt:.6f},{lg:.6f}"
-                        ant_fmt = f'<a href="{url}" target="_blank" rel="noopener">{ant}</a>'
-                        lt_fmt, lg_fmt = f"{lt:.6f}", f"{lg:.6f}"
-                    else:
-                        ant_fmt, lt_fmt, lg_fmt = ant, "—", "—"
-
-                    filas.append((ant_fmt, int(r0["activaciones"]), lt_fmt, lg_fmt, az_dom, desg))
-
-                # Render simple
-                out = []
-                out.append('<section id="resumen-antenas">')
-                out.append('<h2>Antenas más activadas (Top {n})</h2>'.format(n=_topN))
-                out.append('<p class="nota"><b>Nota:</b> En esta sección se muestra un top list de las antenas más activadas en el periodo analizado; seguidamente se muestra la ubicación de esas antenas segun sus coordenadas.</p>')
-                out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
-                out.append('<thead><tr>'
-                        '<th>#</th>'
-                        '<th>Antena</th>'
-                        '<th>Latitud</th>'
-                        '<th>Longitud</th>'
-                        '<th>Activaciones</th>'
-                        '<th>Azimut</th>'
-                        '</tr></thead><tbody>')
-                for idx, (ant_fmt, act, lt_fmt, lg_fmt, az_dom, desg) in enumerate(filas, start=1):
-                    out.append('<tr>'
-                            f'<td>{idx}</td>'
-                            f'<td>{ant_fmt}</td>'
-                            f'<td>{lt_fmt}</td>'
-                            f'<td>{lg_fmt}</td>'
-                            f'<td>{act}</td>'
-                            f'<td>{desg}</td>'
-                            '</tr>')
-                out.append('</tbody></table></div>')
-
-                out.append("""
-    <style>
-    #resumen-antenas .tabla-compacta { border-collapse: collapse; width:100%; font-size:1rem; }
-    #resumen-antenas .tabla-compacta th, #resumen-antenas .tabla-compacta td { border:1px solid #ddd; padding:6px 8px; text-align:left; }
-    #resumen-antenas .tabla-compacta th { background:#f2f2f2; }
-    #resumen-antenas .tabla-scroll { overflow-x:auto; }
-    </style>
-    """)
-                out.append('</section>')
-                sec_ant = "".join(out)
-
-        if sec_ant:
-            anchor = "<h2>Indicadores</h2>"
-            i = html.find(anchor)
-            if i != -1:
-                j = html.find("</section>", i)
-                if j != -1:
-                    html = html[:j+10] + "\n" + sec_ant + html[j+10:]
-                else:
-                    html += sec_ant
-            else:
-                html += sec_ant
-
-
-    except Exception:
-        pass
-    # === FIN HTML-ANTENAS-SIMPLE-1 ===
-
     # REORDENAR-SECCIONES-1: mover “Top antenas” al final y renombrar
     try:
         _hdr = "<h2>Top antenas</h2>"
@@ -2002,6 +1823,36 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     # --- REORDENAR-SECCIONES-1: deja "Top antenas" después de "Indicadores"
     #     y manda "Todas las antenas..." hasta el final, ANTES de escribir el archivo.
     try:
+        # Columnas y validadores reutilizados por heatmap/rangos
+        def _pick_col(_df, candidatos):
+            for c in candidatos:
+                if c in _df.columns:
+                    return c
+            return None
+
+        col_ant = _pick_col(df, ["antena", "nombre_antena", "cell_name"])
+        col_lat = _pick_col(df, ["lat", "latitud", "latitude"])
+        col_lon = _pick_col(df, ["long", "lon", "longitud", "lng", "longitude"])
+        col_az  = _pick_col(df, ["azimut", "azimuth", "azi", "angulo"])
+
+        try:
+            _bbox = CONFIG.get("geografia", {}).get("sv_bbox", None) if ('CONFIG' in globals() and isinstance(CONFIG, dict)) else None
+        except Exception:
+            _bbox = None
+        if not (isinstance(_bbox, dict) and all(k in _bbox for k in ("lat_min","lat_max","lon_min","lon_max"))):
+            _bbox = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
+
+        def _valid_latlon(lt, lg):
+            try:
+                lt = float(lt); lg = float(lg)
+                if np.isnan(lt) or np.isnan(lg):
+                    return False
+                if abs(lt) < 1e-9 and abs(lg) < 1e-9:
+                    return False
+                return (_bbox["lat_min"] <= lt <= _bbox["lat_max"]) and (_bbox["lon_min"] <= lg <= _bbox["lon_max"])
+            except Exception:
+                return False
+
         # === HTML-ANTENAS-RANGOS-1: Antenas por rango horario (debajo del Top antenas) ===
         # Además, prepararemos la nueva sección de "Mapa de calor de actividad" (heatmap)
         # para insertarla entre "Antenas más activadas" y "Contactos con más comunicación".
