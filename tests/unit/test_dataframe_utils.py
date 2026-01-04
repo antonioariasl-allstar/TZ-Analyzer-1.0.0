@@ -8,6 +8,7 @@ con casos edge, errores, y validación de inmutabilidad.
 import pytest
 import pandas as pd
 import numpy as np
+import warnings
 
 from tz_core.dataframe_utils import dedupe_columns
 
@@ -100,6 +101,27 @@ class TestDedupeColumns:
         # Verificar consolidación correcta
         expected = [1.0, 2.5, 3.0, 'text']  # pandas puede convertir a object
         assert result['mixed'].tolist() == expected
+
+    def test_sin_warnings_en_combinacion(self):
+        """No debe emitir warnings de pandas al consolidar duplicados mixtos."""
+        df = pd.DataFrame([
+            [1, ""],
+            [None, 2],
+            ["  ", 3.5],
+            [None, None],
+        ])
+        df.columns = ["dup", "dup"]
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("error")
+            result = dedupe_columns(df)
+
+        assert not caught
+        pd.testing.assert_series_equal(
+            result["dup"],
+            pd.Series([1, 2, 3.5, np.nan], name="dup"),
+            check_names=False,
+        )
     
     def test_dataframe_vacio(self):
         """Debe manejar DataFrame vacío correctamente."""

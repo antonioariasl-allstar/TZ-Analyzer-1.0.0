@@ -8,7 +8,6 @@ con DataFrames, incluyendo deduplicación de columnas.
 import pandas as pd
 import numpy as np
 import difflib
-import warnings
 from collections import Counter
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -52,48 +51,53 @@ def dedupe_columns(df):
     if not dup_names:
         return result_df
     
-    # Procesar cada nombre duplicado
-    for name in dup_names:
-        # Encontrar todas las columnas con este nombre (como lista de objetos columna)
-        same_columns = []
-        for i, col in enumerate(result_df.columns):
-            if col == name:
-                same_columns.append(i)
-        
-        if len(same_columns) <= 1:
+    # Construir nuevo DataFrame con columnas únicas preservando el orden original
+    new_cols: List[str] = []
+    new_series: List[pd.Series] = []
+    seen: set[str] = set()
+
+    def _clean_value(val):
+        if pd.isna(val):
+            return np.nan
+        s = str(val).strip()
+        return np.nan if s == "" else val
+
+    for idx, name in enumerate(result_df.columns):
+        if name in seen:
             continue
-            
-        # Consolidar con backfill: reemplaza vacíos/NaN por el siguiente valor disponible
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message=".*incompatible dtype.*",
-                category=FutureWarning,
-            )
-            result_df.iloc[:, same_columns] = result_df.iloc[:, same_columns].astype(object)
+
+        # Posiciones de columnas duplicadas con este nombre
+        same_columns = [i for i, col in enumerate(result_df.columns) if col == name]
+
+        if len(same_columns) == 1:
+            # Columna única, se mantiene sin cambios
+            new_cols.append(name)
+            new_series.append(result_df.iloc[:, idx])
+            seen.add(name)
+            continue
 
         dup_df = result_df.iloc[:, same_columns].copy()
-        dup_df = dup_df.apply(lambda col: col.map(lambda x: np.nan if (pd.isna(x) or str(x).strip() == "") else x))
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message="Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated*",
-                category=FutureWarning,
-            )
-            combined = dup_df.bfill(axis=1).iloc[:, 0]
+        cleaned = dup_df.map(_clean_value)
 
-        # Actualizar la primera columna con valores consolidados (forzando dtype object para evitar FutureWarning)
-        result_df.iloc[:, same_columns[0]] = combined.values
-        
-        # Crear lista de columnas a mantener (excluyendo duplicadas extras)
-        cols_to_keep = []
-        for i, col in enumerate(result_df.columns):
-            if i not in same_columns[1:]:  # Mantener todo excepto duplicados extras
-                cols_to_keep.append(i)
-        
-        # Reconstruir DataFrame solo con columnas deseadas
-        result_df = result_df.iloc[:, cols_to_keep]
-    
+        if cleaned.empty:
+            combined = pd.Series(np.nan, index=result_df.index)
+        else:
+            valid = ~cleaned.isna()
+            arr = cleaned.to_numpy(dtype=object, copy=False)
+            valid_arr = valid.to_numpy(dtype=bool, copy=False)
+            has_any = valid_arr.any(axis=1)
+            first_idx = valid_arr.argmax(axis=1)
+            row_indices = np.arange(len(cleaned))
+            chosen = arr[row_indices, first_idx]
+            combined = pd.Series(list(chosen), index=result_df.index)
+            combined = combined.where(has_any, np.nan)
+
+        new_cols.append(name)
+        new_series.append(combined)
+        seen.add(name)
+
+    result_df = pd.concat(new_series, axis=1)
+    result_df.columns = new_cols
     return result_df
 
 
