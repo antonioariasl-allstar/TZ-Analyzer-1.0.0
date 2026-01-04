@@ -17,6 +17,10 @@
 - bitacora_io ahora centraliza también selección de hoja y construcción de rutas de salida (`ensure_dir`, `seleccionar_carpeta_salida`, `resolver_rutas_salida`), reduciendo lógica repetida en el monolito.
 - Nuevo módulo `tz_core/bitacora_normalization.py` con validadores puros de hora/fecha y lat/lon; el monolito los usa en la validación de schema en lugar de helpers inline.
 - `generar_informe_html` reutiliza `sanitize_latlon` para métricas de coordenadas, asegurando filtros consistentes.
+- Validadores de hora/fecha/latlon se consumen ahora solo desde `tz_core/bitacora_normalization.py`, eliminando alias duplicados de `tz_core/bitacora_utils.py` en el monolito.
+- Se reutiliza `sanitize_latlon` en la sección de interacciones HTML para validar coordenadas sin duplicar lógica ni aplicar funciones fila por fila.
+- La tabla de “Top antenas” usa `sanitize_latlon` para limpiar y validar coordenadas antes de contar y enlazar antenas.
+- Se restauró la sección de interacciones (tabla + mini-mapa) corrigiendo el validador por fila que faltaba tras la sanitización centralizada.
 
 ### 📦 MÓDULOS CREADOS EN tz_core/
 

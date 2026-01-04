@@ -491,9 +491,6 @@ from tz_core.dataframe_utils import dedupe_columns, _pick_col, _coalesce_duplica
 from tz_core.bitacora_utils import (
     coalesce_cols as _coalesce_cols,
     fmt_lista as _fmt_lista,
-    valida_formato_hora as _valida_formato_hora,
-    valida_fecha_parsible as _valida_fecha_parsible,
-    valida_latlon as _valida_latlon,
 )
 from tz_core.analytics import construir_seccion_todos_contactos, generar_historial_cambios_antena
 from tz_core.file_utils import (
@@ -603,23 +600,21 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
         # Aproximación para El Salvador
         _bbox_cfg = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
 
-    def _valid_latlon_vals(lt, lg):
-        """True si lat/lon son numéricas, no NaN, no (0,0) y dentro del bbox SV."""
+    # Normalizar coordenadas con helper central y marcar filas válidas
+    has_latlon = pd.Series(False, index=df.index)
+    if col_lat and col_long:
         try:
-            lt = float(lt); lg = float(lg)
-            if np.isnan(lt) or np.isnan(lg):
-                return False
-            if abs(lt) < 1e-9 and abs(lg) < 1e-9:
-                return False
-            return (_bbox_cfg["lat_min"] <= lt <= _bbox_cfg["lat_max"]) and (_bbox_cfg["lon_min"] <= lg <= _bbox_cfg["lon_max"])
+            df = sanitize_latlon(df, lat_col=col_lat, lon_col=col_long, bbox=_bbox_cfg)
+            has_latlon = df[col_lat].notna() & df[col_long].notna()
         except Exception:
-            return False
+            pass
 
     def _es_valida_latlon_row(row):
-        """Versión por fila: usa nombres de columnas detectados arriba."""
-        if col_lat and col_long and (col_lat in row) and (col_long in row):
-            return _valid_latlon_vals(row[col_lat], row[col_long])
-        return False
+        """Consulta la máscara de coordenadas válidas generada tras sanitize_latlon."""
+        try:
+            return bool(has_latlon.loc[row.name])
+        except Exception:
+            return False
 
     # Si no hay df razonable, retorna vacío (no rompe HTML)
     if df is None or df.empty:
@@ -628,6 +623,7 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
     # Construcción de datetime y fecha
     dt = _to_datetime_series(df)
     df_local = df.copy()
+    df_local['_has_latlon'] = has_latlon.reindex(df_local.index, fill_value=False)
     df_local['_dt'] = dt
     df_local['_fecha'] = df_local['_dt'].dt.date
     df_local = df_local[df_local['_fecha'].notna()]
@@ -710,7 +706,7 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
         # ¿Fecha con alguna antena válida?
         antenas_validas = False
         if col_lat and col_long and (col_lat in df_d.columns) and (col_long in df_d.columns):
-            antenas_validas = df_d[col_lat].notna().any() and df_d[col_long].notna().any()
+            antenas_validas = df_d['_has_latlon'].any()
 
         fecha_h = pd.to_datetime(d).strftime("%d/%m/%Y")
         out.append(f'<div id="content-{pd.to_datetime(d).strftime("%Y-%m-%d")}" class="day-content" style="display:none;">')
@@ -720,44 +716,14 @@ def _construir_seccion_interacciones(df, dias=3, columnas_config=None):
         total_dia = int(len(df_d))
         dur_total_dia = _fmt_hms(df_d['_dur_sec'].sum() if '_dur_sec' in df_d.columns else 0)
 
-        # Validador de coordenadas con bbox El Salvador
-        def _es_valida_latlon_row(row):
-            try:
-                lt = float(row[col_lat]) if (col_lat and col_lat in df_d.columns) else None
-                lg = float(row[col_long]) if (col_long and col_long in df_d.columns) else None
-                if lt is None or lg is None:
-                    return False
-                if np.isnan(lt) or np.isnan(lg):
-                    return False
-                if abs(lt) < 1e-9 and abs(lg) < 1e-9:
-                    return False
-                # BBOX El Salvador
-                try:
-                    if 'CONFIG' in globals() and isinstance(CONFIG, dict):
-                        bbox = CONFIG.get("geografia", {}).get("sv_bbox", None)
-                        if bbox and isinstance(bbox, dict):
-                            lat_min = bbox.get("lat_min", 12.9)
-                            lat_max = bbox.get("lat_max", 14.5)
-                            lon_min = bbox.get("lon_min", -90.3)
-                            lon_max = bbox.get("lon_max", -87.6)
-                        else:
-                            lat_min, lat_max, lon_min, lon_max = 12.9, 14.5, -90.3, -87.6
-                    else:
-                        lat_min, lat_max, lon_min, lon_max = 12.9, 14.5, -90.3, -87.6
-                    return (lat_min <= lt <= lat_max) and (lon_min <= lg <= lon_max)
-                except Exception:
-                    return True  # si falla el bbox, al menos validamos que no sea 0,0
-            except Exception:
-                return False
-
         if total_dia > 0:
             if col_antena and (col_antena in df_d.columns):
-                _valid_rows = df_d[df_d.apply(_es_valida_latlon_row, axis=1)]
+                _valid_rows = df_d[df_d['_has_latlon']]
                 antenas_unicas = int(_valid_rows[col_antena].dropna().astype(str).nunique()) if not _valid_rows.empty else 0
             else:
                 antenas_unicas = 0
             if col_lat and col_long and (col_lat in df_d.columns) and (col_long in df_d.columns):
-                sin_antena_cnt = int((~df_d.apply(_es_valida_latlon_row, axis=1)).sum())
+                sin_antena_cnt = int((~df_d['_has_latlon']).sum())
             else:
                 sin_antena_cnt = total_dia
             pct_sin_antena = (sin_antena_cnt / total_dia) * 100.0
@@ -1465,12 +1431,15 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
             az = pd.to_numeric(df_a.get("azimut", pd.Series(dtype=float)), errors="coerce").round().astype("Int64")
             df_a["_az_i"] = az
 
-            # coords numéricas
+            # coords numéricas validadas con helper central
+            bbox_all = {"lat_min": -90.0, "lat_max": 90.0, "lon_min": -180.0, "lon_max": 180.0}
+            try:
+                df_a = sanitize_latlon(df_a, lat_col="lat", lon_col="long", bbox=bbox_all)
+            except Exception:
+                pass
             df_a["_lat"] = pd.to_numeric(df_a.get("lat", pd.Series(dtype=float)), errors="coerce")
             df_a["_lon"] = pd.to_numeric(df_a.get("long", pd.Series(dtype=float)), errors="coerce")
-            _mask_zerozero = df_a["_lat"].fillna(0).eq(0) & df_a["_lon"].fillna(0).eq(0)
-            _mask_out = ~df_a["_lat"].between(-90, 90) | ~df_a["_lon"].between(-180, 180)
-            df_a = df_a[~(_mask_zerozero | _mask_out)]
+            df_a = df_a[df_a["_lat"].notna() & df_a["_lon"].notna()]
 
 
         # Construimos entradas y ordenamos por conteo (desc)
