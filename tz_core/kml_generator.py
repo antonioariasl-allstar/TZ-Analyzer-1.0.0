@@ -641,7 +641,7 @@ def generar_kml(
             imei_raw = getv_group('imei','imei_origen')
             numero = normalize_msisdn(numero_raw) or numero_raw
             imei = normalize_imei(imei_raw) or imei_raw
-            alias = getv_group('alias','alias_usuario')
+            alias = getv_group('alias','alias_usuario','alias_contacto')
             usuario = getv_group('nombre_usuario','usuario')
             abonado = getv_group('abonado','nombre_abonado')
             celda = getv_group('cod_celda_inicial','celda')

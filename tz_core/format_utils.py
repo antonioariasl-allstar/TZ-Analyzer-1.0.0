@@ -177,8 +177,14 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
         grupo_identidad_tuvo_datos = True
 
     # Fila 3a: Alias · Usuario
+    # Alias/Usuario: acepta sinónimos para no depender del nombre exacto de columna
     alias = campos.get("alias", None)
+    if not tiene_valor(alias):
+        alias = campos.get("alias_usuario", campos.get("alias_contacto", None))
+
     nombre_usuario = campos.get("usuario", None)
+    if not tiene_valor(nombre_usuario):
+        nombre_usuario = campos.get("nombre_usuario", None)
     l3a = []
     if tiene_valor(alias):
         l3a.append(f"<b>Alias:</b> {str(alias).strip()}")
