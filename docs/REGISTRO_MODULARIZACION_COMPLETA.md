@@ -24,6 +24,7 @@
 - Nuevos helpers en `tz_core/bitacora_normalization.py`: `parse_duration_seconds`, `normalize_imei` y `normalize_msisdn` para limpiar identificadores y duraciones de forma consistente.
 - Se reutiliza `parse_duration_seconds` en la sección de interacciones del monolito y en `tz_core/html_generator.py`, eliminando parsers inline duplicados.
 - `tz_core/format_utils.py` ahora delega la limpieza de IMEI y duraciones a los nuevos helpers para mantener una sola fuente de verdad.
+- Identificación y top contactos en `tz_core/html_generator.py` ahora normalizan MSISDN/IMEI y parsean duraciones con los helpers compartidos para evitar valores sin limpiar o parsers duplicados.
 
 ### 📦 MÓDULOS CREADOS EN tz_core/
 

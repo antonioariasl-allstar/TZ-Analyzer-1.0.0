@@ -830,18 +830,7 @@ def build_top_contacts_sections(
 
     def _to_seconds_any(x) -> float:
         try:
-            s = str(x).strip()
-            if not s or s.lower() in {"nan", "none", "null", "sin inf.", "sin inf", "s/i"}:
-                return 0.0
-            if ":" in s:
-                parts = s.split(":")
-                if len(parts) == 3:
-                    h, m, sec = parts
-                    return float(int(h)) * 3600 + float(int(m)) * 60 + float(int(sec))
-                if len(parts) == 2:
-                    m, sec = parts
-                    return float(int(m)) * 60 + float(int(sec))
-            return float(pd.to_numeric(s, errors="coerce") or 0.0)
+            return float(parse_duration_seconds(x, default=0.0))
         except Exception:
             return 0.0
 
@@ -902,7 +891,8 @@ def build_top_contacts_sections(
 
     if c_col:
         d = df.copy()
-        d["_contacto"] = d[c_col].astype(str).str.strip()
+        d["_contacto_raw"] = d[c_col].astype(str).str.strip()
+        d["_contacto"] = d["_contacto_raw"].map(lambda v: normalize_msisdn(v) or v)
         d = d[(d["_contacto"] != "") & d["_contacto"].notna()]
 
         if not d.empty:
