@@ -138,14 +138,6 @@ def limpiar_texto_validacion(texto: Any) -> str:
 
 # Funciones auxiliares para mantener compatibilidad con nombres originales
 # TODO: Deprecar en futuras versiones cuando se complete la modularización
-def _tiene_valor(v: Any) -> bool:
-    """Alias para compatibilidad hacia atrás."""
-    return tiene_valor(v)
-
-def _es_num(x: Any) -> bool:
-    """Alias para compatibilidad hacia atrás."""
-    return es_num(x)
-
-def _a_float(v: Any) -> float | None:
-    """Alias para compatibilidad hacia atrás."""
-    return a_float(v)
+_tiene_valor = tiene_valor
+_es_num = es_num
+_a_float = a_float

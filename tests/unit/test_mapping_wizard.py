@@ -43,6 +43,7 @@ from tz_core.mapping_wizard import (
     needs_identity_field_prompt,
     apply_wizard_assignments,
 )
+from tz_core.schema_utils import run_schema_location_assistant
 
 
 class _FakeIORecorder:
@@ -810,3 +811,85 @@ def test_quick_remap_flow_maps_missing_recommended_field():
 
     assert "duracion" in mapped_df.columns
     assert mapped_df.loc[0, "duracion"] == "15"
+
+
+def test_run_schema_location_assistant_persists_synonyms_and_validates():
+    df = pd.DataFrame({
+        "lat": [13.5],
+        "long": [-89.2],
+        "siteid": ["SITE-1"],
+        "tel": ["503123"],
+        "fecha": ["2025-01-01"],
+        "hora": ["12:00:00"],
+        "contacto": ["503987"],
+        "interaccion": ["llamada"],
+    })
+
+    inputs = iter(["", "3", "s"])
+    persist_calls: list[tuple[str, str]] = []
+    validator_calls: list[pd.DataFrame] = []
+
+    config = {
+        "schema": {
+            "fields": {"antena": {"required": True}},
+            "location_alternatives": [["lat", "lon"]],
+            "subject_default_mode": "tel",
+        },
+        "entradas": {"columnas_esenciales": ["lat", "long", "antena"]},
+        "synonyms_user": {},
+    }
+
+    result = run_schema_location_assistant(
+        df.copy(),
+        original_columns=list(df.columns),
+        config=config,
+        alias_visibles={"antena": "direccion_antena"},
+        input_fn=lambda _msg="": next(inputs, ""),
+        output_fn=lambda _msg: None,
+        persist_synonym_fn=lambda canonical, header: persist_calls.append((canonical, header)),
+        validate_schema_fn=lambda df_check: validator_calls.append(df_check.copy()),
+        logger=lambda _msg: None,
+        config_path=None,
+    )
+
+    assert "antena" in result.columns
+    assert "siteid" not in result.columns
+    assert persist_calls == [("antena", "siteid")]
+    assert len(validator_calls) == 1
+
+
+def test_run_schema_location_assistant_generates_antena_fallback():
+    df = pd.DataFrame({
+        "lat": [13.5, 13.6],
+        "long": [-89.2, -89.25],
+        "tel": ["1", "1"],
+        "fecha": ["2025-01-01", "2025-01-02"],
+        "hora": ["12:00:00", "12:05:00"],
+        "contacto": ["a", "b"],
+        "interaccion": ["call", "sms"],
+    })
+
+    inputs = iter([""])
+    config = {
+        "schema": {
+            "fields": {},
+            "location_alternatives": [["lat", "lon"]],
+            "subject_default_mode": "tel",
+        },
+        "entradas": {"columnas_esenciales": ["lat", "long"]},
+    }
+
+    result = run_schema_location_assistant(
+        df.copy(),
+        original_columns=list(df.columns),
+        config=config,
+        alias_visibles={"antena": "direccion_antena"},
+        input_fn=lambda _msg="": next(inputs, ""),
+        output_fn=lambda _msg: None,
+        logger=lambda _msg: None,
+        config_path=None,
+    )
+
+    assert "antena" in result.columns
+    assert result["antena"].str.startswith("Antena").all()
+    assert result["antena"].nunique() == len(df)

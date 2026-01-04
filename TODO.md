@@ -1,5 +1,24 @@
 # TODO – TZ Analysis: ARQUITECTURA HÍBRIDA PERMANENTE 🏗️
 
+## ✅ EPIC 16F: HELPERS MANUAL FLOW + REGRESIÓN OPTION 1 (04/01/2026)
+
+**Log de avance:**
+- `handle_manual_html_generation` y `write_minimal_filter_log_if_needed` se movieron a `tz_core/manual_flow.py`; el monolito solo entrega opciones y deja el helper decidir HTML + `log_minimo`.
+- `script_principal_bitacoras_refactory.py` ahora delega la rama manual en los nuevos helpers y elimina lógica duplicada; `tests/unit/test_manual_flow.py` agrega 8 casos cubriendo HTML dual-mode y generación condicional del log.
+- Se construyó un harness temporal para responder los prompts de la Opción 1 (manual) desde `run.py`, normalizando los horarios con `normalize_wizard_datetime_fields` y logrando una corrida determinista en `mi_resultado/option1_auto_20260103_232118/` (HTML + KMZ/KML revisados).
+- Post-regresión, se limpió el sinónimo accidental de `config.json` y se borraron scripts/residuos en `__pycache__`, dejando el repo listo para commit.
+
+**Pendientes inmediatos:**
+- Promover el harness de Opción 1 a un `tests/integration` oficial (inyectar WizardIO + dataset synthetic) para evitar scripts temporales.
+- Documentar la guía de ejecución automática (inputs/respuestas) en `docs/` para que otros puedan repetir la regresión sin leer el código del harness.
+- Continuar la extracción del flujo manual (helpers de overrides/outputs pendientes del plan Manual Flow Split) y conectar los nuevos helpers con las pruebas existentes antes del siguiente corte.
+
+**Documentos base para retomar el contexto:**
+- Revisar `HANDOFF_CASA.txt` para el resumen ejecutivo, instrucciones de regresión y checklist de arranque.
+- Leer `docs/HANDOFF_FASES_9A-9D_OFICINA.md` para entender la arquitectura previa y los cambios de las fases 9A-9D.
+- Consultar `docs/planning/manual_flow_split_plan.md` con el roadmap detallado de extracción del flujo manual.
+- Repasar `docs/CLI_USER_GUIDE.md` + `README.md` para confirmar cómo se espera ejecutar cada modo y qué dependencias requiere el CLI.
+
 ## ✅ EPIC 16A: EXTRACCIÓN TOP CONTACTOS (28/12/2025)
 
 **Log de avance:**
@@ -94,6 +113,17 @@
 - [03/01/2026] `normalize_wizard_datetime_fields` vive en `tz_core/mapping_wizard.py` y reemplaza el bloque inline de normalización fecha/hora del monolito; ahora el script solo lo invoca tras el wizard, manteniendo los logs de advertencia con una función inyectable.
 - [03/01/2026] `finalize_manual_mapping_dataframe` sincroniza lon/long y fuerza los campos numéricos post-wizard; el monolito lo invoca inmediatamente después de `_run_manual_mapping`, eliminando la lógica inline de compatibilidad.
 - [03/01/2026] `_run_schema_location_assistant` extrae el asistente legacy de ubicación/esenciales y solo se ejecuta cuando `MANUAL_QC_MAPPING` es falso, evitando prompts duplicados en el flujo manual y dejando la rama QC liviana.
+- [03/01/2026] `run_schema_location_assistant` vive ahora en `tz_core/schema_utils.py` y el monolito lo invoca pasando `WizardIO`, `validate_schema_or_abort` y un callback para sinónimos; los tests `tests/unit/test_mapping_wizard.py` y `tests/unit/test_wizard_qc_placeholders.py` cubren persistencia, fallback de antenas y validadores inyectables.
+- [03/01/2026] `tests/unit/test_mapping_wizard.py` suma dos casos específicos para el asistente modular (sinónimos/validación y fallback de antenas) y la suite completa asciende a 45 escenarios (`.venv312/Scripts/python.exe -m pytest tests/unit/test_mapping_wizard.py`).
+- [03/01/2026] `config.json` vuelve a exponer la paleta completa y se agregó `salida.solo_kmz=true` como default; el monolito evita escribir KML si la bandera está activa y `run_tz_analysis` respeta el modo con overrides.
+- [03/01/2026] Documento **Manual Flow Split Plan** en `docs/planning/manual_flow_split_plan.md`: lista ocho helpers propuestos (contexto, metadatos, identidad, overrides, nombres, rutas) con contratos y fases de extracción para la próxima iteración del flujo manual.
+- [03/01/2026] `collect_manual_mode_context` vive en `tz_core/ui_utils.py` junto con `ManualModeContext`; el monolito delega la selección de menú/colores y los nuevos tests `tests/unit/test_ui_utils.py` cubren branches de callbacks/manual mode/opciones inválidas (3 escenarios).
+- [03/01/2026] `gather_dataset_metadata` (con dataclass `DatasetMetadata`) vive en `tz_core/ui_utils.py`; `main()` delega la selección de archivo/hoja + normalización y `tests/unit/test_ui_utils.py` ahora cubre también éxito, abortos sin archivo y errores del loader (6 escenarios total).
+- [03/01/2026] `prompt_case_identity` (y dataclass `CaseIdentity`) extrae el bloque de confirmación IMEI/TEL + alias corto/base sugerida; `main()` solo delega y `tests/unit/test_ui_utils.py` suma 3 pruebas (modo forzado, autodetección y columnas faltantes) manteniendo trazabilidad del plan Manual Flow Split.
+- [03/01/2026] `collect_top_overrides` (con dataclass `TopSelection`) encapsula los prompts de Top N antenas/contactos usando defaults desde config; el monolito solo recibe el resultado y propaga overrides, mientras `tests/unit/test_ui_utils.py` agrega 2 casos más (defaults + inputs inválidos).
+- [03/01/2026] `prompt_output_routing` (dataclass `OutputRouting`) mueve el bloque de renombrar carpeta/seleccionar destino/generar rutas KML/KMZ; `main()` únicamente pasa `sanitize_fn` y selección de carpeta, y la suite `tests/unit/test_ui_utils.py` suma 2 pruebas adicionales (rename+fallback y hex+cwd).
+- [03/01/2026] `summarize_outputs` concentra los mensajes finales (KML/KMZ/descartes/errores) con detección de carpetas separadas; el monolito solo delega y las pruebas unitarias agregan 2 escenarios más (KML/KMZ estándar y solo-KMZ con subcarpeta).
+- [03/01/2026] `suggest_case_name` (dataclass `CaseNameSuggestion`) empaqueta la heurística de tel/alias/rangos/filtros para proponer el nombre base; `main()` ahora solo llama al helper tras `prompt_case_identity`, se elimina el bloque duplicado `_pick_id`, y `tests/unit/test_ui_utils.py` suma 2 pruebas nuevas sobre alias/filtros (suite ui_utils: 17 escenarios).
 
 ## ✅ **EPIC 14: CONSOLIDACIÓN KML PUNTOS LIBRES → COMPLETADO + ARCHIVADO (27/12/2025)**
 

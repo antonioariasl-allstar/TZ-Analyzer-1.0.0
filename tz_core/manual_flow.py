@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -9,6 +10,7 @@ import pandas as pd
 
 from tz_core.dataframe_utils import _coalesce_duplicates, apply_schema_renames
 from tz_core.schema_utils import build_schema_synonym_map, run_schema_location_assistant
+from tz_core.logging_utils import write_minimal_filter_log
 from tz_core.text_utils import normalizar_columnas_texto
 from tz_core.time_filters import (
     FiltroTiempo,
@@ -190,3 +192,77 @@ def apply_time_filter_prompt(
         filters=filtros,
         enabled=True,
     )
+
+
+def handle_manual_html_generation(
+    *,
+    config: Optional[Dict[str, Any]],
+    df: pd.DataFrame,
+    archivo_kml: str,
+    carpeta_salida: str,
+    nombre_salida: str,
+    hoja: Optional[str],
+    carpeta_base: str,
+    logger: Callable[[str], None],
+    output_fn: Callable[[str], None],
+    generar_html_fn: Callable[[pd.DataFrame, str, str, str, Optional[str]], str],
+    relocate_kmz_fn: Callable[..., None],
+) -> Optional[str]:
+    """Gestiona la rama legacy/manual de HTML previo a `produce_case_outputs`."""
+
+    cfg = config or {}
+    html_cfg = (cfg.get("html") or {})
+    manual_mode = bool(html_cfg.get("generar_en_modo_manual", False))
+    informe_html: Optional[str] = None
+
+    if manual_mode:
+        output_fn("[INFO] Generación HTML modular no disponible. Usar generar_en_modo_manual=false en config.json")
+        try:
+            relocate_kmz_fn(
+                case_name=nombre_salida,
+                source_folder=carpeta_base,
+                target_folder=carpeta_salida,
+                logger=logger,
+            )
+        except Exception as exc:  # pragma: no cover - advertencia defensiva
+            output_fn(f"[WARN] No se pudo reubicar KMZ: {exc}")
+        return None
+
+    try:
+        informe_html = generar_html_fn(df, archivo_kml, carpeta_salida, nombre_salida, hoja)
+        output_fn(f"Informe HTML generado (modo legacy): {informe_html}")
+    except Exception as exc:  # pragma: no cover - mantiene compatibilidad legacy
+        output_fn(f"[ERROR] No se pudo generar el HTML (modo legacy): {exc}")
+        informe_html = None
+
+    return informe_html
+
+
+def write_minimal_filter_log_if_needed(
+    *,
+    result: TimeFilterResult,
+    df: pd.DataFrame,
+    output_folder: str,
+    logger: Callable[[str], None],
+) -> Optional[str]:
+    """Genera log_minimo.txt cuando los filtros de tiempo estuvieron activos."""
+
+    if not result.enabled or not result.summary:
+        return None
+
+    log_path = os.path.join(output_folder, "log_minimo.txt")
+
+    try:
+        write_minimal_filter_log(
+            df,
+            result.summary,
+            log_path,
+            logger=logger,
+        )
+        return log_path
+    except Exception as exc:  # pragma: no cover - log defensivo
+        try:
+            logger(f"[WARN] No se pudo generar log_minimo: {exc}")
+        except Exception:
+            pass
+        return None

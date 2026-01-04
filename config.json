@@ -1,4 +1,83 @@
 {
+  "kml": {
+    "azimuth_km": 1.5,
+    "cone": {
+      "half_degrees": 35,
+      "fill_color": "7fffffff"
+    },
+    "line": {
+      "color": "ffff00ff",
+      "width": 5
+    },
+    "description": [
+      [
+        [
+          "Tel",
+          "tel"
+        ],
+        [
+          "IMEI",
+          "imei"
+        ],
+        [
+          "Alias",
+          "alias"
+        ],
+        [
+          "Nombre de Usuario",
+          "nombre_usuario"
+        ],
+        [
+          "Abonado",
+          "abonado"
+        ]
+      ],
+      [
+        [
+          "Antena",
+          "antena"
+        ],
+        [
+          "Detalle",
+          "detalle"
+        ],
+        [
+          "Alias",
+          "alias"
+        ],
+        [
+          "Lat",
+          "lat"
+        ],
+        [
+          "Long",
+          "long"
+        ],
+        [
+          "Azimut",
+          "azimut"
+        ],
+        [
+          "Celda",
+          "celda"
+        ],
+        [
+          "LAC",
+          "lac"
+        ]
+      ],
+      [
+        [
+          "Interacción",
+          "interaccion"
+        ],
+        [
+          "Duración",
+          "duracion"
+        ]
+      ]
+    ]
+  },
   "style": {
     "theme_hex": "#76ff03",
     "pin_icon_url": "http://maps.google.com/mapfiles/kml/paddle/wht-blank.png",
@@ -269,5 +348,6 @@
       "lat",
       "long"
     ]
-  }
+  },
+  "synonyms_user": {}
 }

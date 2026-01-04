@@ -17,9 +17,9 @@ import numpy as np
 # Definición de rangos horarios para clasificación "SV" (usado en carpetas de KML)
 # Formato: clave -> (nombre_carpeta, hora_inicio, hora_fin)
 RANGOS_SV = {
-    "madrugada": ("madrugada_0000-0559", _time(0, 0, 0),  _time(6, 0, 0)),    # 00:00–05:59
-    "manana":    ("manana_0600-1159",    _time(6, 0, 0),  _time(12, 0, 0)),   # 06:00–11:59
-    "tarde":     ("tarde_1200-1759",     _time(12, 0, 0), _time(18, 0, 0)),   # 12:00–17:59
+    "madrugada": ("madrugada_0000-0559", _time(0, 0, 0),  _time(5, 59, 59)),  # 00:00–05:59
+    "manana":    ("manana_0600-1159",    _time(6, 0, 0),  _time(11, 59, 59)), # 06:00–11:59
+    "tarde":     ("tarde_1200-1759",     _time(12, 0, 0), _time(17, 59, 59)), # 12:00–17:59
     "noche":     ("noche_1800-2359",     _time(18, 0, 0), _time(23, 59, 59)), # 18:00–23:59
 }
 
@@ -192,33 +192,13 @@ def etiqueta_rango(hora: Any, rangos_cfg: List[Dict[str, Any]], default: str = "
 
 # Funciones auxiliares para mantener compatibilidad con nombres originales
 # TODO: Deprecar en futuras versiones cuando se complete la modularización
-def _hhmmss_to_time_or_none(hh: Any) -> Optional[_time]:
-    """Alias para compatibilidad hacia atrás."""
-    return hhmmss_to_time_or_none(hh)
-
-def _en_rango(t: _time, ini: _time, fin: _time) -> bool:
-    """Alias para compatibilidad hacia atrás."""
-    return en_rango_tiempo(t, ini, fin)
-
-def _clasificar_rango_sv(hhmmss: str) -> Optional[str]:
-    """Alias para compatibilidad hacia atrás."""
-    return clasificar_rango_sv(hhmmss)
-
-def _parse_hhmmss_to_minutes(s: Optional[str]) -> Optional[int]:
-    """Alias para compatibilidad hacia atrás."""
-    return parse_hhmmss_to_minutes(s)
-
-def _minutes_from_any(hora: Any) -> Optional[int]:
-    """Alias para compatibilidad hacia atrás."""
-    return minutes_from_any(hora)
-
-def _construir_rangos_cfg(rangos_cfg: List[Dict[str, Any]]) -> List[Tuple[str, int, int]]:
-    """Alias para compatibilidad hacia atrás."""
-    return construir_rangos_cfg(rangos_cfg)
-
-def _en_rango_minutos(minutos: int, ini: int, fin: int) -> bool:
-    """Alias para compatibilidad hacia atrás."""
-    return en_rango_minutos(minutos, ini, fin)
+_hhmmss_to_time_or_none = hhmmss_to_time_or_none
+_en_rango = en_rango_tiempo
+_clasificar_rango_sv = clasificar_rango_sv
+_parse_hhmmss_to_minutes = parse_hhmmss_to_minutes
+_minutes_from_any = minutes_from_any
+_construir_rangos_cfg = construir_rangos_cfg
+_en_rango_minutos = en_rango_minutos
 
 
 def to_datetime_series(df: Any) -> pd.Series:

@@ -95,7 +95,6 @@ from tz_core.logging_utils import (
     log_warn,
     log_error,
     log_debug,
-    write_minimal_filter_log,
 )
 from tz_core.ui_utils import (
     collect_manual_mode_context,
@@ -106,7 +105,12 @@ from tz_core.ui_utils import (
     summarize_outputs,
     suggest_case_name,
 )
-from tz_core.manual_flow import normalize_and_validate_schema, apply_time_filter_prompt
+from tz_core.manual_flow import (
+    normalize_and_validate_schema,
+    apply_time_filter_prompt,
+    handle_manual_html_generation,
+    write_minimal_filter_log_if_needed,
+)
 from tz_core.text_utils import (
     _fix_mojibake_text,
     _aplicar_reemplazos_regex
@@ -3733,45 +3737,26 @@ def main():
     archivo_kmz = routing.kmz_path
     carpeta_kml = routing.kml_folder
 
-    # HTML opcional (solo si lo activás en config.json con html.generar_en_modo_manual = true)
-    if bool(CONFIG.get("html", {}).get("generar_en_modo_manual", False)):
-        try:
-            print("[INFO] Generación HTML modular no disponible. Usar generar_en_modo_manual=false en config.json")
-            # --- Normalizar ubicación del KMZ (por si quedó fuera de BASE) ---
-            try:
-                relocate_kmz_file(
-                    case_name=nombre_salida,
-                    source_folder=carpeta_base,
-                    target_folder=carpeta_salida,
-                    logger=log,
-                )
-            except Exception as _e:
-                print(f"[WARN] No se pudo reubicar KMZ: {_e}")
+    informe_html = handle_manual_html_generation(
+        config=CONFIG,
+        df=df,
+        archivo_kml=archivo_kml,
+        carpeta_salida=carpeta_salida,
+        nombre_salida=nombre_salida,
+        hoja=hoja,
+        carpeta_base=carpeta_base,
+        logger=log,
+        output_fn=print,
+        generar_html_fn=generar_informe_html,
+        relocate_kmz_fn=relocate_kmz_file,
+    )
 
-        except Exception as e:
-            print(f"[ERROR] No se pudo generar el HTML: {e}")
-            informe_html = None
-    else:
-        try:
-            informe_html = generar_informe_html(df, archivo_kml, carpeta_salida, nombre_salida, hoja)
-            print(f"Informe HTML generado (modo legacy): {informe_html}")
-        except Exception as e:
-            print(f"[ERROR] No se pudo generar el HTML (modo legacy): {e}")
-            informe_html = None
-
-    # Log mínimo para Modo 2
-    if time_filters.enabled and time_filters.summary:
-        try:
-            log_min = os.path.join(carpeta_salida, "log_minimo.txt")
-            write_minimal_filter_log(
-                df,
-                time_filters.summary,
-                log_min,
-                logger=log,
-            )
-        except Exception:
-            # No detiene el flujo si hay algún problema con el log
-            pass
+    write_minimal_filter_log_if_needed(
+        result=time_filters,
+        df=df,
+        output_folder=carpeta_salida,
+        logger=log,
+    )
 
     # PRE-KML: asegurar alias/usuario/abonado sin prompt (usar 'SinInf' si faltan)
     df = prep_meta_unicos(

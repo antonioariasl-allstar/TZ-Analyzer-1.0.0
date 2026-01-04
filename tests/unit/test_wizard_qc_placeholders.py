@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 import script_principal_bitacoras_refactory as monolito
+from tz_core.schema_utils import run_schema_location_assistant
 
 
 def test_apply_qc_placeholders_inyecta_fields():
@@ -36,17 +37,15 @@ def test_apply_qc_placeholders_respeta_aliases():
     assert "abonado_final" in cols
 
 
-def test_run_schema_location_assistant_maps_columns_and_creates_antena(monkeypatch):
+def test_run_schema_location_assistant_maps_columns_and_creates_antena():
     df = pd.DataFrame({
         "col_lat": [13.5, 13.6],
         "col_lon": [-89.2, -89.25],
     })
 
     inputs = iter(["1", "1", "2", ""])
-    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs, ""))
 
-    original_config = monolito.CONFIG
-    monolito.CONFIG = {
+    config = {
         "schema": {
             "fields": {},
             "location_alternatives": [["lat", "lon"]],
@@ -55,10 +54,15 @@ def test_run_schema_location_assistant_maps_columns_and_creates_antena(monkeypat
         "entradas": {"columnas_esenciales": ["lat", "long"]},
     }
 
-    try:
-        result = monolito._run_schema_location_assistant(df.copy(), list(df.columns))
-    finally:
-        monolito.CONFIG = original_config
+    result = run_schema_location_assistant(
+        df.copy(),
+        original_columns=list(df.columns),
+        config=config,
+        alias_visibles=monolito.ALIAS_VISIBLES,
+        input_fn=lambda _prompt="": next(inputs, ""),
+        output_fn=lambda _msg: None,
+        config_path=None,
+    )
 
     assert "lat" in result.columns
     assert "long" in result.columns
@@ -68,20 +72,16 @@ def test_run_schema_location_assistant_maps_columns_and_creates_antena(monkeypat
     assert result["antena"].str.startswith("Antena").all()
 
 
-def test_run_schema_location_assistant_skips_prompts_when_location_present(monkeypatch):
+def test_run_schema_location_assistant_respects_existing_location_columns():
     df = pd.DataFrame({
         "lat": [13.5],
         "long": [-89.2],
         "antena": ["Antena 1"],
     })
 
-    def _fail_input(_prompt: str = "") -> str:
-        raise AssertionError("input should not be called when columnas ya existen")
+    inputs = iter(["", "", "", ""])
 
-    monkeypatch.setattr("builtins.input", _fail_input)
-
-    original_config = monolito.CONFIG
-    monolito.CONFIG = {
+    config = {
         "schema": {
             "fields": {},
             "location_alternatives": [["lat", "lon"]],
@@ -90,10 +90,15 @@ def test_run_schema_location_assistant_skips_prompts_when_location_present(monke
         "entradas": {"columnas_esenciales": ["lat", "long", "antena"]},
     }
 
-    try:
-        result = monolito._run_schema_location_assistant(df.copy(), list(df.columns))
-    finally:
-        monolito.CONFIG = original_config
+    result = run_schema_location_assistant(
+        df.copy(),
+        original_columns=list(df.columns),
+        config=config,
+        alias_visibles=monolito.ALIAS_VISIBLES,
+        input_fn=lambda _prompt="": next(inputs, ""),
+        output_fn=lambda _msg: None,
+        config_path=None,
+    )
 
     assert list(result.columns) == ["lat", "long", "antena"]
     assert result.equals(df)

@@ -1,11 +1,15 @@
 """Helpers relacionados con schema/aliasado de columnas para TZ Analyzer."""
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence
+import json
 import re
+
+import numpy as np
 
 import pandas as pd
 
 from .text_utils import normalize_header_key
 from .logging_utils import log as core_log
+from .dataframe_utils import dedupe_columns
 
 
 def build_schema_synonym_map(
@@ -384,3 +388,225 @@ def confirm_column_mapping_with_preview(
             pass
 
     return renamed
+
+
+def run_schema_location_assistant(
+    df: pd.DataFrame,
+    *,
+    original_columns: Sequence[str],
+    config: Optional[Mapping[str, Any]] = None,
+    alias_visibles: Optional[Mapping[str, str]] = None,
+    input_fn: Optional[Callable[[str], str]] = None,
+    output_fn: Optional[Callable[[str], None]] = None,
+    persist_synonym_fn: Optional[Callable[[str, str], None]] = None,
+    validate_schema_fn: Optional[Callable[[pd.DataFrame], Any]] = None,
+    logger: Optional[Callable[[str], None]] = None,
+    target_alias: Optional[Mapping[str, str]] = None,
+    config_path: Optional[str] = "config.json",
+) -> pd.DataFrame:
+    """Asistente interactivo para garantizar ubicación y campos esenciales."""
+
+    alias_visibles = alias_visibles or {}
+    input_cb = input_fn or (lambda message: input(message))  # type: ignore[arg-type]
+    output_cb = output_fn or print
+    log_fn = logger or core_log
+    config_dict = dict(config) if isinstance(config, Mapping) else {}
+
+    schema_cfg = dict(config_dict.get("schema", {}) or {})
+    fields_meta = schema_cfg.get("fields", {}) or {}
+    location_alts = schema_cfg.get("location_alternatives", [["lat", "lon"], ["antena"]])
+    subject_mode = str(schema_cfg.get("subject_default_mode", "tel")).lower() or "tel"
+
+    alias_map = {"lon": "long", "duracion_seg": "duracion"}
+    if isinstance(target_alias, Mapping):
+        alias_map.update(target_alias)
+
+    columns_menu = list(dict.fromkeys(list(original_columns or []) + list(df.columns)))
+    present = set(columns_menu)
+
+    def _normalize(value: Any) -> str:
+        try:
+            return normalize_header_key(value)
+        except Exception:
+            return ""
+
+    def _rename_like(df_obj: pd.DataFrame, source: str, target: str) -> pd.DataFrame:
+        if source == target:
+            return df_obj
+        if source in df_obj.columns:
+            return df_obj.rename(columns={source: target})
+        src_norm = _normalize(source)
+        for existing in list(df_obj.columns):
+            if _normalize(existing) == src_norm:
+                return df_obj.rename(columns={existing: target})
+        return df_obj
+
+    def _prompt_index(message: str, limit: int, default: Optional[int] = None) -> Optional[int]:
+        raw = (input_cb(message) or "").strip()
+        if raw == "" and default is not None:
+            return default
+        try:
+            idx = int(raw)
+        except Exception:
+            return default
+        if 1 <= idx <= limit:
+            return idx
+        return default
+
+    if not has_location_coverage(present, location_alts, alias_map):
+        output_cb("\n[WIZARD] Falta UBICACIÓN. Elegí alternativa:")
+        for idx, alt in enumerate(location_alts, 1):
+            alt_view = " + ".join([alias_map.get(val, val) for val in alt])
+            output_cb(f"  [{idx}] {alt_view}")
+        choice_idx = _prompt_index("→ Opción (#, Enter=1): ", len(location_alts), default=1) or 1
+        choice = location_alts[choice_idx - 1]
+
+        for tgt in choice:
+            canonical = alias_map.get(tgt, tgt)
+            if canonical in present:
+                continue
+            label = alias_visibles.get(tgt, tgt)
+            output_cb(f"\n[WIZARD] Elegí la columna para '{label}':")
+            for idx, column in enumerate(columns_menu, 1):
+                output_cb(f"  [{idx}] {column}")
+            pick = _prompt_index("→ Columna (# o Enter=omitir): ", len(columns_menu))
+            if pick is None:
+                continue
+            source = columns_menu[pick - 1]
+            df = _rename_like(df, source, canonical)
+            present.add(canonical)
+            if canonical not in columns_menu:
+                columns_menu.append(canonical)
+
+    missing = collect_missing_required_fields(
+        present,
+        subject_mode=subject_mode,
+        fields_meta=fields_meta,
+        target_alias=alias_map,
+    )
+    if missing:
+        output_cb("\n[WIZARD] Faltan campos esenciales: " + ", ".join(missing))
+        output_cb("Elegí la columna correspondiente (número). Enter = saltar.\nColumnas disponibles:")
+        for idx, column in enumerate(columns_menu, 1):
+            output_cb(f"  [{idx}] {column}")
+        for canonical in missing:
+            label = alias_visibles.get(canonical, canonical)
+            pick = _prompt_index(
+                f"→ ¿Cuál columna corresponde a '{label}'? (# o Enter): ",
+                len(columns_menu),
+            )
+            if pick is None:
+                continue
+            source = columns_menu[pick - 1]
+            real_target = alias_map.get(canonical, canonical)
+            df = _rename_like(df, source, real_target)
+            present.add(real_target)
+            if real_target not in columns_menu:
+                columns_menu.append(real_target)
+
+    def _persist_config_snapshot() -> None:
+        if not (isinstance(config_dict, Mapping) and config_path):
+            return
+        with open(config_path, "w", encoding="utf-8") as handle:
+            json.dump(config_dict, handle, ensure_ascii=False, indent=2)
+        output_cb("[WIZARD] Validación completada. Config guardada (sin cambios de sinónimos).")
+
+    try:
+        _persist_config_snapshot()
+    except Exception:
+        output_cb("[WIZARD] Aviso: no se pudo escribir config.json; se continúa sin persistir.")
+
+    df = dedupe_columns(df)
+
+    def _smoke_schema_postmap(df_check: pd.DataFrame) -> tuple[bool, str]:
+        esenciales = (config_dict.get("entradas", {}) or {}).get("columnas_esenciales", []) or []
+        faltan = [col for col in esenciales if col not in df_check.columns]
+        if faltan:
+            return False, f"Faltan columnas esenciales tras el mapeo: {', '.join(faltan)}"
+
+        if "lat" in df_check.columns and "long" in df_check.columns:
+            try:
+                lt = pd.to_numeric(df_check["lat"], errors="coerce")
+                lg = pd.to_numeric(df_check["long"], errors="coerce")
+                mask_valid = (~lt.isna()) & (~lg.isna()) & (lt != 0) & (lg != 0)
+                if not mask_valid.any():
+                    return False, "No quedaron coordenadas válidas (lat/long) tras el mapeo."
+            except Exception:
+                return False, "Coordenadas inválidas tras el mapeo."
+        return True, ""
+
+    def _ask_map_col(df_obj: pd.DataFrame, colname: str) -> Optional[pd.DataFrame]:
+        if colname in df_obj.columns:
+            return df_obj
+        output_cb(
+            f"\n[WIZARD] Falta columna esencial de ubicación: '{colname}'. Elegí la columna correspondiente (número). Enter=omitir."
+        )
+        cols_list = list(df_obj.columns)
+        for idx, column in enumerate(cols_list, 1):
+            output_cb(f"  [{idx}] {column}")
+        pick = _prompt_index("→ ¿Cuál columna corresponde? (# o Enter): ", len(cols_list))
+        if pick is None:
+            return df_obj
+        source = cols_list[pick - 1]
+        if source != colname and source in df_obj.columns:
+            user_synonyms = dict(config_dict.get("synonyms_user", {}) or {})
+            mapped_df = confirm_column_mapping_with_preview(
+                df_obj,
+                source,
+                colname,
+                preview_fn=preview_column_mapping,
+                muestras_fn=_muestras_columna,
+                validator_fn=_es_columna_valida_para,
+                post_map_validator=_smoke_schema_postmap,
+                input_fn=input_cb,
+                output_fn=output_cb,
+                synonyms_user=user_synonyms,
+                persist_synonym_fn=persist_synonym_fn,
+                logger=log_fn,
+            )
+            if mapped_df is None:
+                return None
+            df_obj = mapped_df
+
+        if validate_schema_fn is not None:
+            validate_schema_fn(df_obj)
+        return df_obj
+
+    for need in ("lat", "long", "antena"):
+        updated_df = _ask_map_col(df, need)
+        if updated_df is None:
+            return df
+        df = updated_df
+
+    df = dedupe_columns(df)
+
+    faltan_ub = [col for col in ("lat", "long") if col not in df.columns]
+    if faltan_ub:
+        output_cb(
+            "\n[ERROR] No se puede continuar: faltan columnas esenciales de ubicación -> " + ", ".join(faltan_ub)
+        )
+        output_cb("Revise los encabezados de la hoja o use el wizard para mapearlos correctamente.")
+        raise SystemExit(2)
+
+    if "lat" in df.columns and "long" in df.columns and "antena" not in df.columns:
+        def _fmt_coord(value: Any) -> str:
+            try:
+                return f"{float(value):.6f}"
+            except Exception:
+                return ""
+
+        lat_key = df["lat"].map(_fmt_coord)
+        lon_key = df["long"].map(_fmt_coord)
+        mask = (lat_key != "") & (lon_key != "")
+        pairs = pd.Series(list(zip(lat_key, lon_key)), index=df.index)
+        uniq_pairs = pd.unique(pairs[mask])
+        mapdict = {pair: f"Antena {idx}" for idx, pair in enumerate(uniq_pairs, start=1)}
+        if log_fn:
+            try:
+                log_fn(f"Antena fallback: se crearon {len(mapdict)} grupos por par (lat,long).")
+            except Exception:
+                pass
+        df["antena"] = np.where(mask, pairs.map(mapdict), "Antena —")
+        df = dedupe_columns(df)
+
+    return df

@@ -3,11 +3,34 @@
 ## 🎯 ESTADO ACTUAL: 4 FASES COMPLETADAS - LISTO MERGE
 
 **RESUMEN EJECUTIVO:**
-- ✅ FASES 9A, 9B, 9C, 9D completadas exitosamente
-- ✅ 18 módulos en framework tz_core/
-- ✅ Monolito reducido: ~8,000 → ~7,500 líneas (-500+ líneas)
-- ✅ 3/3 tests E2E pasando en todas las fases
-- ✅ Zero regresiones, funcionalidad 100% preservada
+
+## 🆕 HANDOFF 03 ENE 2026 – ESTADO Y PENDIENTES PARA CASA
+
+### ✅ Qué quedó listo en oficina
+- Helpers `handle_manual_html_generation` y `write_minimal_filter_log_if_needed` viven en `tz_core/manual_flow.py`; el monolito sólo orquesta y los tests unitarios (`tests/unit/test_manual_flow.py`) cubren HTML dual-mode + `log_minimo` condicional.
+- Se corrió la Opción 1 manual de punta a punta con un harness temporal (basado en `run.py`) que inyecta respuestas y normaliza horarios via `normalize_wizard_datetime_fields`; la corrida dejó artefactos verificados en `mi_resultado/option1_auto_20260103_232118/`.
+- Config y repo se limpiaron tras la regresión (sinónimos revertidos, scripts temporales eliminados, `git status` limpio).
+
+### 🧪 Cómo repetir la regresión manual automatizada
+1. Activar el virtualenv 3.12 y exportar `TZ_MANUAL_FLOW_AUTOMATION=1` para que `run.py` use el harness temporal.
+2. Ejecutar `python run.py --mode manual` (o el comando equivalente usado arriba) y confirmar que el prompt muestre la ruta `option1_auto_*` antes de finalizar.
+3. Revisar `mi_resultado/option1_auto_*` (HTML + KMZ/KML) y validar que `log_minimo.txt` sólo exista cuando se omiten filtros.
+4. Restaurar cualquier cambio automático en `config.json` (sinónimos) y borrar residuos en `__pycache__` antes de continuar.
+
+### 📌 Pendientes priorizados + dinámica sugerida
+1. **Formalizar el harness como prueba de integración**
+    - Crear un caso en `tests/integration/` que instancie `WizardIO` falso + dataset sintético (puede reutilizar `tests/data/` o generar en memoria).
+    - El objetivo es reemplazar el script temporal para no depender de `run.py` ni de prompts reales; la prueba debe escribir a un directorio temporal y validar que `tz_core/manual_flow` genere HTML/log correctamente.
+2. **Documentar la guía de regresión automática**
+    - Redactar en `docs/` (sugerido: `docs/Manual_Flow_Regression.md`) la secuencia de pasos/flags/entradas usadas por el harness.
+    - Incluir una tabla con cada respuesta automática, las dependencias (`TZ_MANUAL_FLOW_AUTOMATION`, dataset de prueba) y los criterios de validación.
+3. **Continuar el plan “Manual Flow Split”**
+    - Seguir extrayendo los bloques pendientes (overrides, ruteo de outputs, resumen final) descritos en `docs/planning/manual_flow_split_plan.md`.
+    - Cada extracción debe venir acompañada de helpers en `tz_core/ui_utils.py` o módulos específicos y nuevas pruebas en `tests/unit/test_ui_utils.py`.
+4. **Checklist al retomar en casa**
+    - Correr `pytest tests/unit/test_manual_flow.py tests/unit/test_ui_utils.py -q` para asegurar el estado base.
+    - Revisar `mi_resultado/` y eliminar artefactos obsoletos antes de generar nuevos resultados.
+    - Mantener `TODO.md` sincronizado con cada helper extraído y con el progreso del harness.
 
 ## 📦 COMMITS LISTOS PARA MERGE:
 
