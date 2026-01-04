@@ -74,7 +74,9 @@ from simplekml import Kml
 from validaciones import validar_datos, guardar_errores
 from tz_core.bitacora_io import (
     seleccionar_archivo,
+    seleccionar_carpeta_salida,
     seleccionar_carpeta,
+    ensure_dir,
     obtener_hojas_visibles,
     listar_todas_hojas,
     seleccionar_hoja_visible,
@@ -3270,9 +3272,9 @@ def main():
         input_fn=input,
         output_fn=print,
         sanitize_fn=_sanear_nombre_archivo_local,
-        select_folder=seleccionar_carpeta,
+        select_folder=seleccionar_carpeta_salida,
         cwd_fn=os.getcwd,
-        ensure_dir=lambda path: os.makedirs(path, exist_ok=True),
+        ensure_dir=ensure_dir,
         separate_kml=bool(CONFIG.get("salida", {}).get("separar_kml_kmz", False)),
     )
     nombre_salida = routing.base_name

@@ -14,6 +14,7 @@
 - `script_principal_bitacoras_refactory.py` ahora importa esos helpers y elimina duplicación local en la validación de esquema.
 - `dedupe_columns` en `tz_core/dataframe_utils.py` se refinó para eliminar FutureWarnings y mantener tipos correctos; suite completa de tests en verde (232/234, 2 skip).
 - Se creó `tz_core/bitacora_io.py` para centralizar selección de archivo/carpeta con fallback de consola; el monolito ahora usa estos selectores.
+- bitacora_io ahora centraliza también selección de hoja y construcción de rutas de salida (`ensure_dir`, `seleccionar_carpeta_salida`, `resolver_rutas_salida`), reduciendo lógica repetida en el monolito.
 
 ### 📦 MÓDULOS CREADOS EN tz_core/
 
