@@ -124,5 +124,4 @@ from .html_generator import (
     resolve_top_antennas_n,
     build_top_antennas_section,
     build_antennas_by_hour_section,
-    build_recent_contacts_section,
 )

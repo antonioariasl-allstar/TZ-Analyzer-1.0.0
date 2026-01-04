@@ -205,28 +205,3 @@ def test_build_antennas_by_hour_section_respects_override():
     assert html.count("<tr><td class='mono'>") == 1
 
 
-def test_build_recent_contacts_section_basic():
-    df = html_generator.pd.DataFrame(
-        [
-            {"fecha": "01/01/2025", "hora": "10:00:00", "contacto": "7001", "interaccion": "Llamada", "duracion": 60},
-            {"fecha": "02/01/2025", "hora": "11:00:00", "contacto": "7002", "interaccion": "SMS", "duracion": 5},
-        ]
-    )
-
-    html = html_generator.build_recent_contacts_section(df, days=5, max_rows=10)
-
-    assert 'id="contactos-recientes"' in html
-    assert "7001" in html and "7002" in html
-    assert "Llamada" in html and "SMS" in html
-
-
-def test_build_recent_contacts_section_empty_without_contact_col():
-    df = html_generator.pd.DataFrame(
-        [
-            {"fecha": "01/01/2025", "hora": "10:00:00", "tel": "7001"},
-        ]
-    )
-
-    html = html_generator.build_recent_contacts_section(df)
-
-    assert html == ""

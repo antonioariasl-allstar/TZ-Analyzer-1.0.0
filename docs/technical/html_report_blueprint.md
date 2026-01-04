@@ -1,9 +1,10 @@
 # HTML Report Generator Blueprint
 
-## Progress (28/12/2025)
-- Top contactos extraído a helper `build_top_contacts_sections` en `tz_core/html_generator.py`.
-- Monolito delega la sección "Contactos con más comunicación" al helper (conteo y duración) usando overrides/config.
-- Output HTML validado por usuario (prueba manual) sin regresiones visibles.
+## Progress
+- 04/01/2026: Se eliminó el helper/HTML de "Contactos recientes"; sección desactivada en el monolito y tests retirados.
+- 28/12/2025: Top contactos extraído a helper `build_top_contacts_sections` en `tz_core/html_generator.py`.
+- 28/12/2025: Monolito delega la sección "Contactos con más comunicación" al helper (conteo y duración) usando overrides/config.
+- 28/12/2025: Output HTML validado por usuario (prueba manual) sin regresiones visibles.
 
 ## 1. Scope
 
@@ -54,7 +55,7 @@
 | Heatmap + markers | `antena`, `lat`, `long`, `azimut` | json, Leaflet JS, `_valid_latlon` |
 | Antenas por rango | `antena`, `lat`, `long`, `azimut`, `fecha`/`hora` | numpy, pandas datetime |
 | Historial cambios antena | DataFrame full | tz_core.analytics.generar_historial_cambios_antena |
-| Contactos recientes | `tel_contacto`, `fecha`, `hora`, `duracion` | `_fmt_sec` helper |
+| Contactos recientes (deprecated, removido 04/01/2026) | — | — |
 | Branding / H1 / logos | CONFIG.brand / CONFIG.branding | base64, mimetypes |
 | TOC / Sticky nav | HTML string manipulations | CSS/JS injection |
 | Watermark | CONFIG.branding | CSS injection |
@@ -114,7 +115,6 @@ HTMLReportBuilder
 │   │   ├── _section_antenas_rangos
 │   │   ├── _section_historial
 │   │   ├── _section_contactos_top
-│   │   ├── _section_contactos_recientes
 │   │   └── _inject_external_sections
 │   ├── _assemble_html(sections, branding)
 │   └── _write_file(html, output_path)
@@ -151,7 +151,7 @@ class ReportContext:
 ### Step 2 – Section Extraction (incremental)
 1. Move “Top contactos” block into `_section_contactos_top` (use metrics).
 2. Move “Antenas más activadas” block into `_section_antenas_resumen`.
-3. Continue with heatmap, rangos, historial, contactos recientes.
+3. Continue with heatmap, rangos, historial. (Contactos recientes se eliminó del alcance.)
 4. Each move: run `pytest tests/test_e2e_regresion.py` to ensure no diff.
 
 ### Step 3 – Assembly & Branding
