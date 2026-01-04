@@ -71,8 +71,8 @@ import pandas as pd  # <-- UNO solo, aquí arriba
 from simplekml import Kml
 
 # Módulos locales
-from utilidades import seleccionar_archivo, seleccionar_carpeta
 from validaciones import validar_datos, guardar_errores
+from tz_core.bitacora_io import seleccionar_archivo, seleccionar_carpeta
 from tz_core.kml_generator import generar_kml_puntos_libres
 from tz_core.mapping_wizard import (
     WizardIO,
@@ -432,18 +432,6 @@ except Exception:
             else:
                 f.write(f"[{datetime.now().isoformat(sep=' ', timespec='seconds')}] No se detectaron errores.\n")
         return archivo_errores
-
-try:
-    from utilidades import seleccionar_archivo, seleccionar_carpeta
-except Exception:
-    # Fallback por consola (sin Tk)
-    def seleccionar_archivo():
-        ruta = input("Ruta del archivo Excel (.xlsx/.xls): ").strip('"').strip()
-        return ruta if ruta else None
-
-    def seleccionar_carpeta():
-        ruta = input("Ruta de la carpeta de salida (Enter = actual): ").strip('"').strip()
-        return ruta if ruta else os.getcwd()
 
 # =========================
 # Configuración externa
