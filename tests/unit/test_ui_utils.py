@@ -268,6 +268,20 @@ def test_collect_top_overrides_guard_against_invalid_numbers():
     assert any("Valor inválido" in msg for msg in outputs)
 
 
+def test_collect_top_overrides_accepts_mismo_keyword():
+    inputs = iter(["12", "mismo"])
+
+    selection = collect_top_overrides(
+        input_fn=lambda _prompt="": next(inputs, ""),
+        output_fn=lambda _msg: None,
+        default_antennas=8,
+        default_contacts=5,
+    )
+
+    assert selection.antennas == 12
+    assert selection.contacts == 12
+
+
 def test_prompt_output_routing_creates_paths_and_respects_rename():
     created_dirs: list[str] = []
 

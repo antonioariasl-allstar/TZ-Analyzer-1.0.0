@@ -98,7 +98,6 @@ from tz_core.logging_utils import (
     write_minimal_filter_log,
 )
 from tz_core.ui_utils import (
-    solicitar_overrides_topn,
     collect_manual_mode_context,
     gather_dataset_metadata,
     prompt_case_identity,
@@ -3631,15 +3630,6 @@ def main():
         df = finalize_manual_mapping_dataframe(df)
 
     df = normalize_wizard_datetime_fields(df, warn_writer=lambda msg: print(msg))
-    # === Overrides Top N (Modos 1 y 2) ===
-    if opcion in ("1", "2") and not MANUAL_QC_MAPPING:
-        try:
-            ovr = solicitar_overrides_topn(CONFIG)
-            if ovr:
-                globals()["OVERRIDE_TOPS"] = ovr
-                print(f"[INFO] Top N override aplicado: {ovr}")
-        except Exception:
-            pass
 
     df, errores = validar_datos(df, columnas_esenciales)
 
