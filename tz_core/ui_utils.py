@@ -25,6 +25,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from tz_core.bitacora_normalization import normalize_imei, normalize_msisdn
+
 
 @dataclass
 class ManualModeContext:
@@ -258,18 +260,22 @@ def prompt_case_identity(
     output_fn("Enter = Que TZ Analyzer decida")
     tipo_bitacora = (input_fn("→ Opción (I/T/Enter): ") or "").strip().upper()
 
+    def _normalize_id(column: str, value: Any) -> str:
+        if column == "tel":
+            return normalize_msisdn(value) or str(value).strip()
+        if column == "imei":
+            return normalize_imei(value) or str(value).strip()
+        return str(value).strip()
+
     def _safe_nunique(column: str) -> int:
         if column not in getattr(df, "columns", []):
             return 0
         try:
-            return int(df[column].nunique(dropna=True))
+            serie = df[column].dropna().map(lambda v: _normalize_id(column, v))
+            valores = {v for v in serie if v}
+            return len(valores)
         except Exception:
-            try:
-                serie = df[column].dropna().astype(str)
-                valores = {v.strip() for v in serie if v and v.strip()}
-                return len(valores)
-            except Exception:
-                return 0
+            return 0
 
     if tipo_bitacora == "I":
         modo_bitacora = "IMEI"
@@ -312,8 +318,8 @@ def prompt_case_identity(
         if column not in getattr(df, "columns", []):
             return None
         try:
-            serie = df[column].dropna().astype(str)
-            valores = sorted({v.strip() for v in serie if v and v.strip()})
+            serie = df[column].dropna().map(lambda v: _normalize_id(column, v))
+            valores = sorted({v for v in serie if v})
             return valores[0] if valores else None
         except Exception:
             return None

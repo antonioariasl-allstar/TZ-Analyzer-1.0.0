@@ -32,6 +32,8 @@ FASE: 9B - Analytics (Riesgo Moderado)
 
 import os
 import pandas as pd
+
+from tz_core.bitacora_normalization import normalize_msisdn, parse_duration_seconds
 import numpy as np
 from datetime import time as _time, datetime as _dt
 from typing import List, Dict, Any, Optional, Tuple
@@ -281,10 +283,8 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
         if not c_col:
             return ""
 
-        # Normalizar contacto a dígitos (dejamos '+', quitamos separadores)
-        s = df[c_col].astype(str).str.strip()
-        s = s.str.replace(r"[^\d+]", "", regex=True)
-        s = s.str.replace(r"^\+?0+(?=\d)", "", regex=True)
+        # Normalizar contacto con helper MSISDN para agrupar bien
+        s = df[c_col].map(lambda v: normalize_msisdn(v) or str(v).strip())
 
         d = df.loc[s != ""].copy()
         if d.empty:
@@ -295,12 +295,8 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
         if "_sec" in d.columns:
             sec = pd.to_numeric(d["_sec"], errors="coerce").fillna(0)
         elif "duracion" in d.columns:
-            d_dur = d["duracion"].astype(str).str.strip()
-            td = pd.to_timedelta(
-                d_dur.where(d_dur.str.contains(":"), None), errors="coerce"
-            )
-            sec = td.dt.total_seconds()
-            sec = sec.fillna(pd.to_numeric(d_dur, errors="coerce")).fillna(0)
+            d_dur = d["duracion"].map(lambda x: parse_duration_seconds(x, default=0.0))
+            sec = pd.to_numeric(d_dur, errors="coerce").fillna(0)
         else:
             sec = 0
         d["_sec"] = pd.to_numeric(sec, errors="coerce").fillna(0).astype(int)
