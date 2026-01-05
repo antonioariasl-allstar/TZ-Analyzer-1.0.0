@@ -469,6 +469,7 @@ from tz_core.file_utils import (
     _copiar_logo_a_salida,
     relocate_kmz_file,
 )
+from tz_core.schema_guard import validate_schema_or_abort
 from tz_core.output_pipeline import produce_case_outputs
 from tz_core.html_toc import apply_toc
 from tz_core.ingestion_pipeline import run_ingestion_pipeline
@@ -2901,89 +2902,13 @@ def main():
 
 
     # === VALIDACIÓN DE SCHEMA (aborto elegante) — INICIO =======================
-    def validate_schema_or_abort(df):
-        """
-        Verifica:
-        1) Presencia de esenciales (de config.entradas.columnas_esenciales) con tolerancia lon/long.
-        2) Alternativas de localización (schema.location_alternatives): p.ej., (lat+long) o (antena).
-        3) Tipos mínimos: hora HH:MM:SS, fecha parseable, al menos una fila con lat/long válidas.
-        Si falla: imprime guía, loguea y aborta ejecución (SystemExit).
-        """
-        esenciales_cfg = (CONFIG or {}).get("entradas", {}).get("columnas_esenciales", []) or []
-        # Tolerancia: si piden "long", aceptar "lon" también
-        esenciales = set(esenciales_cfg)
-        if "long" in esenciales and "lon" not in esenciales:
-            esenciales.add("lon")
-
-        headers = list(df.columns)
-        faltan = [c for c in esenciales if c not in headers]
-        # Permitir que si falta long pero hay lon (o viceversa), no cuente como faltante
-        if "long" in faltan and "lon" in headers:
-            faltan.remove("long")
-        if "lon" in faltan and "long" in headers:
-            faltan.remove("lon")
-
-        # Alternativas de localización
-        alts = (CONFIG or {}).get("schema", {}).get("location_alternatives", []) or []
-        # Normalizar posibles 'lon' a 'long' internamente
-        def _alt_ok(alt_group):
-            # Un grupo es válido si TODAS sus columnas existen (tratando lon/long como equivalentes)
-            cols_needed = []
-            for c in alt_group:
-                if c == "lon":  # tu schema trae 'lon' como canónico, pero el pipeline usa 'long'
-                    cols_needed.append(_coalesce_cols(df, "long", "lon"))
-                else:
-                    cols_needed.append(c if c in df.columns else None)
-            return all(col is not None for col in cols_needed)
-
-        hay_alt_loc = any(_alt_ok(g) for g in alts) if alts else True
-
-        problemas = []
-        if faltan:
-            problemas.append(f"- Faltan columnas esenciales: {_fmt_lista(faltan)}")
-        if not hay_alt_loc:
-            problemas.append("- No se cumple ninguna alternativa de localización (p. ej., (lat+long) o (antena)).")
-
-        # Chequeos de tipo mínimos
-        # hora
-        if _coalesce_cols(df, "hora"):
-            ok_hora, smp_h = _valida_formato_hora(df["hora"].astype(str))
-            if not ok_hora:
-                problemas.append(f"- 'hora' debería verse como HH:MM:SS; muestras: {_fmt_lista(smp_h)}")
-
-        # fecha
-        if _coalesce_cols(df, "fecha"):
-            ok_fecha, smp_f = _valida_fecha_parsible(df["fecha"])
-            if not ok_fecha:
-                problemas.append(f"- 'fecha' no es parseable en algunas filas; muestras: {_fmt_lista(smp_f)}")
-
-        # lat/long
-        if _coalesce_cols(df, "lat") and _coalesce_cols(df, "long", "lon"):
-            bbox = (CONFIG or {}).get("geografia", {}).get("sv_bbox", None)
-            if not _valida_latlon(df, bbox=bbox):
-                problemas.append("- 'lat/long' no tienen registros válidos (no 0,0; dentro de SV).")
-
-        if problemas:
-            guia = []
-            guia.append("\n[SCHEMA] No se puede continuar. Ajustá los encabezados o agrega sinónimos:\n")
-            guia.extend(p + "\n" for p in problemas)
-            guia.append("\nSugerencias:\n")
-            guia.append("• Revisá 'entradas.columnas_esenciales' en config.json.\n")
-            guia.append("• Usá el wizard para mapear encabezados raros (se persisten en synonyms_user).\n")
-            guia.append("• Para 'long' también se acepta 'lon' (sinónimo en schema.fields).\n")
-            msg = "".join(guia)
-            try:
-                log(f"[FATAL][schema] {msg}")
-            except Exception:
-                pass
-            print(msg)
-            raise SystemExit(2)
-        else:
-            try:
-                log("[schema] Validación OK: esenciales presentes y tipos mínimos razonables.")
-            except Exception:
-                pass
-            return True
+    def validate_schema_or_abort_local(df):
+        return validate_schema_or_abort(
+            df,
+            config=CONFIG,
+            logger=log,
+            output_fn=print,
+        )
 
     # Auto-mapeo de encabezados (desde CONFIG.schema.fields) con fuzzy
     # - Usa sinónimos del config
@@ -3004,7 +2929,7 @@ def main():
         alias_visibles=ALIAS_VISIBLES,
         wizard_io_factory=_build_wizard_io,
         persist_synonym_fn=_persist_user_synonym,
-        validate_schema_fn=validate_schema_or_abort,
+        validate_schema_fn=validate_schema_or_abort_local,
         validar_datos_fn=validar_datos,
         time_filter_option=opcion,
         solicitar_filtros_fn=_solicitar_filtros_tiempo,
