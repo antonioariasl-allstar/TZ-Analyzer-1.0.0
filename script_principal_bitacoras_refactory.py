@@ -101,6 +101,7 @@ from tz_core.logging_utils import (
     log_error,
     log_debug,
 )
+from tz_core.output_runner import run_outputs_flow
 from tz_core.health_utils import (
     log_dataset_stats,
     run_health_checks,
@@ -3117,53 +3118,42 @@ def main():
     log("[salidas] Generando KML/KMZ…")
     archivo_kml, desc_coords = generar_kml(df, archivo_kml, flat=False)
     log(f"[salidas] KML listo: {archivo_kml}")
-    
-    # === BLOQUE HTML/SECCIONES (repuesto) ===
-    try:
-        def _store_interacciones(html):
-            global HTML_SECCION_INTERACCIONES
-            HTML_SECCION_INTERACCIONES = html or ""
 
-        def _store_contactos(html):
-            global HTML_SECCION_TODOS_CONTACTOS
-            HTML_SECCION_TODOS_CONTACTOS = html or ""
+    # === BLOQUE HTML/SECCIONES (delegado) ===
+    def _store_interacciones(html):
+        global HTML_SECCION_INTERACCIONES
+        HTML_SECCION_INTERACCIONES = html or ""
 
-        log("[salidas] Construyendo salidas HTML/KML…")
+    def _store_contactos(html):
+        global HTML_SECCION_TODOS_CONTACTOS
+        HTML_SECCION_TODOS_CONTACTOS = html or ""
 
-        resultado_salidas = produce_case_outputs(
-            df=df,
-            config=CONFIG,
-            nombre_salida=nombre_salida,
-            archivo_kml=archivo_kml,
-            carpeta_base=carpeta_base,
-            carpeta_salida=carpeta_salida,
-            archivo_entrada=archivo_entrada,
-            hoja=hoja,
-            error_report_path=archivo_errores,
-            discarded_coords=desc_coords,
-            build_interactions_section=_construir_seccion_interacciones,
-            build_contacts_section=construir_seccion_todos_contactos,
-            generar_html_fn=generar_informe_html,
-            relocate_kmz_fn=relocate_kmz_file,
-            write_hashes_fn=escribe_hashes_txt,
-            summarize_fn=summarize_outputs,
-            logger=log,
-            output_fn=print,
-            path_exists=os.path.exists,
-            cwd_fn=os.getcwd,
-            log_file_path=globals().get("LOG_FILE"),
-            set_interactions_section=_store_interacciones,
-            set_contacts_section=_store_contactos,
-        )
-        try:
-            html_path = resultado_salidas.get("html") if isinstance(resultado_salidas, dict) else None
-            kmz_path = resultado_salidas.get("kmz") if isinstance(resultado_salidas, dict) else None
-            hashes_path = resultado_salidas.get("hashes") if isinstance(resultado_salidas, dict) else None
-            log(f"[salidas] HTML={html_path} KMZ={kmz_path} HASHES={hashes_path}")
-        except Exception:
-            pass
-    except Exception as e:
-        print(f"[ERROR] Bloque HTML/KML falló: {e}")
+    run_outputs_flow(
+        df=df,
+        config=CONFIG,
+        nombre_salida=nombre_salida,
+        archivo_kml=archivo_kml,
+        carpeta_base=carpeta_base,
+        carpeta_salida=carpeta_salida,
+        archivo_entrada=archivo_entrada,
+        hoja=hoja,
+        archivo_errores=archivo_errores,
+        desc_coords=desc_coords,
+        build_interactions_section=_construir_seccion_interacciones,
+        build_contacts_section=construir_seccion_todos_contactos,
+        generar_html_fn=generar_informe_html,
+        relocate_kmz_fn=relocate_kmz_file,
+        write_hashes_fn=escribe_hashes_txt,
+        produce_fn=produce_case_outputs,
+        summarize_fn=summarize_outputs,
+        logger=log,
+        output_fn=print,
+        path_exists=os.path.exists,
+        cwd_fn=os.getcwd,
+        log_file_path=globals().get("LOG_FILE"),
+        set_interactions_section=_store_interacciones,
+        set_contacts_section=_store_contactos,
+    )
 if __name__ == "__main__":
     bootstrap_config()
 
