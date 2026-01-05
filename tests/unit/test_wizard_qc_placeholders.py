@@ -144,7 +144,11 @@ def test_run_manual_mapping_instantiates_mappingwizard(monkeypatch):
             result["mapped"] = True
             return result, {"tel": ("col", "foo")}
 
-    monkeypatch.setattr(monolito, "MappingWizard", _DummyWizard)
+    # El monolito no expone MappingWizard; permitir crear el atributo sin fallar
+    monkeypatch.setattr(monolito, "MappingWizard", _DummyWizard, raising=False)
+    # Parchear también el símbolo real usado en run_manual_mapping
+    import tz_core.manual_mapping_helpers as manual_helpers
+    monkeypatch.setattr(manual_helpers, "MappingWizard", _DummyWizard)
 
     mapped, assignments = monolito._run_manual_mapping(df.copy(), wizard_io=sentinel_io)
 
