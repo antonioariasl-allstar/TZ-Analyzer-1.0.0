@@ -50,32 +50,28 @@
 
 # Estándar
 import json
-import math
-import os
-import re
-import shutil
-import sys
 import logging
+import os
+import sys
+import time
 import traceback
-import io
-import base64
 import warnings
-
-from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, time as _time
 from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
+import pandas as pd
 
-# Terceros
-import pandas as pd  # <-- UNO solo, aquí arriba
-from simplekml import Kml
-
-# Módulos locales
-from validaciones import validar_datos, guardar_errores
+# === SECCIÓN: WIZARD DE MAPEO DE COLUMNAS (detección, mapeo manual, QC) ===
+# Estos wrappers (_build_wizard_io, _prepare_manual_mapping, _run_manual_mapping,
+# _persist_user_synonym) mantienen compatibilidad con el flujo original, pero
+# delegan la lógica real a tz_core.mapping_wizard y tz_core.config_manager.
+# No modificar comportamientos aquí sin coordinar con los módulos extraídos; si se
+# refactoriza, moverlos a una capa de compatibilidad y deprecarlos de forma
+# controlada.
 from tz_core.bitacora_io import (
     seleccionar_archivo,
     seleccionar_carpeta_salida,
-    seleccionar_carpeta,
     ensure_dir,
     obtener_hojas_visibles,
     listar_todas_hojas,
@@ -145,8 +141,6 @@ from tz_core.time_filters import (
     _solicitar_filtros_tiempo,
     _aplicar_filtros_tiempo,
 )
-# --- Helpers de hora y carpetas/rangos (Preset A SV) ---
-from datetime import time as _time
 
 # =========================
 # Generación de KML (usa CONFIG)
