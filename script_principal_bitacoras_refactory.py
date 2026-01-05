@@ -343,6 +343,32 @@ def log(msg: str):
     _log_impl(msg)
 
 
+def _log_dataset_stats(etapa: str, df: pd.DataFrame) -> None:
+    """Loguea contadores básicos de un DataFrame en una etapa del flujo."""
+    try:
+        total = len(df)
+        cols = len(df.columns)
+        lat_ok = 0
+        if "lat" in df.columns and ("long" in df.columns or "lon" in df.columns):
+            lat_series = pd.to_numeric(df.get("lat"), errors="coerce")
+            lon_series = pd.to_numeric(df.get("long", df.get("lon")), errors="coerce")
+            lat_ok = int((lat_series.notna() & lon_series.notna()).sum())
+
+        hora_missing = None
+        if "hora" in df.columns:
+            hora_missing = int(df["hora"].isna().sum())
+
+        parts = [f"[{etapa}] filas={total}", f"cols={cols}"]
+        if lat_ok:
+            parts.append(f"coord_validas={lat_ok}")
+        if hora_missing is not None:
+            parts.append(f"horas_sin_inf={hora_missing}")
+
+        log(" ".join(parts))
+    except Exception:
+        pass
+
+
 def _apply_qc_placeholders(
     df: pd.DataFrame,
     missing_fields,
@@ -2885,6 +2911,8 @@ def main():
     hoja = dataset.hoja
     df = dataset.dataframe
 
+    _log_dataset_stats("carga_inicial", df)
+
     # La carpeta se elegirá al final (previsualización)
     carpeta_salida = None
 
@@ -3009,6 +3037,15 @@ def main():
     df = ingestion.dataframe
     errores = ingestion.errores
     time_filters = ingestion.time_filters
+
+    try:
+        err_count = len(errores) if errores is not None else 0
+        tf_summary = time_filters.summary if getattr(time_filters, "enabled", False) else "sin filtros de tiempo"
+        log(f"[ingestion] errores={err_count} filtros={tf_summary}")
+    except Exception:
+        pass
+
+    _log_dataset_stats("post_ingestion", df)
 
     if time_filters.enabled:
         if df.empty:
