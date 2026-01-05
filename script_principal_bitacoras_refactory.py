@@ -80,9 +80,10 @@ from tz_core.bitacora_io import (
     seleccionar_hoja,
     cargar_excel_con_normalizacion,
 )
-from tz_core.mapping_wizard import (
-    WizardIO,
-    MappingWizard,
+from tz_core.mapping_wizard import WizardIO
+from tz_core.manual_mapping_helpers import (
+    prepare_manual_mapping as _prepare_manual_mapping,
+    run_manual_mapping as _run_manual_mapping,
 )
 from tz_core.html_helpers import fmt_datetime as fmt_dt
 from tz_core.logging_utils import (
@@ -242,57 +243,6 @@ def _build_wizard_io(log_to_system: Optional[bool] = None) -> WizardIO:
                 pass
 
     return WizardIO(input_fn=_wizard_input, output_fn=_wizard_output)
-
-
-def _prepare_manual_mapping(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], List[str]]:
-    """Prepara DataFrame y listas canónicas para el wizard QC manual."""
-
-    esenciales_qc = [
-        "fecha",
-        "hora",
-        "tel",
-        "imei",
-        "interaccion",
-        "contacto",
-        "lat",
-        "long",
-        "azimut",
-        "antena",
-    ]
-    no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message="Pandas doesn't allow columns to be created via a new attribute name*",
-            category=UserWarning,
-        )
-        try:
-            df._orig_cols = list(df.columns)
-        except Exception:
-            pass
-
-    df.attrs["_orig_cols"] = list(df.columns)
-    return df, esenciales_qc, no_esenciales_qc
-
-
-def _run_manual_mapping(
-    df: pd.DataFrame,
-    *,
-    esenciales: Optional[List[str]] = None,
-    no_esenciales: Optional[List[str]] = None,
-    wizard_io: Optional[WizardIO] = None,
-) -> Tuple[pd.DataFrame, Dict[str, Tuple[str, Any]]]:
-    """Instancia MappingWizard con defaults y devuelve (df_mapeado, asignaciones)."""
-
-    df_ready, default_esenciales, default_no_esenciales = _prepare_manual_mapping(df)
-    wizard = MappingWizard(
-        df_ready,
-        esenciales if esenciales is not None else default_esenciales,
-        no_esenciales if no_esenciales is not None else default_no_esenciales,
-        io=wizard_io or _build_wizard_io(),
-    )
-    return wizard.run()
 
 
 def _persist_user_synonym(canonical: str, encabezado: str) -> None:
