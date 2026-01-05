@@ -108,6 +108,7 @@ from tz_core.health_utils import (
     log_dataset_stats,
     run_health_checks,
 )
+from tz_core.synonym_utils import persist_user_synonym as _persist_user_synonym_helper
 from tz_core.ui_utils import (
     collect_manual_mode_context,
     gather_dataset_metadata,
@@ -233,14 +234,15 @@ def _persist_user_synonym(canonical: str, encabezado: str) -> None:
     """Actualiza CONFIG/RENAME_MAP cuando el asistente agrega sinónimos manuales."""
 
     global CONFIG, RENAME_MAP
-    try:
-        CONFIG = cfg_add_user_synonym(CONFIG, canonical, encabezado)
-        RENAME_MAP = cfg_build_rename_map(CONFIG)
-    except Exception as exc:
-        try:
-            log(f"[WARN][synonyms] No se pudo persistir el sinónimo: {exc}")
-        except Exception:
-            pass
+    CONFIG, RENAME_MAP = _persist_user_synonym_helper(
+        config=CONFIG,
+        rename_map=RENAME_MAP,
+        canonical=canonical,
+        encabezado=encabezado,
+        cfg_add_user_synonym=cfg_add_user_synonym,
+        cfg_build_rename_map=cfg_build_rename_map,
+        logger=log,
+    )
 
 
 # Wrappers de compatibilidad para logging
