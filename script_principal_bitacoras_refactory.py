@@ -114,6 +114,7 @@ from tz_core.ui_utils import (
     summarize_outputs,
     suggest_case_name,
 )
+from tz_core.output_flow import prepare_output_setup
 from tz_core.manual_flow import (
     normalize_and_validate_schema,
     apply_time_filter_prompt,
@@ -3035,88 +3036,48 @@ def main():
     if not run_health_checks(df, logger=log, output_fn=print):
         return
 
-    # Salidas
+    # Salidas (delegado a helper para reducir superficie del monolito)
     nombre_base = os.path.splitext(os.path.basename(archivo_entrada))[0]
 
-    # --- Nombre sugerido para salida (Excel): TEL + ALIAS + RANGO ISO + EXCEL + TIMESTAMP ---
-    def _sanear_nombre_archivo_local(s: str) -> str:
-        """
-        Wrapper para compatibilidad - usar sanear_nombre_archivo de tz_core.utils
-        
-        CRÍTICO: Preserva fallback dinámico (nombre_base) para mantener
-        comportamiento idéntico en generación de nombres Excel.
-        
-        CONTEXTO: Esta función se usa en:
-        - Línea 7899: generación automática de nombres Excel  
-        - Línea 8098: validación entrada usuario para nombres Excel
-        
-        El fallback nombre_base es crucial para nombres consistentes.
-        """
-        return sanear_nombre_archivo(s, nombre_base)
-
-    from datetime import datetime
-
-    identity = prompt_case_identity(
+    output_setup = prepare_output_setup(
         df=df,
+        config=CONFIG,
+        time_filters=time_filters,
+        nombre_base=nombre_base,
         input_fn=input,
         output_fn=print,
-        now_fn=datetime.now,
-    )
-    suggestion = suggest_case_name(
-        df=df,
-        identity=identity,
-        filters=time_filters.filters if time_filters.enabled else None,
         timestamp_fn=datetime.now,
-        sanitize_fn=_sanear_nombre_archivo_local,
+        now_fn=datetime.now,
+        sanitize_fn=sanear_nombre_archivo,
+        prompt_case_identity=prompt_case_identity,
+        suggest_case_name=suggest_case_name,
+        collect_top_overrides=collect_top_overrides,
+        prompt_output_routing=prompt_output_routing,
+        select_folder=seleccionar_carpeta_salida,
+        cwd_fn=os.getcwd,
+        ensure_dir=ensure_dir,
     )
+
+    identity = output_setup.identity
+    suggestion = output_setup.suggestion
+    base_auto = output_setup.base_auto
     modo_bitacora = identity.mode
-    base_auto = suggestion.base_name
 
-    # [QC] Alias / Usuario / Abonado (post-mapeo; opcional)
+    top_antenas = output_setup.top_antenas
+    top_contactos = output_setup.top_contactos
 
-    # [QC] Preguntas de TOPs (antenas/contactos) — antes de la previsualización
-    def _default_top(key, fallback):
-        try:
-            return int(CONFIG.get("html", {}).get(key, fallback))
-        except Exception:
-            return fallback
-
-    selection = collect_top_overrides(
-        input_fn=input,
-        output_fn=print,
-        default_antennas=_default_top("top_antenas_n", 10),
-        default_contacts=_default_top("top_contactos_n", 10),
-    )
-    top_antenas = selection.antennas
-    top_contactos = selection.contacts
-
-    # Propagar a CONFIG si existe (para que HTML/KMZ usen estos valores)
-    if "CONFIG" in globals() and isinstance(CONFIG, dict):
-        CONFIG["top_antenas"] = top_antenas
-        CONFIG["top_contactos"] = top_contactos
-
-    # Además, propagar overrides a nivel global para que las secciones HTML los lean
+    # Propagar overrides a nivel global para que las secciones HTML los lean
     try:
         globals()["OVERRIDE_TOPS"] = {"antenas": int(top_antenas), "contactos": int(top_contactos)}
     except Exception:
         pass
 
-    routing = prompt_output_routing(
-        base_name=base_auto,
-        input_fn=input,
-        output_fn=print,
-        sanitize_fn=_sanear_nombre_archivo_local,
-        select_folder=seleccionar_carpeta_salida,
-        cwd_fn=os.getcwd,
-        ensure_dir=ensure_dir,
-        separate_kml=bool(CONFIG.get("salida", {}).get("separar_kml_kmz", False)),
-    )
-    nombre_salida = routing.base_name
-    carpeta_base = routing.base_folder
-    carpeta_salida = routing.output_folder
-    archivo_kml = routing.kml_path
-    archivo_kmz = routing.kmz_path
-    carpeta_kml = routing.kml_folder
+    nombre_salida = output_setup.nombre_salida
+    carpeta_base = output_setup.carpeta_base
+    carpeta_salida = output_setup.carpeta_salida
+    archivo_kml = output_setup.archivo_kml
+    archivo_kmz = output_setup.archivo_kmz
+    carpeta_kml = output_setup.carpeta_kml
 
     informe_html = handle_manual_html_generation(
         config=CONFIG,
