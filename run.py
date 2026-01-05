@@ -25,14 +25,11 @@ Uso: python run.py
 
 import logging
 import traceback
-from script_principal_bitacoras_refactory import main, bootstrap_config
+from tz_core.app_runner import run
 
 
 if __name__ == "__main__":
-    # Inicializar configuración y banner
-    bootstrap_config()
-
-    # Configurar logging simple y visible en consola
+    # Inicializar logging simple y visible en consola (se mantiene aquí)
     logging.basicConfig(
         level=logging.INFO,
         format="%(levelname)s: %(message)s"
@@ -40,7 +37,7 @@ if __name__ == "__main__":
 
     # Ejecutar flujo principal con manejo de errores
     try:
-        main()
+        run()
     except KeyboardInterrupt:
         print("\n\n[INFO] Proceso cancelado por el usuario.")
     except Exception as e:

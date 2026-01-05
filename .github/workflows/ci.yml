@@ -26,6 +26,7 @@ jobs:
 
       - name: Run tests
         run: |
+          $env:PYTHONPATH = "$PWD;$env:PYTHONPATH"
           pytest -q
 
       - name: Static analysis (flake8)
