@@ -9,7 +9,7 @@ from datetime import time as _time
 
 from tz_core.time_utils import (
     hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, 
-    clasificar_rango_sv, RANGOS_SV
+    clasificar_rango_sv, RANGOS_SV, normalize_hour_to_hhmmss
 )
 
 
@@ -42,6 +42,23 @@ class TestHhmmssToTimeOrNone:
         assert hhmmss_to_time_or_none("1:2:3") == _time(1, 2, 3)
         assert hhmmss_to_time_or_none("  14:30:15  ") == _time(14, 30, 15)
         assert hhmmss_to_time_or_none("14:30") is None  # formato incompleto
+
+
+class TestNormalizeHourToHhmmss:
+    """Tests para normalize_hour_to_hhmmss."""
+
+    def test_separadores_varios(self):
+        assert normalize_hour_to_hhmmss("6.30") == "06:30:00"
+        assert normalize_hour_to_hhmmss("14-20") == "14:20:00"
+        assert normalize_hour_to_hhmmss("18/45") == "18:45:00"
+
+    def test_timestamps_y_parciales(self):
+        assert normalize_hour_to_hhmmss("2025-01-04 21:15:30") == "21:15:30"
+        assert normalize_hour_to_hhmmss("09:15") == "09:15:00"
+
+    def test_invalidos(self):
+        assert normalize_hour_to_hhmmss("invalid") is None
+        assert normalize_hour_to_hhmmss(None) is None
 
 
 class TestEnRangoTiempo:

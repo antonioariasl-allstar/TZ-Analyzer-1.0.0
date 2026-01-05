@@ -11,6 +11,8 @@ Cobertura:
 import os
 import shutil
 import tempfile
+import hashlib
+from datetime import datetime
 import pytest
 from pathlib import Path
 from unittest.mock import patch, mock_open
@@ -21,7 +23,7 @@ from tz_io.file_io import (
     _escribe_hashes_txt,  # alias
     _copiar_logo_a_salida  # alias
 )
-from tz_core.file_utils import relocate_kmz_file
+from tz_core.file_utils import relocate_kmz_file, write_detailed_hashes_report
 
 
 class TestEscribeHashesTxt:
@@ -124,6 +126,40 @@ class TestEscribeHashesTxt:
         content = hash_file.read_text(encoding="utf-8")
         assert "café_ñandú.txt" in content
         assert content.startswith("SHA256  ")
+
+
+class TestWriteDetailedHashesReport:
+    """Tests para reporte detallado de hashes (MD5/SHA256 + tamaño)."""
+
+    def test_genera_reporte_detallado(self, tmp_path):
+        f1 = tmp_path / "a.txt"
+        f2 = tmp_path / "b.txt"
+        f1.write_text("hola", encoding="utf-8")
+        f2.write_text("mundo!", encoding="utf-8")
+
+        dest = tmp_path / "hashes.txt"
+
+        fixed_now = datetime(2026, 1, 4, 12, 0, 0)
+        write_detailed_hashes_report(
+            str(dest),
+            [("HTML", str(f1)), ("KML", str(f2))],
+            now_fn=lambda: fixed_now,
+        )
+
+        content = dest.read_text(encoding="utf-8")
+        lines = [ln for ln in content.splitlines() if ln]
+
+        assert lines[0] == "Hashes generados: 2026-01-04 12:00:00"
+        assert "[HTML] a.txt" in lines
+        assert any(ln.endswith("a.txt") and ln.strip().startswith("Ruta") for ln in lines)
+        assert any(ln == f"  Tamaño: {f1.stat().st_size} bytes" for ln in lines)
+
+        md5_1 = hashlib.md5(f1.read_bytes()).hexdigest()
+        sha_2 = hashlib.sha256(f2.read_bytes()).hexdigest()
+
+        assert any(ln == f"  MD5: {md5_1}" for ln in lines)
+        assert "[KML] b.txt" in lines
+        assert any(ln == f"  SHA256: {sha_2}" for ln in lines)
 
 
 class TestCopiarLogoASalida:

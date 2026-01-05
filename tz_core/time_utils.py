@@ -8,7 +8,8 @@ Extraídas del script_principal_bitacoras_refactory.py para modularización.
 Módulo de bajo riesgo - funciones sin estado y sin dependencias externas complejas.
 """
 
-from datetime import time as _time
+from datetime import time as _time, datetime as _datetime
+import re
 from typing import Optional, List, Dict, Tuple, Any
 
 import pandas as pd
@@ -38,6 +39,58 @@ def hhmmss_to_time_or_none(hh: Any) -> Optional[_time]:
     try:
         h, m, s = str(hh).strip()[:8].split(":")
         return _time(int(h), int(m), int(s))
+    except Exception:
+        return None
+
+
+def normalize_hour_to_hhmmss(value: Any) -> Optional[str]:
+    """
+    Normaliza valores horarios con separadores variados a formato HH:MM:SS.
+
+    Acepta entradas como "6.30", "14-20", "18/45", "2025-01-04 21:15:30" o
+    objetos datetime/time. Devuelve None si no puede normalizar.
+    """
+
+    if value is None:
+        return None
+
+    try:
+        if isinstance(value, float) and (np.isnan(value)):
+            return None
+    except Exception:
+        pass
+
+    s = str(value).strip()
+    if not s:
+        return None
+
+    s_lower = s.lower()
+    if s_lower in {"sin inf.", "sin inf", "s/i", "nan", "none"}:
+        return None
+
+    # 1) Intentar parsear timestamps completos o formatos estándar con pandas
+    try:
+        dt = pd.to_datetime(s, errors="coerce")
+        if not pd.isna(dt):
+            return dt.strftime("%H:%M:%S")
+    except Exception:
+        pass
+
+    # 2) Normalizar separadores variados (., -, /, espacios) a ":"
+    t = re.sub(r"\s+", "", s)
+    t = t.replace(".", ":").replace("-", ":").replace("/", ":")
+    parts = t.split(":")
+    if not parts:
+        return None
+
+    try:
+        h = int(parts[0]) if parts[0] != "" else 0
+        m = int(parts[1]) if len(parts) > 1 and parts[1] != "" else 0
+        sec = int(parts[2]) if len(parts) > 2 and parts[2] != "" else 0
+        cand = f"{h:02d}:{m:02d}:{sec:02d}"
+        # Validar rango usando datetime
+        _datetime.strptime(cand, "%H:%M:%S")
+        return cand
     except Exception:
         return None
 

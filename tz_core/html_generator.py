@@ -37,7 +37,7 @@ from tz_core.html_helpers import (
     is_valid_imei,
 )
 from tz_core.runtime_utils import collect_env_snapshot
-from tz_core.time_utils import to_datetime_silent
+from tz_core.time_utils import to_datetime_silent, normalize_hour_to_hhmmss
 from tz_core.bitacora_normalization import (
     parse_duration_seconds,
     normalize_msisdn,
@@ -238,6 +238,8 @@ def build_antennas_by_hour_section(
                 "hora_local",
                 "hora_llamada",
                 "hora_evento",
+                "hora_local_sv",
+                "hora_sv",
                 "time",
             ],
         )
@@ -257,13 +259,20 @@ def build_antennas_by_hour_section(
             return ""
 
         def _to_hour_series():
-            if col_hora is not None:
-                import warnings
+            import warnings
 
+            if col_hora is not None:
+                # 1) Normalizar con helper tolerante a separadores variados
+                norm = df[col_hora].map(normalize_hour_to_hhmmss)
+                if norm.notna().any():
+                    return norm.map(lambda v: int(v.split(":")[0]) if v else np.nan)
+
+                # 2) Fallback silencioso a pandas
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore", message="Could not infer format*", category=UserWarning)
                     s = pd.to_datetime(df[col_hora], errors="coerce").dt.hour
 
+                # 3) Fallback manual si la mayoría sigue en NaN
                 if s.isna().mean() > 0.5:
                     def _hh(x):
                         try:
@@ -274,13 +283,25 @@ def build_antennas_by_hour_section(
 
                     s = df[col_hora].map(_hh)
                 return s
+
             if col_fecha_hora is not None:
-                return pd.to_datetime(df[col_fecha_hora], errors="coerce").dt.hour
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message="Could not infer format*", category=UserWarning)
+                    return pd.to_datetime(df[col_fecha_hora], errors="coerce").dt.hour
             return None
 
         hours = _to_hour_series()
         if hours is None:
             return ""
+
+        try:
+            invalid_ratio = float(hours.isna().mean()) if len(hours) else 0.0
+            if invalid_ratio > 0.2:
+                log(
+                    f"[WARNING] Antenas por rango horario: {invalid_ratio*100:.1f}% de horas no se pudieron normalizar; revisa formato de 'hora'/'fecha_hora'."
+                )
+        except Exception:
+            pass
 
         def _lab(h):
             if h is None or np.isnan(h):

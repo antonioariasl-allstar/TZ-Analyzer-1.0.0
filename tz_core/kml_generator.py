@@ -37,7 +37,7 @@ import simplekml as sk
 
 # Imports internos del framework tz_core
 from tz_core.geo_utils import calcular_punto_final
-from tz_core.time_utils import clasificar_rango_sv, RANGOS_SV
+from tz_core.time_utils import clasificar_rango_sv, RANGOS_SV, normalize_hour_to_hhmmss
 from tz_core.color_utils import hex_to_kml_color
 from tz_core.format_utils import agregar_bloque, armar_descripcion_compacta
 from tz_core.logging_utils import log
@@ -330,20 +330,37 @@ def generar_kml(
     else:
         df["fecha"] = "Sin Inf."
 
-    if "hora" in df.columns:
+    # Detectar mejor columna de hora y normalizar a HH:MM:SS tolerando separadores variados
+    hora_candidates = [
+        "hora",
+        "hora_local",
+        "hora_llamada",
+        "hora_evento",
+        "hora_utc",
+        "hora_local_sv",
+        "hora_sv",
+        "time",
+    ]
+
+    col_hora = next((c for c in hora_candidates if c in df.columns), None)
+    if col_hora and col_hora != "hora":
+        df["hora"] = df[col_hora]
+    elif "hora" not in df.columns:
+        df["hora"] = "Sin Inf."
+
+    try:
+        horas_norm = df["hora"].apply(normalize_hour_to_hhmmss)
         try:
-            # Normalizar a HH:MM:SS para que la clasificación por rango no pierda datos
-            horas_raw = df["hora"].astype(str).str.strip()
-            horas_dt = pd.to_datetime(horas_raw, format="%H:%M:%S", errors="coerce")
-            # Fallback para entradas HH:MM sin segundos (evita el warning de inferencia)
-            faltantes = horas_dt.isna()
-            if faltantes.any():
-                horas_dt.loc[faltantes] = pd.to_datetime(horas_raw.loc[faltantes], format="%H:%M", errors="coerce")
-            df["hora"] = horas_dt.dt.strftime("%H:%M:%S")
-            df["hora"] = df["hora"].fillna("Sin Inf.")
+            invalid_ratio = float(horas_norm.isna().mean()) if len(horas_norm) else 0.0
+            if invalid_ratio > 0.2:
+                log(
+                    f"[WARNING] KML rango horario: {invalid_ratio*100:.1f}% de horas no se pudieron normalizar; revisa formato de columnas de hora."
+                )
         except Exception:
-            df["hora"] = "Sin Inf."
-    else:
+            pass
+
+        df["hora"] = horas_norm.where(horas_norm.notna(), "Sin Inf.")
+    except Exception:
         df["hora"] = "Sin Inf."
 
     # Ordenar por fecha y hora

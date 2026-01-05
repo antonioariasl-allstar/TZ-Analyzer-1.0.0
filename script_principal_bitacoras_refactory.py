@@ -496,6 +496,7 @@ from tz_core.bitacora_utils import (
 from tz_core.analytics import construir_seccion_todos_contactos, generar_historial_cambios_antena
 from tz_core.file_utils import (
     escribe_hashes_txt,
+    write_detailed_hashes_report,
     copiar_logo_a_salida,
     _copiar_logo_a_salida,
     relocate_kmz_file,
@@ -2704,22 +2705,6 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
     # --- HASHES de salida: HTML, KML y KMZ (si existen) ---
     try:
-        import hashlib
-
-        def _file_hashes(path: str) -> tuple[str, str, int]:
-            md5 = hashlib.md5()
-            sha = hashlib.sha256()
-            size = 0
-            with open(path, 'rb') as fh:
-                while True:
-                    chunk = fh.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    size += len(chunk)
-                    md5.update(chunk)
-                    sha.update(chunk)
-            return md5.hexdigest(), sha.hexdigest(), size
-
         archivos = []
         # HTML recién generado
         if os.path.exists(html_path):
@@ -2736,20 +2721,7 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
 
         if archivos:
             txt_hash = os.path.join(carpeta_salida, f"{nombre_salida}_hashes.txt")
-            lines = []
-            lines.append(f"Hashes generados: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            for etiqueta, path in archivos:
-                try:
-                    md5, sha, size = _file_hashes(path)
-                    lines.append(f"[{etiqueta}] {os.path.basename(path)}")
-                    lines.append(f"  Ruta: {path}")
-                    lines.append(f"  Tamaño: {size} bytes")
-                    lines.append(f"  MD5: {md5}")
-                    lines.append(f"  SHA256: {sha}\n")
-                except Exception as _e:
-                    lines.append(f"[{etiqueta}] {path} — error al calcular hashes: {_e}\n")
-            with open(txt_hash, 'w', encoding='utf-8') as fh:
-                fh.write("\n".join(lines).strip() + "\n")
+            write_detailed_hashes_report(txt_hash, archivos)
             try:
                 log(f"[INFO] Hashes guardados en: {txt_hash}")
             except Exception:

@@ -14,6 +14,8 @@ para mejorar reutilización y testing.
 
 import os
 import shutil
+import hashlib
+from datetime import datetime
 from typing import Callable, List, Tuple, Optional
 from .utils import sha256_de_archivo
 
@@ -40,6 +42,54 @@ def escribe_hashes_txt(dest_path: str, pares: List[Tuple[str, str]]) -> None:
     
     with open(dest_path, "w", encoding="utf-8") as fw:
         fw.write("\n".join(lines) + "\n")
+
+
+def write_detailed_hashes_report(
+    dest_path: str,
+    archivos: List[Tuple[str, str]],
+    *,
+    now_fn: Optional[Callable[[], datetime]] = None,
+) -> None:
+    """Genera un reporte de hashes MD5/SHA256 con tamaño por archivo.
+
+    Args:
+        dest_path: ruta donde escribir el reporte.
+        archivos: lista de tuplas (etiqueta, ruta_absoluta).
+        now_fn: inyectable para tests (por defecto datetime.now).
+    """
+
+    now = now_fn or datetime.now
+
+    def _file_hashes(path: str) -> tuple[str, str, int]:
+        md5 = hashlib.md5()
+        sha = hashlib.sha256()
+        size = 0
+        with open(path, "rb") as fh:
+            while True:
+                chunk = fh.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                md5.update(chunk)
+                sha.update(chunk)
+        return md5.hexdigest(), sha.hexdigest(), size
+
+    lines: list[str] = []
+    lines.append(f"Hashes generados: {now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+    for etiqueta, path in archivos:
+        try:
+            md5_hex, sha_hex, size = _file_hashes(path)
+            lines.append(f"[{etiqueta}] {os.path.basename(path)}")
+            lines.append(f"  Ruta: {path}")
+            lines.append(f"  Tamaño: {size} bytes")
+            lines.append(f"  MD5: {md5_hex}")
+            lines.append(f"  SHA256: {sha_hex}\n")
+        except Exception as exc:  # pragma: no cover - ruta corrupta/unreadable
+            lines.append(f"[{etiqueta}] {path} — error al calcular hashes: {exc}\n")
+
+    with open(dest_path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines).strip() + "\n")
 
 
 def copiar_logo_a_salida(logo_src: str, carpeta_salida: str) -> Optional[str]:
@@ -137,5 +187,6 @@ def relocate_kmz_file(
 
 # Aliases para compatibilidad con script principal
 _escribe_hashes_txt = escribe_hashes_txt
+_write_detailed_hashes_report = write_detailed_hashes_report
 _copiar_logo_a_salida = copiar_logo_a_salida
 _relocate_kmz_file = relocate_kmz_file

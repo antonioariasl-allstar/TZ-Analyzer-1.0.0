@@ -205,3 +205,17 @@ def test_build_antennas_by_hour_section_respects_override():
     assert html.count("<tr><td class='mono'>") == 1
 
 
+def test_build_antennas_by_hour_section_parses_nonstandard_hours():
+    df = html_generator.pd.DataFrame(
+        [
+            {"antena": "A1", "hora": "6.30", "lat": 13.7, "long": -89.2},
+            {"antena": "A2", "hora": "14-20", "lat": 13.71, "long": -89.21},
+            {"antena": "A3", "hora": "21/05", "lat": 13.8, "long": -89.25},
+        ]
+    )
+
+    html = html_generator.build_antennas_by_hour_section(df, {"html": {"top_antenas_n": 5}}, overrides=None)
+
+    assert "Mañana" in html and "Tarde" in html and "Noche" in html
+
+
