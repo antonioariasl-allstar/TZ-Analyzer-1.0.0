@@ -5,6 +5,15 @@
 
 ---
 
+## 📌 Actualización 04/01/2026
+- HTML/KML: la sección "Antenas por rango horario" vuelve a poblarse al normalizar horas a HH:MM:SS (incluye alias de columnas `hora_*` y usa clasificación por rango sin pérdidas).
+- KML: se corrigen carpetas por rango horario y Top por rango al asegurar horas limpias antes de clasificar.
+- Pruebas: nueva integración `tests/integration/test_manual_flow_option1.py` valida el flujo manual completo (HTML, KMZ, log) con `WizardIO` falso y dataset sintético.
+- Configuración: `config.json` ahora deja `solo_kmz=false` para generar KML+KMZ por defecto.
+- Documentación: guía de regresión manual en `docs/Manual_Flow_Regression.md` con pasos pytest y CLI opcional.
+
+---
+
 ## 📊 RESUMEN EJECUTIVO
 
 ### Estado General

@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Any, Dict, Tuple
+import warnings
 
 import pandas as pd
 
@@ -893,3 +894,17 @@ def test_run_schema_location_assistant_generates_antena_fallback():
     assert "antena" in result.columns
     assert result["antena"].str.startswith("Antena").all()
     assert result["antena"].nunique() == len(df)
+
+
+def test_normalize_wizard_datetime_fields_parses_iso_without_warnings():
+    df = pd.DataFrame({
+        "fecha": ["2025-12-31"],
+        "hora": ["10:00:00"],
+    })
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        normalized = normalize_wizard_datetime_fields(df.copy())
+
+    assert normalized.loc[0, "fecha"] == "31/12/2025"
+    assert normalized.loc[0, "hora"] == "10:00:00"

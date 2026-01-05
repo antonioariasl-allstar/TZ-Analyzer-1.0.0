@@ -66,6 +66,7 @@ def test_option1_manual_flow_generates_outputs(tmp_path: Path, monkeypatch: pyte
 
     monkeypatch.setattr(app, "_build_wizard_io", lambda: _fake_wizard_io())
     monkeypatch.setattr(app, "MANUAL_QC_MAPPING", False)
+    monkeypatch.setattr(app, "seleccionar_carpeta_salida", lambda: str(tmp_path))
 
     result = app.run_tz_analysis(
         ruta_entrada=str(excel_path),

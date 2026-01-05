@@ -332,7 +332,15 @@ def generar_kml(
 
     if "hora" in df.columns:
         try:
-            df["hora"] = df["hora"].astype(str).str[:8]
+            # Normalizar a HH:MM:SS para que la clasificación por rango no pierda datos
+            horas_raw = df["hora"].astype(str).str.strip()
+            horas_dt = pd.to_datetime(horas_raw, format="%H:%M:%S", errors="coerce")
+            # Fallback para entradas HH:MM sin segundos (evita el warning de inferencia)
+            faltantes = horas_dt.isna()
+            if faltantes.any():
+                horas_dt.loc[faltantes] = pd.to_datetime(horas_raw.loc[faltantes], format="%H:%M", errors="coerce")
+            df["hora"] = horas_dt.dt.strftime("%H:%M:%S")
+            df["hora"] = df["hora"].fillna("Sin Inf.")
         except Exception:
             df["hora"] = "Sin Inf."
     else:

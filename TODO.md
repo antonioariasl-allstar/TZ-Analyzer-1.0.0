@@ -7,10 +7,10 @@
 - `script_principal_bitacoras_refactory.py` ahora delega la rama manual en los nuevos helpers y elimina lógica duplicada; `tests/unit/test_manual_flow.py` agrega 8 casos cubriendo HTML dual-mode y generación condicional del log.
 - Se construyó un harness temporal para responder los prompts de la Opción 1 (manual) desde `run.py`, normalizando los horarios con `normalize_wizard_datetime_fields` y logrando una corrida determinista en `mi_resultado/option1_auto_20260103_232118/` (HTML + KMZ/KML revisados).
 - Post-regresión, se limpió el sinónimo accidental de `config.json` y se borraron scripts/residuos en `__pycache__`, dejando el repo listo para commit.
+- Prueba de integración en `tests/integration/test_manual_flow_option1.py` con `WizardIO` falso y dataset sintético: genera HTML/KMZ/log en un tmp y elimina la dependencia del harness temporal.
+- Guía rápida de regresión automática documentada en `docs/Manual_Flow_Regression.md` (ruta recomendada: pytest, sin `TZ_MANUAL_FLOW_AUTOMATION`).
 
 **Pendientes inmediatos:**
-- Promover el harness de Opción 1 a un `tests/integration` oficial (inyectar WizardIO + dataset synthetic) para evitar scripts temporales.
-- Documentar la guía de ejecución automática (inputs/respuestas) en `docs/` para que otros puedan repetir la regresión sin leer el código del harness.
 - Continuar la extracción del flujo manual (helpers de overrides/outputs pendientes del plan Manual Flow Split) y conectar los nuevos helpers con las pruebas existentes antes del siguiente corte.
 
 **Documentos base para retomar el contexto:**

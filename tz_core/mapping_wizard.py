@@ -122,18 +122,59 @@ def normalize_wizard_datetime_fields(
         fecha_dt: Optional[pd.Series] = None
 
         if "fecha" in df.columns:
-            fecha_dt = pd.to_datetime(df["fecha"], errors="coerce", dayfirst=True)
+            fecha_text = df["fecha"].astype(str).str.strip()
+            fecha_dt = pd.Series(pd.NaT, index=fecha_text.index)
+
+            mask_iso = fecha_text.str.match(r"^\d{4}-\d{2}-\d{2}$")
+            if mask_iso.any():
+                fecha_dt.loc[mask_iso] = pd.to_datetime(
+                    fecha_text.loc[mask_iso],
+                    format="%Y-%m-%d",
+                    errors="coerce",
+                )
+
+            mask_other = ~mask_iso
+            if mask_other.any():
+                fecha_dt.loc[mask_other] = pd.to_datetime(
+                    fecha_text.loc[mask_other],
+                    errors="coerce",
+                    dayfirst=True,
+                )
+
             df["fecha"] = fecha_dt.dt.strftime("%d/%m/%Y")
 
         if "hora" in df.columns:
-            hora_dt = pd.to_datetime(df["hora"], errors="coerce", dayfirst=True)
+            hora_text = df["hora"].astype(str).str.strip()
+            hora_dt = pd.Series(pd.NaT, index=df.index)
+
+            mask_hms = hora_text.str.match(r"^\d{1,2}:\d{2}(:\d{2})?$")
+            if mask_hms.any():
+                hora_fmt = hora_text.loc[mask_hms].str.replace(
+                    r"^(\d{1,2}:\d{2})$",
+                    r"\1:00",
+                    regex=True,
+                )
+                hora_dt.loc[mask_hms] = pd.to_datetime(
+                    hora_fmt,
+                    format="%H:%M:%S",
+                    errors="coerce",
+                )
+
+            mask_remaining = ~mask_hms & hora_text.ne("")
+            if mask_remaining.any():
+                prefixed = "1970-01-01 " + hora_text.loc[mask_remaining]
+                hora_dt.loc[mask_remaining] = pd.to_datetime(
+                    prefixed,
+                    errors="coerce",
+                    dayfirst=True,
+                )
+
             hora_out = pd.Series("", index=df.index, dtype=object)
 
             mask_ok = hora_dt.notna()
             if mask_ok.any():
                 hora_out.loc[mask_ok] = hora_dt.loc[mask_ok].dt.strftime("%H:%M:%S")
 
-            hora_text = df["hora"].astype(str).str.strip()
             mask_bad = ~mask_ok & hora_text.ne("")
             if mask_bad.any():
                 prefixed = "1970-01-01 " + hora_text.loc[mask_bad]

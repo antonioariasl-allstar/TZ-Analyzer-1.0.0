@@ -230,8 +230,27 @@ def build_antennas_by_hour_section(
         col_ant = pick_first_existing_column(df, ["antena", "antenanombre", "antena_nombre"])
         col_lat = pick_first_existing_column(df, ["lat", "latitud"])
         col_lon = pick_first_existing_column(df, ["lon", "long", "longitud"])
-        col_hora = pick_first_existing_column(df, ["hora", "time"])
-        col_fecha_hora = pick_first_existing_column(df, ["fecha y hora", "fechahora", "datetime", "timestamp"])
+        col_hora = pick_first_existing_column(
+            df,
+            [
+                "hora",
+                "hora_utc",
+                "hora_local",
+                "hora_llamada",
+                "hora_evento",
+                "time",
+            ],
+        )
+        col_fecha_hora = pick_first_existing_column(
+            df,
+            [
+                "fecha y hora",
+                "fechahora",
+                "fecha_hora",
+                "datetime",
+                "timestamp",
+            ],
+        )
         col_az = pick_first_existing_column(df, ["azimut", "azimuth", "azi", "angulo"])
 
         if not col_ant:
