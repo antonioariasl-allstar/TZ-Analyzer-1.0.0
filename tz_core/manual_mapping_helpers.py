@@ -1,6 +1,6 @@
 """Helpers for manual mapping wizard setup and execution."""
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Callable
 import warnings
 
 import pandas as pd
@@ -38,6 +38,41 @@ def prepare_manual_mapping(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], L
 
     df.attrs["_orig_cols"] = list(df.columns)
     return df, esenciales_qc, no_esenciales_qc
+
+
+def build_wizard_io(
+    log_to_system: Optional[bool] = None,
+    *,
+    log_enabled_default: bool = True,
+    log_debug: Optional[Callable[[str], None]] = None,
+    log_info: Optional[Callable[[str], None]] = None,
+    input_fn=input,
+) -> WizardIO:
+    """Create a WizardIO with optional logging hooks."""
+
+    log_enabled = log_enabled_default if log_to_system is None else bool(log_to_system)
+
+    def _wizard_input(message: str) -> str:
+        if log_enabled and log_debug:
+            try:
+                log_debug(f"[Wizard Prompt] {message.strip()}")
+            except Exception:
+                pass
+
+        try:
+            return input_fn(message)
+        except Exception:
+            return ""
+
+    def _wizard_output(message: str) -> None:
+        print(message)
+        if log_enabled and log_info:
+            try:
+                log_info(message)
+            except Exception:
+                pass
+
+    return WizardIO(input_fn=_wizard_input, output_fn=_wizard_output)
 
 
 def run_manual_mapping(

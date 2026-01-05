@@ -84,6 +84,7 @@ from tz_core.mapping_wizard import WizardIO
 from tz_core.manual_mapping_helpers import (
     prepare_manual_mapping as _prepare_manual_mapping,
     run_manual_mapping as _run_manual_mapping,
+    build_wizard_io as _build_wizard_io_helper,
 )
 from tz_core.html_helpers import fmt_datetime as fmt_dt
 from tz_core.logging_utils import (
@@ -184,6 +185,17 @@ ALIAS_VISIBLES = {
     "ubicacion": "direccion_antena",
 }
 
+
+def _build_wizard_io(log_to_system: Optional[bool] = None) -> WizardIO:
+    """Wrapper que reusa build_wizard_io con logging opcional controlado por env."""
+
+    return _build_wizard_io_helper(
+        log_to_system,
+        log_enabled_default=WIZARD_IO_LOGGING_ENABLED,
+        log_debug=log_debug,
+        log_info=log_info,
+    )
+
 # === SECCI�"N: WIZARD DE MAPEO DE COLUMNAS (detecci�n, mapeo manual, QC) ===
 # � M�DULO EXTRA&#205;DO EN EPIC 15 - 27/12/2025
 #
@@ -215,34 +227,6 @@ ALIAS_VISIBLES = {
 #
 # COMMIT: Pendiente tras validaci�n paranoica completa
 # =========================================================================
-
-
-def _build_wizard_io(log_to_system: Optional[bool] = None) -> WizardIO:
-    """Crea un WizardIO que puede silenciar logs según bandera global o argumento."""
-
-    log_enabled = WIZARD_IO_LOGGING_ENABLED if log_to_system is None else bool(log_to_system)
-
-    def _wizard_input(message: str) -> str:
-        if log_enabled:
-            try:
-                log_debug(f"[Wizard Prompt] {message.strip()}")
-            except Exception:
-                pass
-
-        try:
-            return input(message)
-        except Exception:
-            return ""
-
-    def _wizard_output(message: str) -> None:
-        print(message)
-        if log_enabled:
-            try:
-                log_info(message)
-            except Exception:
-                pass
-
-    return WizardIO(input_fn=_wizard_input, output_fn=_wizard_output)
 
 
 def _persist_user_synonym(canonical: str, encabezado: str) -> None:
