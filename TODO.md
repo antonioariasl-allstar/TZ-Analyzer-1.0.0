@@ -19,6 +19,15 @@
 - Consultar `docs/planning/manual_flow_split_plan.md` con el roadmap detallado de extracción del flujo manual.
 - Repasar `docs/CLI_USER_GUIDE.md` + `README.md` para confirmar cómo se espera ejecutar cada modo y qué dependencias requiere el CLI.
 
+## ✅ EPIC 16G: INTERACCIONES → HELPER DEDICADO (04/01/2026)
+
+**Log de avance:**
+- Se extrajo la sección “Interacciones recientes” a `tz_core/interacciones_builder.py`, preservando dropdown por día, KPIs diarios y mini heatmaps Leaflet por jornada.
+- El helper reutiliza `_pick_col`, `sanitize_latlon` y `_fmt_hms` para mantener consistencia con el monolito y respeta `sv_bbox` por defecto.
+- Usa `string.Template` para el bloque JS del heatmap, evitando conflictos de llaves con f-strings y permitiendo incrustar datos de forma segura.
+
+**Estado:** módulo listo para integrarse; el monolito mantiene la implementación inline como fallback mientras se completa el wiring y las pruebas.
+
 ## ✅ EPIC 16A: EXTRACCIÓN TOP CONTACTOS (28/12/2025)
 
 **Log de avance:**
