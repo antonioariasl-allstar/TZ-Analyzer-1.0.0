@@ -3158,6 +3158,8 @@ def main():
         logger=log,
     )
 
+    _log_dataset_stats("pre_kml_prep_meta", df)
+
     # PRE-KML: asegurar alias/usuario/abonado sin prompt (usar 'SinInf' si faltan)
     df = prep_meta_unicos(
         df,
@@ -3170,7 +3172,9 @@ def main():
     )
 
 
+    log("[salidas] Generando KML/KMZ…")
     archivo_kml, desc_coords = generar_kml(df, archivo_kml, flat=False)
+    log(f"[salidas] KML listo: {archivo_kml}")
     
     # === BLOQUE HTML/SECCIONES (repuesto) ===
     try:
@@ -3181,6 +3185,8 @@ def main():
         def _store_contactos(html):
             global HTML_SECCION_TODOS_CONTACTOS
             HTML_SECCION_TODOS_CONTACTOS = html or ""
+
+        log("[salidas] Construyendo salidas HTML/KML…")
 
         resultado_salidas = produce_case_outputs(
             df=df,
@@ -3207,6 +3213,13 @@ def main():
             set_interactions_section=_store_interacciones,
             set_contacts_section=_store_contactos,
         )
+        try:
+            html_path = resultado_salidas.get("html") if isinstance(resultado_salidas, dict) else None
+            kmz_path = resultado_salidas.get("kmz") if isinstance(resultado_salidas, dict) else None
+            hashes_path = resultado_salidas.get("hashes") if isinstance(resultado_salidas, dict) else None
+            log(f"[salidas] HTML={html_path} KMZ={kmz_path} HASHES={hashes_path}")
+        except Exception:
+            pass
     except Exception as e:
         print(f"[ERROR] Bloque HTML/KML falló: {e}")
 if __name__ == "__main__":
