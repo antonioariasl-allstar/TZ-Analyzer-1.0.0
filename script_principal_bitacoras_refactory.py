@@ -358,18 +358,13 @@ def _apply_qc_placeholders(
     logger=log,
 ):
     """Rellena placeholders 'SinInf' y devuelve listas refrescadas para QC manual."""
-
-    ensure_placeholder_columns(
-        df,
-        missing_fields,
-        placeholder="SinInf",
+    return apply_qc_placeholders(
+        df=df,
+        missing_fields=missing_fields,
+        cols_originales=cols_originales,
         target_alias=target_alias,
         logger=logger,
     )
-
-    cols = list(dict.fromkeys(cols_originales + list(df.columns)))
-    present = set(cols)
-    return cols, present
 
 
 # =========================
@@ -454,6 +449,7 @@ from tz_core.bitacora_normalization import (
 from tz_core.schema_utils import (
     prep_meta_unicos,
     ensure_placeholder_columns,
+    apply_qc_placeholders,
 )
 from tz_core.color_utils import color_mock
 from tz_core.dataframe_utils import _pick_col

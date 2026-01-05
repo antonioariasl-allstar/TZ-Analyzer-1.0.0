@@ -200,6 +200,29 @@ def ensure_placeholder_columns(
     return added
 
 
+def apply_qc_placeholders(
+    df,
+    missing_fields,
+    cols_originales,
+    target_alias,
+    *,
+    logger: Optional[Callable[[str], None]] = None,
+):
+    """Rellena placeholders 'SinInf' y devuelve listas refrescadas para QC manual."""
+
+    ensure_placeholder_columns(
+        df,
+        missing_fields,
+        placeholder="SinInf",
+        target_alias=target_alias,
+        logger=logger,
+    )
+
+    cols = list(dict.fromkeys(list(cols_originales) + list(df.columns)))
+    present = set(cols)
+    return cols, present
+
+
 def _muestras_columna(serie, n: int = 5) -> list[str]:
     """Devuelve una vista previa de hasta *n* valores no vacíos de la serie."""
 
