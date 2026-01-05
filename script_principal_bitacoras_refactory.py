@@ -52,6 +52,7 @@
 import json
 import logging
 import os
+import re
 import sys
 import time
 import traceback
@@ -79,12 +80,9 @@ from tz_core.bitacora_io import (
     seleccionar_hoja,
     cargar_excel_con_normalizacion,
 )
-from tz_core.kml_generator import generar_kml_puntos_libres
 from tz_core.mapping_wizard import (
     WizardIO,
     MappingWizard,
-    normalize_wizard_datetime_fields,
-    finalize_manual_mapping_dataframe,
 )
 from tz_core.html_helpers import fmt_datetime as fmt_dt
 from tz_core.logging_utils import (
@@ -118,13 +116,6 @@ from tz_core.manual_flow import (
     handle_manual_html_generation,
     write_minimal_filter_log_if_needed,
 )
-from tz_core.text_utils import (
-    _fix_mojibake_text,
-    _aplicar_reemplazos_regex
-)
-from tz_core.format_utils import agregar_bloque, armar_descripcion_compacta
-from tz_core.config_manager import cfg_build_rename_map, add_user_synonym, solicitar_color_tema
-from tz_core.color_utils import hex_to_kml_color
 from tz_core.html_generator import (
     generate_html_header,
     generate_body_header,
@@ -440,23 +431,12 @@ except Exception:
 # =========================
 # Configuración externa
 # =========================
-from tz_core.utils import sha256_de_archivo, compactar_ruta, sanear_nombre_archivo
+from tz_core.utils import sanear_nombre_archivo
 from tz_core.config_loader import (
     get_config as core_get_config,
     cfg_build_rename_map,
     cfg_add_user_synonym,
-    normalize_key_for_synonyms,
     solicitar_color_tema,
-)
-
-# Alias de compatibilidad para funciones de sinónimos usadas en el monolito
-_normalize_key_for_synonyms = normalize_key_for_synonyms
-from tz_core.geo_utils import grados_a_radianes, calcular_punto_final, generar_cono
-from tz_core.text_utils import (
-    normalizar_texto,
-    normalizar_columnas_texto,
-    _fix_mojibake_text,
-    normalize_header_key,
 )
 from tz_core.bitacora_normalization import (
     validate_time_sample as _valida_formato_hora,
@@ -466,23 +446,11 @@ from tz_core.bitacora_normalization import (
     parse_duration_seconds,
 )
 from tz_core.schema_utils import (
-    build_schema_synonym_map,
-    has_location_coverage,
-    collect_missing_required_fields,
     prep_meta_unicos,
     ensure_placeholder_columns,
-    preview_column_mapping,
-    confirm_column_mapping_with_preview,
-    _muestras_columna,
-    _es_numero,
-    _en_bbox_sv,
-    _es_columna_valida_para,
-    run_schema_location_assistant,
 )
-from tz_core.color_utils import hex_to_kml_color, color_mock
-from tz_core.validation_utils import tiene_valor, es_num, a_float
-from tz_core.time_utils import hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, clasificar_rango_sv, RANGOS_SV as RANGOS_SV_MODULAR
-from tz_core.dataframe_utils import dedupe_columns, _pick_col, _coalesce_duplicates, apply_schema_renames
+from tz_core.color_utils import color_mock
+from tz_core.dataframe_utils import _pick_col
 from tz_core.bitacora_utils import (
     coalesce_cols as _coalesce_cols,
     fmt_lista as _fmt_lista,
@@ -498,12 +466,6 @@ from tz_core.file_utils import (
 from tz_core.output_pipeline import produce_case_outputs
 from tz_core.html_toc import apply_toc
 from tz_core.ingestion_pipeline import run_ingestion_pipeline
-
-# Importar constantes desde tz_core para consistencia
-RANGOS_SV = RANGOS_SV_MODULAR
-
-# Alias de compatibilidad para normalización de encabezados
-_norm_head = normalize_header_key
 
 # === CONFIG & GLOBALS ===
 
