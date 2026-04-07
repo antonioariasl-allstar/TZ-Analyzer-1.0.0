@@ -59,6 +59,7 @@ def modo_manual(config: dict):
     except ImportError:
         # Fallback si no existe el módulo (mantener compatibilidad)
         def solicitar_color_tema(cfg):
+            """Solicita al usuario seleccionar tema de color para visualización."""
             return cfg
     
     from tz_core.kml_generator import generar_kml
@@ -68,6 +69,7 @@ def modo_manual(config: dict):
 
     # ==================== HELPERS LOCALES ====================
     def _input_str(msg, obligatorio=False, maxlen=None):
+        """Solicita entrada de texto con validación de obligatoriedad y longitud máxima."""
         while True:
             s = input(msg).strip()
             if s == "" and not obligatorio:
@@ -81,6 +83,7 @@ def modo_manual(config: dict):
             return s
 
     def _input_float(msg, obligatorio=False):
+        """Solicita entrada numérica de tipo float con validación y manejo de errores."""
         while True:
             s = input(msg).strip()
             if s == "" and not obligatorio:
@@ -91,6 +94,7 @@ def modo_manual(config: dict):
                 print("Valor numérico inválido. Ej: 13.71234")
 
     def _input_int(msg, obligatorio=False, minv=None, maxv=None):
+        """Solicita entrada numérica entera con validación de rango y obligatoriedad."""
         while True:
             s = input(msg).strip()
             if s == "" and not obligatorio:
@@ -106,6 +110,7 @@ def modo_manual(config: dict):
                 print("Ingrese un entero válido.")
 
     def _listar(items):
+        """Muestra en consola una lista numerada de antenas con sus datos principales."""
         if not items:
             print("No hay registros cargados.")
             return
@@ -120,6 +125,7 @@ def modo_manual(config: dict):
         print()
 
     def _armar_df(items):
+        """Construye DataFrame normalizado a partir de lista de puntos/antenas ingresados manualmente."""
         # Convertimos a DF con los nombres que ya espera tu pipeline
         df = pd.DataFrame(items)
         # Tipos
@@ -145,6 +151,7 @@ def modo_manual(config: dict):
         return sanear_nombre_archivo(s, "antenas_manual")
 
     def _nombre_auto_desde_items(items):
+        """Genera nombre de archivo automático basado en tel y alias del primer ítem disponible."""
         # toma el primer tel y el primer alias no vacios
         tel = next((it.get("tel") for it in items if it.get("tel")), None)
         alias = next((it.get("alias") for it in items if it.get("alias")), None)

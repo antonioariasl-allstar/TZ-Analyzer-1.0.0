@@ -141,12 +141,14 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
         from .validation_utils import tiene_valor
     except ImportError:
         def tiene_valor(v):
+            """Verifica si un valor es significativo (no vacío, nulo o cero)."""
             return v is not None and str(v).strip() not in ("", "nan", "None", "—")
     
     P = []
     
     # Función helper para formatear campos
     def fmt(col):
+        """Formatea un valor individual de campo para presentación en burbuja HTML."""
         v = campos.get(col, None)
         if not tiene_valor(v):
             return None
@@ -251,6 +253,7 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
 
     # Normalizador para comparar direccion vs antena
     def _norm_text(s):
+        """Normaliza texto eliminando diacríticos, espacios múltiples y convirtiendo a minúsculas."""
         if s is None:
             return ""
         try:
@@ -322,6 +325,7 @@ def agregar_bloque(partes: list, fila: dict, pares: list) -> None:
         from .validation_utils import tiene_valor
     except ImportError:
         def tiene_valor(v):
+            """Verifica si un valor es significativo (no vacío, nulo o cero)."""
             return v is not None and str(v).strip() not in ("", "nan", "None", "—")
     
     bloque = []
