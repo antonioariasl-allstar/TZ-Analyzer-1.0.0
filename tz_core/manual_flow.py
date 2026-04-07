@@ -210,7 +210,10 @@ def handle_manual_html_generation(
     logger: Callable[[str], None],
     output_fn: Callable[[str], None],
     generar_html_fn: Callable[[pd.DataFrame, str, str, str, Optional[str]], str],
-    relocate_kmz_fn: Callable[..., None],
+    override_tops: Optional[Dict[str, Any]] = None,
+    html_seccion_interacciones: Optional[str] = None,
+    html_seccion_todos_contactos: Optional[str] = None,
+    relocate_kmz_fn: Callable[..., None] = None,
 ) -> Optional[str]:
     """Gestiona la rama legacy/manual de HTML previo a `produce_case_outputs`."""
 
@@ -233,7 +236,19 @@ def handle_manual_html_generation(
         return None
 
     try:
-        informe_html = generar_html_fn(df, archivo_kml, carpeta_salida, nombre_salida, hoja)
+        informe_html = generar_html_fn(
+            df=df,
+            archivo_kml=archivo_kml,
+            carpeta_salida=carpeta_salida,
+            nombre_salida=nombre_salida,
+            hoja=hoja,
+            nombre_bitacora=None,
+            config=config,
+            override_tops=override_tops,
+            html_seccion_interacciones=html_seccion_interacciones,
+            html_seccion_todos_contactos=html_seccion_todos_contactos,
+            logger=logger,
+        )
         output_fn(f"Informe HTML generado (modo legacy): {informe_html}")
     except Exception as exc:  # pragma: no cover - mantiene compatibilidad legacy
         output_fn(f"[ERROR] No se pudo generar el HTML (modo legacy): {exc}")

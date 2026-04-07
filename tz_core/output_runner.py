@@ -7,6 +7,7 @@ def run_outputs_flow(
     *,
     df,
     config,
+    override_tops=None,
     nombre_salida: str,
     archivo_kml: str,
     carpeta_base: str,
@@ -38,6 +39,7 @@ def run_outputs_flow(
         resultado_salidas = produce_fn(
             df=df,
             config=config,
+            override_tops=override_tops,
             nombre_salida=nombre_salida,
             archivo_kml=archivo_kml,
             carpeta_base=carpeta_base,

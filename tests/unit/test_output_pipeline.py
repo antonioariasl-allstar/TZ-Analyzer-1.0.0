@@ -31,7 +31,7 @@ def test_produce_outputs_generates_assets(tmp_path):
     summary_calls = []
     hashes_written = {}
 
-    def generar_html(df, archivo_kml, carpeta_salida, nombre, hoja, nombre_bitacora):
+    def generar_html(df, archivo_kml, carpeta_salida, nombre_salida, hoja, nombre_bitacora, **kwargs):
         html_target.write_text("html", encoding="utf-8")
         return str(html_target)
 
@@ -105,7 +105,7 @@ def test_produce_outputs_handles_interaction_errors(tmp_path):
     def bad_interactions(*args, **kwargs):
         raise ValueError("boom")
 
-    def generar_html(df, archivo_kml, carpeta_salida, nombre, hoja, nombre_bitacora):
+    def generar_html(df, archivo_kml, carpeta_salida, nombre_salida, hoja, nombre_bitacora, **kwargs):
         html_target.write_text("html", encoding="utf-8")
         return str(html_target)
 
@@ -143,17 +143,8 @@ def test_produce_outputs_handles_interaction_errors(tmp_path):
     assert section_flag.get("inter") == ""
 
 
-def test_generar_informe_html_inserta_interacciones(tmp_path, monkeypatch):
-    import script_principal_bitacoras_refactory as monolith
-
-    # Forzar config mínima y sección precalculada
-    monkeypatch.setattr(monolith, "CONFIG", {}, raising=False)
-    monkeypatch.setattr(
-        monolith,
-        "HTML_SECCION_INTERACCIONES",
-        '<section id="interacciones-recientes">ok</section>',
-        raising=False,
-    )
+def test_generar_informe_html_inserta_interacciones(tmp_path):
+    from tz_core.html_generator import generar_informe_html
 
     df = pd.DataFrame(
         {
@@ -164,35 +155,25 @@ def test_generar_informe_html_inserta_interacciones(tmp_path, monkeypatch):
             "long": [-88.9],
         }
     )
-
     out_dir = tmp_path
     kml_path = out_dir / "caso.kml"
     kml_path.write_text("kml", encoding="utf-8")
-
-    html_path = monolith.generar_informe_html(
-        df,
-        str(kml_path),
-        str(out_dir),
-        "caso",
+    html_path = generar_informe_html(
+        df=df,
+        archivo_kml=str(kml_path),
+        carpeta_salida=str(out_dir),
+        nombre_salida="caso",
         hoja=None,
         nombre_bitacora=None,
+        config={},
+        html_seccion_interacciones='<section id="interacciones-recientes">ok</section>',
     )
-
     contenido = Path(html_path).read_text(encoding="utf-8")
     assert "interacciones-recientes" in contenido
 
 
-def test_generar_informe_html_inserta_todos_contactos(tmp_path, monkeypatch):
-    import script_principal_bitacoras_refactory as monolith
-
-    # Forzar config mínima y sección precalculada
-    monkeypatch.setattr(monolith, "CONFIG", {}, raising=False)
-    monkeypatch.setattr(
-        monolith,
-        "HTML_SECCION_TODOS_CONTACTOS",
-        '<section id="todos-contactos">ok</section>',
-        raising=False,
-    )
+def test_generar_informe_html_inserta_todos_contactos(tmp_path):
+    from tz_core.html_generator import generar_informe_html
 
     df = pd.DataFrame(
         {
@@ -205,19 +186,18 @@ def test_generar_informe_html_inserta_todos_contactos(tmp_path, monkeypatch):
             "duracion": [30],
         }
     )
-
     out_dir = tmp_path
     kml_path = out_dir / "caso.kml"
     kml_path.write_text("kml", encoding="utf-8")
-
-    html_path = monolith.generar_informe_html(
-        df,
-        str(kml_path),
-        str(out_dir),
-        "caso",
+    html_path = generar_informe_html(
+        df=df,
+        archivo_kml=str(kml_path),
+        carpeta_salida=str(out_dir),
+        nombre_salida="caso",
         hoja=None,
         nombre_bitacora=None,
+        config={},
+        html_seccion_todos_contactos='<section id="todos-contactos">ok</section>',
     )
-
     contenido = Path(html_path).read_text(encoding="utf-8")
     assert "todos-contactos" in contenido

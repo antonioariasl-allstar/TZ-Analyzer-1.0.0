@@ -1,4 +1,4 @@
-# ======================================================================
+﻿# ======================================================================
 #                 T Z   A N A L Y S I S  —  MAPA DE SECCIONES
 # ======================================================================
 # Este archivo implementa el motor principal del procesador forense TZ Analyzer.
@@ -126,7 +126,7 @@ from tz_core.manual_flow import (
     write_minimal_filter_log_if_needed,
 )
 from tz_core.html_generator import (
-    generar_informe_html as _generar_informe_html_core,
+    generar_informe_html as generar_informe_html_core,
     prepare_report_metrics,
     generate_html_header,
     generate_body_header,
@@ -420,23 +420,6 @@ OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejec
 HTML_SECCION_INTERACCIONES = ""
 
 from tz_core.time_utils import to_datetime_silent, _to_datetime_series, _fmt_hms
-def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str, nombre_salida: str, hoja: str | None = None, nombre_bitacora: str | None = None) -> str:
-    """Wrapper — delega a tz_core.html_generator.generar_informe_html."""
-    return _generar_informe_html_core(
-        df=df,
-        archivo_kml=archivo_kml,
-        carpeta_salida=carpeta_salida,
-        nombre_salida=nombre_salida,
-        hoja=hoja,
-        nombre_bitacora=nombre_bitacora,
-        config=CONFIG if 'CONFIG' in globals() and isinstance(CONFIG, dict) else None,
-        override_tops=OVERRIDE_TOPS if 'OVERRIDE_TOPS' in globals() and isinstance(OVERRIDE_TOPS, dict) else None,
-        html_seccion_interacciones=globals().get("HTML_SECCION_INTERACCIONES"),
-        html_seccion_todos_contactos=globals().get("HTML_SECCION_TODOS_CONTACTOS"),
-        logger=log,
-    )
-
-
 
 # --- Anti-hojas: ignorar ocultas y elegir visible ---
 
@@ -755,7 +738,10 @@ def main():
         carpeta_base=carpeta_base,
         logger=log,
         output_fn=print,
-        generar_html_fn=generar_informe_html,
+        generar_html_fn=generar_informe_html_core,
+        override_tops=OVERRIDE_TOPS,
+        html_seccion_interacciones=HTML_SECCION_INTERACCIONES,
+        html_seccion_todos_contactos=globals().get("HTML_SECCION_TODOS_CONTACTOS"),
         relocate_kmz_fn=relocate_kmz_file,
     )
 
@@ -797,6 +783,7 @@ def main():
     run_outputs_flow(
         df=df,
         config=CONFIG,
+        override_tops=OVERRIDE_TOPS,
         nombre_salida=nombre_salida,
         archivo_kml=archivo_kml,
         carpeta_base=carpeta_base,
@@ -807,7 +794,7 @@ def main():
         desc_coords=desc_coords,
         build_interactions_section=construir_seccion_interacciones,
         build_contacts_section=construir_seccion_todos_contactos,
-        generar_html_fn=generar_informe_html,
+        generar_html_fn=generar_informe_html_core,
         relocate_kmz_fn=relocate_kmz_file,
         write_hashes_fn=escribe_hashes_txt,
         produce_fn=produce_case_outputs,

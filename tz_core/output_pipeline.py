@@ -28,6 +28,7 @@ def produce_case_outputs(
     *,
     df: pd.DataFrame,
     config: Optional[Dict[str, Any]],
+    override_tops: Optional[Dict[str, Any]] = None,
     nombre_salida: str,
     archivo_kml: str,
     carpeta_base: str,
@@ -94,12 +95,17 @@ def produce_case_outputs(
     nombre_bitacora = os.path.basename(archivo_entrada) if archivo_entrada else None
     try:
         informe_html = generar_html_fn(
-            df,
-            archivo_kml,
-            carpeta_salida,
-            nombre_salida,
-            hoja,
-            nombre_bitacora,
+            df=df,
+            archivo_kml=archivo_kml,
+            carpeta_salida=carpeta_salida,
+            nombre_salida=nombre_salida,
+            hoja=hoja,
+            nombre_bitacora=nombre_bitacora,
+            config=config,
+            override_tops=override_tops,
+            html_seccion_interacciones=interactions_html,
+            html_seccion_todos_contactos=contacts_html,
+            logger=logger,
         )
         output_fn(f"Informe HTML generado en: {informe_html}")
     except Exception as exc:

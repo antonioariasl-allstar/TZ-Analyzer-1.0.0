@@ -126,7 +126,7 @@ def test_handle_manual_html_generation_legacy_path_is_returned():
         called["relocated"] = True
         raise AssertionError("No debe relocalizar en modo legacy")
 
-    def _fake_generate(df, archivo_kml, carpeta_salida, nombre_salida, hoja):
+    def _fake_generate(df, archivo_kml, carpeta_salida, nombre_salida, hoja, **kwargs):
         assert archivo_kml == "archivo.kml"
         assert carpeta_salida == "carpeta_salida"
         assert nombre_salida == "CASO-123"
