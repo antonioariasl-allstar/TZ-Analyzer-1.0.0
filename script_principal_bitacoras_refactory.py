@@ -1,4 +1,4 @@
-﻿# ======================================================================
+# ======================================================================
 #                 T Z   A N A L Y S I S  —  MAPA DE SECCIONES
 # ======================================================================
 # Este archivo implementa el motor principal del procesador forense TZ Analyzer.
@@ -44,6 +44,19 @@
 #
 # NOTA: Este bloque solo documenta y ordena la lectura del archivo. No modifica funcionalidad.
 # ======================================================================
+
+"""
+TZ-Analyzer — Orquestador Principal
+
+Punto de entrada y orquestador del flujo de análisis de bitácoras telefónicas.
+Coordina la carga de configuración, validación de datos, y delega el procesamiento
+a los módulos especializados en tz_core/ (normalización, generación HTML/KML,
+análisis de interacciones, etc.).
+
+No contiene lógica de procesamiento directa — toda la lógica reside en tz_core/.
+
+Architecture: TZ-Analyzer v1.0.0
+"""
 
 #===============================================================================
 # === SECCIÓN 0 · IMPORTS & CONFIG ===
@@ -253,13 +266,18 @@ def _persist_user_synonym(canonical: str, encabezado: str) -> None:
 
 # Crear objetos que simulan las variables globales originales
 class _LogsCompat:
+    """Wrapper de compatibilidad que emula una lista de logs para código legacy."""
     def __iter__(self):
+        """Itera sobre los logs almacenados."""
         return iter(get_logs())
     def __len__(self):
+        """Retorna el número de logs."""
         return get_logs_count()
     def __getitem__(self, key):
+        """Accede a un log por índice."""
         return get_logs()[key]
     def append(self, item):
+        """Agrega un log, extrayendo el mensaje sin timestamp si ya lo tiene."""
         # Para compatibilidad con código que hace LOGS.append()
         # Extraer el mensaje sin timestamp si ya lo tiene
         if item.startswith('[') and '] ' in item:
@@ -272,13 +290,18 @@ class _LogsCompat:
             _log_impl(item)
 
 class _PlaceholdersCompat:
+    """Wrapper de compatibilidad que emula un set de placeholders para código legacy."""
     def __iter__(self):
+        """Itera sobre los placeholders de log."""
         return iter(get_log_placeholders())
     def __len__(self):
+        """Retorna el número de placeholders."""
         return len(get_log_placeholders())
     def __contains__(self, item):
+        """Verifica si un placeholder existe en el conjunto."""
         return has_log_placeholder(item)
     def add(self, item):
+        """Agrega un placeholder al conjunto."""
         add_log_placeholder(item)
 
 LOGS = _LogsCompat()
@@ -317,9 +340,11 @@ except Exception:
     from datetime import datetime
 
     def validar_columnas(dataframe, columnas_esperadas):
+        """Retorna lista de columnas esperadas que faltan en el dataframe."""
         return [col for col in columnas_esperadas if col not in dataframe.columns]
 
     def validar_datos(df, columnas_esenciales):
+        """Valida datos del DataFrame: columnas esenciales, formatos de fecha/hora y coordenadas."""
         errores = []
         faltantes = validar_columnas(df, columnas_esenciales)
         if faltantes:
@@ -357,6 +382,7 @@ except Exception:
         return df, errores
 
     def guardar_errores(errores, carpeta_salida, nombre_base):
+        """Guarda los errores detectados en archivo errores.txt en la carpeta de salida."""
         os.makedirs(carpeta_salida, exist_ok=True)
         # ahora: usar siempre el BASE unificado
         archivo_errores = os.path.join(carpeta_salida, "errores.txt")
@@ -495,12 +521,14 @@ def run_tz_analysis(
         _snapshot = mp_ctx.get("snapshot")
     except Exception:
         def _snapshot(folder):
+            """Toma snapshot de archivos en folder de forma recursiva, retorna set de paths."""
             try:
                 return set(glob.glob(os.path.join(folder, "**/*"), recursive=True))
             except Exception:
                 return set()
 
         def restore():
+            """Función placeholder para restauración (no implementada)."""
             pass
 
         out_root = carpeta_salida or os.getcwd()
@@ -529,6 +557,7 @@ def run_tz_analysis(
 
     # Heurística simple: tomar los más recientes por extensión
     def _pick(exts):
+        """Busca y retorna el archivo más reciente con extensión en exts desde archivos creados."""
         cands = [p for p in created if os.path.splitext(p)[1].lower() in exts]
         if not cands:
             # buscar también en subcarpetas nuevas
@@ -581,11 +610,13 @@ def main():
     log("Mostrando menú principal de opciones...")
 
     def _run_manual_mode() -> None:
+        """Ejecuta el modo manual de antenas y registra el inicio y finalización."""
         log("Iniciando modo manual de antenas...")
         _modo_manual()
         log("Regresando del modo manual al menú principal")
 
     def _pick_color(cfg):
+        """Solicita configuración de tema de colores al usuario y retorna el color seleccionado."""
         log("Solicitando configuración de tema de colores...")
         return solicitar_color_tema(cfg)
 
@@ -626,6 +657,7 @@ def main():
 
     # === VALIDACIÓN DE SCHEMA (aborto elegante) — INICIO =======================
     def validate_schema_or_abort_local(df):
+        """Valida el esquema del DataFrame y aborta si hay errores críticos."""
         return validate_schema_or_abort(
             df,
             config=CONFIG,
@@ -685,7 +717,7 @@ def main():
     if not run_health_checks(df, logger=log, output_fn=print):
         return
 
-    # Salidas (delegado a helper para reducir superficie del monolito)
+    # Salidas (delegado a helper para modularidad)
     nombre_base = os.path.splitext(os.path.basename(archivo_entrada))[0]
 
     output_setup = prepare_output_setup(
@@ -773,10 +805,12 @@ def main():
 
     # === BLOQUE HTML/SECCIONES (delegado) ===
     def _store_interacciones(html):
+        """Almacena el HTML de la sección de interacciones en variable global."""
         global HTML_SECCION_INTERACCIONES
         HTML_SECCION_INTERACCIONES = html or ""
 
     def _store_contactos(html):
+        """Almacena el HTML de la sección de todos los contactos en variable global."""
         global HTML_SECCION_TODOS_CONTACTOS
         HTML_SECCION_TODOS_CONTACTOS = html or ""
 

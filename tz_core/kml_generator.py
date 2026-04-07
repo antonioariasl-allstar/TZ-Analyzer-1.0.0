@@ -133,6 +133,7 @@ def _crear_feature_kml(
             
             # Normalizar IDs numéricos (quitar .0 al final de TEL/IMEI)
             def _fix_id_line(s: str) -> str:
+                """Elimina el '.0' de números en líneas de IMEI/Número para formato limpio."""
                 if ("<b>IMEI" in s) or ("<b>Número" in s) or ("<b>Numero" in s):
                     return re.sub(r'(\d+)\.0\b', r'\1', s)
                 return s
@@ -633,15 +634,18 @@ def generar_kml(
 
             # Helpers de normalización
             def _sin_tildes(s):
+                """Elimina acentos y tildes de un string reemplazándolos con caracteres ASCII."""
                 return (s.replace("á","a").replace("é","e").replace("í","i")
                        .replace("ó","o").replace("ú","u").replace("Á","A")
                        .replace("É","E").replace("Í","I").replace("Ó","O")
                        .replace("Ú","U").replace("ñ","n").replace("Ñ","N"))
 
             def _norm_key(k):
+                """Normaliza clave de columna: sin tildes, minúsculas, sin espacios."""
                 return _sin_tildes(str(k).strip().lower())
 
             def _norm_val(v):
+                """Normaliza valor: retorna 'SinInf' si es None, NaN o vacío, sino el string del valor."""
                 try:
                     if v is None: return "SinInf"
                     if isinstance(v, float) and math.isnan(v): return "SinInf"
@@ -675,6 +679,7 @@ def generar_kml(
 
             # Formatear azimuts sin .0
             def _fmt_az(v):
+                """Formatea azimut: entero si es entero, decimal sin ceros trailing, o string original."""
                 try:
                     f = float(v)
                     return str(int(f)) if f.is_integer() else str(f).rstrip('0').rstrip('.')
@@ -697,6 +702,7 @@ def generar_kml(
                 _label_dir_top = "Direccion"
 
             def _norm_text(s):
+                """Normaliza texto: NFKD, sin acentos, espacios normalizados, minúsculas."""
                 if s is None:
                     return ""
                 try:

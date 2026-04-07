@@ -1,21 +1,16 @@
 """
-TZ-Analyzer-1.0.0 HTML Generator Module
+TZ-Analyzer — HTML Generator Module
 
-Módulo especializado para la generación de secciones HTML del informe de bitácora.
-Extraído de generar_informe_html() para mejorar modularidad y mantenibilidad.
+Módulo principal de generación de informes HTML para bitácoras telefónicas.
+Contiene toda la lógica de construcción del reporte: estructura HTML, estilos,
+componentes visuales (headers, KPIs, tablas de antenas), secciones de contenido
+(interacciones, contactos, mapas de calor) e inyección de metadatos técnicos.
 
-FASE 2 - HTML Generator Extraction Epic
-Responsabilidades:
-- Generación de estructura HTML base (head, styles, body)
-- Componentes visuales (headers, metadatos, KPIs)
-- Secciones de contenido especializado
+La función principal es generar_informe_html(), que orquesta todas las secciones.
 
-Author: AI Agent + Human Collaboration
-Last Modified: 2025-12-27
-Architecture: TZ-Analyzer Professional v1.0.0
+Architecture: TZ-Analyzer v1.0.0 — tz_core package
 """
 
-# Imports necesarios para construir_seccion_interacciones
 import base64
 import json
 import mimetypes
@@ -358,6 +353,7 @@ def build_top_antennas_section(
             return ""
 
         def _valid_latlon(lt, lg):
+            """Valida si coordenadas lat/lon son válidas y dentro del bbox configurado."""
             try:
                 lt = float(lt)
                 lg = float(lg)
@@ -510,6 +506,7 @@ def build_antennas_by_hour_section(
             return ""
 
         def _to_hour_series():
+            """Extrae hora como entero de columna de hora usando normalización o pandas."""
             import warnings
 
             if col_hora is not None:
@@ -526,6 +523,7 @@ def build_antennas_by_hour_section(
                 # 3) Fallback manual si la mayoría sigue en NaN
                 if s.isna().mean() > 0.5:
                     def _hh(x):
+                        """Extrae componente de hora (entero) de un valor datetime/string en formato HH:MM:SS."""
                         try:
                             x = str(x)
                             return int(x.split(":")[0])
@@ -555,6 +553,7 @@ def build_antennas_by_hour_section(
             pass
 
         def _lab(h):
+            """Genera etiqueta de periodo del día según la hora (Mañana/Tarde/Noche)."""
             if h is None or np.isnan(h):
                 return None
             h = int(h)
@@ -574,6 +573,7 @@ def build_antennas_by_hour_section(
         ]
 
         def _fmt(x):
+            """Formatea número flotante con 6 decimales o retorna '—' si falla."""
             try:
                 x = float(x)
                 return f"{x:.6f}"
@@ -581,6 +581,7 @@ def build_antennas_by_hour_section(
                 return "—"
 
         def _first_valid_geo(sub_ant):
+            """Retorna las primeras coordenadas válidas (lat, lon) no-cero de un subset de antenas."""
             if col_lat and col_lon:
                 tmp = sub_ant[[col_lat, col_lon]].dropna()
                 if not tmp.empty:
@@ -846,13 +847,6 @@ section{{margin-top:22px}}
 
 </head>"""
 
-# TODO: Más funciones se añadirán en FASE 2.2, 2.3, 2.4...
-# - generate_body_header()
-# - generate_metadata_section() 
-# - generate_kpi_section()
-# - generate_top_antenas_section()
-# etc.
-
 
 def generate_body_header(logo_html: str, nombre_salida: str, hoja: str | None, gen_dt: str, config_dict: dict = None) -> str:
     """
@@ -1055,6 +1049,7 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
     imsi_raw = first_nonempty_in(df, imsi_cols)
 
     def _coerce_float_str(value):
+        """Convierte valor a float y retorna string formateado o el valor original si falla."""
         if value is None:
             return None
         try:
@@ -1069,6 +1064,7 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
     imsi_val = _coerce_float_str(imsi_raw) if imsi_raw is not None else None
 
     def _ask_if_missing(label_visible: str, current_value, col_name: str):
+        """Pregunta al usuario si falta un dato y retorna el valor ingresado o actual."""
         try:
             val_actual = (str(current_value).strip() if current_value is not None else "")
         except Exception:
@@ -1099,6 +1095,7 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
     imsi_n = nunique_in(df, imsi_cols)
 
     def _fmt_uni(val, count):
+        """Formatea valor único para display: retorna 'múltiples' si count>1, valor si existe, None sino."""
         if count > 1:
             return f"múltiples ({count})"
         if val:
@@ -1190,12 +1187,14 @@ def build_top_contacts_sections(
         df = pd.DataFrame()
 
     def _to_seconds_any(x) -> float:
+        """Convierte duración en cualquier formato a segundos usando parse_duration_seconds."""
         try:
             return float(parse_duration_seconds(x, default=0.0))
         except Exception:
             return 0.0
 
     def _fmt_hms(sec: float) -> str:
+        """Formatea segundos a formato HH:MM:SS o MM:SS según duración."""
         sec = int(round(sec))
         h = sec // 3600
         m = (sec % 3600) // 60
@@ -1233,6 +1232,7 @@ def build_top_contacts_sections(
     top_contactos_dur_html = note_no_dur if not d_col else "<p class='small'>No hay columna de contacto.</p>"
 
     def _resolve_top_limit() -> int:
+        """Resuelve el límite de top contactos desde overrides, config o default 10."""
         try:
             if overrides and isinstance(overrides, dict) and overrides.get("contactos") is not None:
                 return int(overrides.get("contactos"))
@@ -1358,12 +1358,14 @@ def construir_seccion_interacciones(df, dias=3, columnas_config=None, CONFIG=Non
 
     # Helpers
     def _pick_col(df, candidatos):
+        """Selecciona y retorna la primera columna existente de una lista de candidatas."""
         for c in candidatos:
             if c and c in df.columns:  # Ignora None y strings vac├¡os
                 return c
         return None
 
     def _to_datetime_series(df):
+        """Convierte DataFrame a Series datetime combinando fecha+hora o columnas datetime."""
         # Intento 1: combinaci├│n fecha + hora
         if 'fecha' in df.columns and 'hora' in df.columns:
             try:
@@ -1384,6 +1386,7 @@ def construir_seccion_interacciones(df, dias=3, columnas_config=None, CONFIG=Non
         return pd.Series(pd.NaT, index=df.index)
 
     def _fmt_hms(total_seconds):
+        """Formatea segundos totales a formato HH:MM:SS con manejo de errores."""
         try:
             total_seconds = float(total_seconds)
         except Exception:
@@ -1560,6 +1563,7 @@ def construir_seccion_interacciones(df, dias=3, columnas_config=None, CONFIG=Non
 
         # Validador de coordenadas con bbox El Salvador
         def _es_valida_latlon_row(row):
+            """Valida si la fila tiene coordenadas lat/lon válidas y dentro del bbox."""
             try:
                 lt = float(row[col_lat]) if (col_lat and col_lat in df_d.columns) else None
                 lg = float(row[col_long]) if (col_long and col_long in df_d.columns) else None
@@ -1632,6 +1636,7 @@ def construir_seccion_interacciones(df, dias=3, columnas_config=None, CONFIG=Non
         out.append('<thead><tr>' + ''.join(f'<th>{c}</th>' for c in thead_cols) + '</tr></thead><tbody>')
 
         def _fmt_coord(val):
+            """Formatea coordenada numérica a string con 6 decimales o '—' si es inválida."""
             try:
                 if val is None:
                     return 'ÔÇö'
@@ -1643,6 +1648,7 @@ def construir_seccion_interacciones(df, dias=3, columnas_config=None, CONFIG=Non
                 return 'ÔÇö'
 
         def _fmt_az(v):
+            """Formatea valor de azimut a string entero redondeado o '—' si es inválido."""
             if v is None:
                 return 'ÔÇö'
             try:
@@ -1653,6 +1659,7 @@ def construir_seccion_interacciones(df, dias=3, columnas_config=None, CONFIG=Non
                 return s if s else 'ÔÇö'
 
         def _fmt_hora(row):
+            """Formatea hora de fila extrayendo de columna hora o datetime, retorna '—' si falla."""
             try:
                 if col_hora and (col_hora in row.index):
                     s = str(row[col_hora]).strip()
@@ -1664,6 +1671,7 @@ def construir_seccion_interacciones(df, dias=3, columnas_config=None, CONFIG=Non
             return 'ÔÇö'
 
         def _ant_fmt_link(ant, lt, lg):
+            """Formatea nombre de antena como enlace HTML a Google Maps si tiene coordenadas válidas."""
             try:
                 if ant and (lt is not None) and (lg is not None):
                     lt_f = float(lt); lg_f = float(lg)
@@ -1715,6 +1723,7 @@ def construir_seccion_interacciones(df, dias=3, columnas_config=None, CONFIG=Non
         # === ALERTAS-2: avisos por fecha (concentraci├│n, movilidad, calidad) ===
         # Helper: distancia (km)
         def _haversine_km(lat1, lon1, lat2, lon2):
+            """Calcula distancia en kilómetros entre dos puntos usando fórmula haversine."""
             from math import radians, sin, cos, sqrt, atan2
             R = 6371.0
             lat1, lon1, lat2, lon2 = map(float, (lat1, lon1, lat2, lon2))
@@ -1726,6 +1735,7 @@ def construir_seccion_interacciones(df, dias=3, columnas_config=None, CONFIG=Non
 
         # Helper: enmascarar contacto si est├í activado en CONFIG
         def _mask_contact(s):
+            """Enmascara número de contacto para privacidad según configuración, reemplazando con '*'."""
             try:
                 if 'CONFIG' in globals() and isinstance(CONFIG, dict):
                     cfg = CONFIG.get("html", {})
@@ -2136,6 +2146,7 @@ def _build_meta_block(snapshot: dict[str, str], modo: str, mostrar_versiones: bo
 
 
 def _inject_block(html: str, block: str) -> tuple[str, bool]:
+    """Inyecta un bloque HTML antes de la primera sección con 'meta' en su etiqueta."""
     lower_html = html.lower()
     idx = lower_html.find("<section")
     while idx != -1:
@@ -2469,6 +2480,7 @@ def generar_informe_html(
     try:
         # Columnas y validadores reutilizados por heatmap/rangos
         def _pick_col(_df, candidatos):
+            """Selecciona y retorna la primera columna existente de una lista de candidatas."""
             for c in candidatos:
                 if c in _df.columns:
                     return c
@@ -2487,6 +2499,7 @@ def generar_informe_html(
             _bbox = {"lat_min": 12.9, "lat_max": 14.5, "lon_min": -90.3, "lon_max": -87.6}
 
         def _valid_latlon(lt, lg):
+            """Valida si coordenadas lat/lon son válidas y dentro del bbox configurado."""
             try:
                 lt = float(lt); lg = float(lg)
                 if np.isnan(lt) or np.isnan(lg):
@@ -3380,6 +3393,7 @@ def generar_informe_html(
         # TOC-REFRESH: reconstruir índice final (orden objetivo) y reemplazar el anterior
     try:
         def _has(id_): 
+            """Verifica si el HTML contiene un elemento con el ID especificado."""
             return f'id="{id_}"' in html
 
         _links = []
