@@ -370,7 +370,8 @@ def generar_kml(
         pass
 
     # === PREPARAR ITEMS (un dict por cada fila válida) ===
-    desc_spec = config["kml"]["description"]
+    kml_cfg = (config or {}).get("kml", {})
+    desc_spec = kml_cfg.get("description", [])
 
     def _first_available(row_obj, *cols):
         """Return first column with a meaningful value for backwards compatibility."""
