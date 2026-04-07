@@ -113,6 +113,7 @@ def normalize_header_key(value: Any) -> str:
 
 
 def _norm_head(value: Any) -> str:  # pragma: no cover
+    """Alias interno de normalize_header_key para compatibilidad."""
     return normalize_header_key(value)
 
 

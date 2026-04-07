@@ -168,8 +168,10 @@ _aplicar_alias = aplicar_filtros_tiempo
 
 
 def _solicitar_filtros_tiempo() -> FiltroTiempo:  # pragma: no cover - compat
+    """Alias interno de solicitar_filtros_tiempo para compatibilidad."""
     return _def_alias()
 
 
 def _aplicar_filtros_tiempo(df: pd.DataFrame, filtros: FiltroTiempo) -> Tuple[pd.DataFrame, str]:  # pragma: no cover
+    """Alias interno de aplicar_filtros_tiempo para compatibilidad."""
     return _aplicar_alias(df, filtros)
