@@ -29,10 +29,10 @@ except ImportError:
     pytest = None
 
 from script_principal_bitacoras_refactory import (
-    generar_kml,
     generar_informe_html,
     bootstrap_config,
 )
+from tz_core.kml_generator import generar_kml
 from tests.normalize_outputs import normalize_kml_from_kmz, normalize_html
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -77,7 +77,7 @@ if pytest:
         kmz_base = os.path.join(out_dir, 'e2e.kml')
 
         # Act
-        generar_kml(df, kmz_base, flat=False)
+        generar_kml(df, kmz_base, config={}, flat=False)
         html_path = generar_informe_html(
             df=df,
             archivo_kml=kmz_base,
@@ -130,7 +130,7 @@ def test_kmz_estructura_basica_sintetica():
         
         # Inicializar config y generar KML/KMZ
         bootstrap_config()
-        generar_kml(df, out_kml, flat=False)
+        generar_kml(df, out_kml, config={}, flat=False)
         
         # Validar que se generó el KMZ
         kmz_path = os.path.splitext(out_kml)[0] + ".kmz"
@@ -182,7 +182,7 @@ def test_kml_business_logic_validation():
         }])
         
         out_kml_1 = os.path.join(tmp_dir, "case1.kml")
-        generar_kml(df_case1, out_kml_1, flat=True)
+        generar_kml(df_case1, out_kml_1, config={}, flat=True)
         kmz_path_1 = os.path.splitext(out_kml_1)[0] + ".kmz"
         kml_content_1 = extract_kml_from_kmz(kmz_path_1)
         
@@ -200,7 +200,7 @@ def test_kml_business_logic_validation():
         }])
         
         out_kml_2 = os.path.join(tmp_dir, "case2.kml")
-        generar_kml(df_case2, out_kml_2, flat=True)
+        generar_kml(df_case2, out_kml_2, config={}, flat=True)
         kmz_path_2 = os.path.splitext(out_kml_2)[0] + ".kmz"
         kml_content_2 = extract_kml_from_kmz(kmz_path_2)
         
@@ -216,7 +216,7 @@ def test_kml_business_logic_validation():
         }])
         
         out_kml_3 = os.path.join(tmp_dir, "case3.kml")
-        generar_kml(df_case3, out_kml_3, flat=True)
+        generar_kml(df_case3, out_kml_3, config={}, flat=True)
         kmz_path_3 = os.path.splitext(out_kml_3)[0] + ".kmz"
         kml_content_3 = extract_kml_from_kmz(kmz_path_3)
         
@@ -235,7 +235,7 @@ def test_kml_business_logic_validation():
         }])
         
         out_kml_4 = os.path.join(tmp_dir, "case4.kml")
-        generar_kml(df_case4, out_kml_4, flat=True)
+        generar_kml(df_case4, out_kml_4, config={}, flat=True)
         kmz_path_4 = os.path.splitext(out_kml_4)[0] + ".kmz"
         kml_content_4 = extract_kml_from_kmz(kmz_path_4)
         

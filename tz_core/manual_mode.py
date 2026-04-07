@@ -61,15 +61,7 @@ def modo_manual(config: dict):
         def solicitar_color_tema(cfg):
             return cfg
     
-    # Import de generar_kml wrapper desde monolito (temporal)
-    # TODO Epic futura: extraer generar_kml completamente
-    import sys
-    import importlib.util
-    script_path = os.path.join(os.path.dirname(__file__), "..", "script_principal_bitacoras_refactory.py")
-    spec = importlib.util.spec_from_file_location("script_principal", script_path)
-    script_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(script_module)
-    generar_kml = script_module.generar_kml
+    from tz_core.kml_generator import generar_kml as _generar_kml_core
 
     log("=== INICIANDO MODO MANUAL ===")
     log("Configurando funciones auxiliares para entrada de datos...")
@@ -346,7 +338,7 @@ def modo_manual(config: dict):
                 archivo_kmz = os.path.join(carpeta_salida, f"{nombre_salida}_mapeo.kmz")
 
             # Generar el KML/KMZ en modo plano (sin subcarpetas del KML)
-            archivo_kml, desc_coords = generar_kml(df, archivo_kml, flat=True)
+            archivo_kml, desc_coords = _generar_kml_core(df, archivo_kml, config=config, flat=True)
             print(f"KML generado en: {archivo_kml}")
 
             # KMZ (si se pudo generar)

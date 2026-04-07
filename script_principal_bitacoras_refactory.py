@@ -412,26 +412,6 @@ from tz_core.ingestion_pipeline import run_ingestion_pipeline
 CONFIG = None
 OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejecución)
 
-# =========================
-# Generación de KML (usa CONFIG)
-# =========================
-def generar_kml(df: pd.DataFrame, archivo_salida_kml: str, flat: bool=False) -> tuple[str, int]:
-    """Wrapper de compatibilidad para tz_core.kml_generator.generar_kml()"""
-    from tz_core.kml_generator import generar_kml as generar_kml_modular
-    
-    # Inyectar CONFIG global y OVERRIDE_TOPS si existen
-    config_param = CONFIG if 'CONFIG' in globals() else {}
-    override_param = OVERRIDE_TOPS if 'OVERRIDE_TOPS' in globals() else None
-    
-    return generar_kml_modular(
-        df=df,
-        archivo_salida_kml=archivo_salida_kml,
-        config=config_param,
-        flat=flat,
-        override_tops=override_param
-    )
-
-
 HTML_SECCION_INTERACCIONES = ""
 
 from tz_core.time_utils import to_datetime_silent, _to_datetime_series, _fmt_hms
@@ -2973,7 +2953,8 @@ def main():
 
 
     log("[salidas] Generando KML/KMZ…")
-    archivo_kml, desc_coords = generar_kml(df, archivo_kml, flat=False)
+    from tz_core.kml_generator import generar_kml as _generar_kml_core
+    archivo_kml, desc_coords = _generar_kml_core(df, archivo_kml, config=CONFIG, flat=False, override_tops=OVERRIDE_TOPS)
     log(f"[salidas] KML listo: {archivo_kml}")
 
     # === BLOQUE HTML/SECCIONES (delegado) ===
