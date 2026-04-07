@@ -61,6 +61,7 @@ def write_detailed_hashes_report(
     now = now_fn or datetime.now
 
     def _file_hashes(path: str) -> tuple[str, str, int]:
+        """Calcula hashes MD5 y SHA256 de un archivo junto con su tamaño."""
         md5 = hashlib.md5()
         sha = hashlib.sha256()
         size = 0

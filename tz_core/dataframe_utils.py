@@ -57,6 +57,7 @@ def dedupe_columns(df):
     seen: set[str] = set()
 
     def _clean_value(val):
+        """Limpia un valor individual eliminando NaN, vacíos o espacios."""
         if pd.isna(val):
             return np.nan
         s = str(val).strip()
@@ -114,6 +115,7 @@ def pick_first_existing_column(df: pd.DataFrame, candidates: Iterable[Optional[s
 
 
 def _pick_col(df: pd.DataFrame, candidates: Iterable[Optional[str]]) -> Optional[str]:  # pragma: no cover
+    """Alias interno de pick_first_existing_column para compatibilidad."""
     return pick_first_existing_column(df, candidates)
 
 
@@ -174,6 +176,7 @@ def coalesce_duplicates(
     seen = set()
 
     def _clean_series(series: pd.Series) -> pd.Series:
+        """Limpia una Serie de pandas eliminando valores nulos, vacíos y normalizando."""
         cleaned = series.astype(object).copy()
         invalid = {"", "sin inf", "sin inf.", "nan", "none", "null", "s/i"}
         return cleaned.where(~cleaned.astype(str).str.strip().str.lower().isin(invalid), None)
@@ -210,4 +213,5 @@ def _coalesce_duplicates(
     prefer: Optional[List[str]] = None,
     original_columns: Optional[List[str]] = None,
 ) -> pd.DataFrame:  # pragma: no cover
+    """Alias interno de coalesce_duplicates para compatibilidad."""
     return coalesce_duplicates(df, prefer=prefer, original_columns=original_columns)
