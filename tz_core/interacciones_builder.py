@@ -1,4 +1,12 @@
-"""Generación de sección de interacciones recientes (HTML) extraída del monolito."""
+"""
+TZ-Analyzer — Interacciones Builder
+
+Genera la sección HTML de interacciones recientes en el informe de bitácora.
+Incluye tablas de detalle por día, mapas de calor de antenas, y cálculos
+de distancia/desplazamiento entre activaciones.
+
+Architecture: TZ-Analyzer v1.0.0 — tz_core package
+"""
 
 from __future__ import annotations
 
@@ -102,6 +110,7 @@ def construir_seccion_interacciones(
             pass
 
     def _es_valida_latlon_row(row):
+        """Valida si la fila tiene coordenadas lat/lon válidas consultando has_latlon por índice."""
         try:
             return bool(has_latlon.loc[row.name])
         except Exception:
@@ -223,6 +232,7 @@ def construir_seccion_interacciones(
         out.append('<thead><tr>' + ''.join(f'<th>{c}</th>' for c in thead_cols) + '</tr></thead><tbody>')
 
         def _fmt_coord(val):
+            """Formatea coordenada numérica a string con 6 decimales o '—' si es inválida."""
             try:
                 if val is None:
                     return "—"
@@ -234,6 +244,7 @@ def construir_seccion_interacciones(
                 return "—"
 
         def _fmt_az(v):
+            """Formatea valor de azimut a string entero redondeado o '—' si es inválido."""
             if v is None:
                 return "—"
             try:
@@ -244,6 +255,7 @@ def construir_seccion_interacciones(
                 return s if s else "—"
 
         def _fmt_hora(row):
+            """Formatea hora de fila extrayendo de columna hora o datetime, retorna '—' si falla."""
             try:
                 if col_hora and (col_hora in row.index):
                     s = str(row[col_hora]).strip()
@@ -255,6 +267,7 @@ def construir_seccion_interacciones(
             return "—"
 
         def _ant_fmt_link(ant, lt, lg):
+            """Formatea nombre de antena como enlace HTML a Google Maps si tiene coordenadas válidas."""
             try:
                 if ant and (lt is not None) and (lg is not None):
                     lt_f = float(lt)
@@ -304,6 +317,7 @@ def construir_seccion_interacciones(
             )
 
         def _haversine_km(lat1, lon1, lat2, lon2):
+            """Calcula distancia en kilómetros entre dos puntos usando fórmula haversine."""
             lat1, lon1, lat2, lon2 = map(float, (lat1, lon1, lat2, lon2))
             dlat = radians(lat2 - lat1)
             dlon = radians(lon2 - lon1)
@@ -312,6 +326,7 @@ def construir_seccion_interacciones(
             return 6371.0 * c
 
         def _mask_contact(s):
+            """Enmascara número de contacto para privacidad según configuración, reemplazando con '*'."""
             try:
                 html_cfg = cfg.get("html", {}) if isinstance(cfg, dict) else {}
                 if html_cfg.get("enmascarar_contactos", False):
@@ -397,6 +412,10 @@ def construir_seccion_interacciones(
             day_str = pd.to_datetime(d).strftime("%Y%m%d")
 
             def render_heatmap_html_for_day(df_day, day_id):
+                """
+                Genera mapa de calor HTML con Leaflet para antenas activadas en un día.
+                Incluye clústeres de puntos y tooltips con información de antena.
+                """
                 antenas_dict: Dict[tuple, Dict[str, Any]] = {}
                 total_filas = 0
                 if df_day is None or df_day.empty:

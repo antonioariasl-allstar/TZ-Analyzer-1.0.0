@@ -111,6 +111,7 @@ def solicitar_overrides_topn(config: Dict[str, Any]) -> Optional[Dict[str, int]]
     ovr = {}
 
     def _parse(x):
+        """Parsea valor a int positivo, retorna None si falla o es no-positivo."""
         try:
             v = int(x)
             return v if v > 0 else None
@@ -205,6 +206,7 @@ def prompt_case_identity(
     tipo_bitacora = (input_fn("→ Opción (I/T/Enter): ") or "").strip().upper()
 
     def _normalize_id(column: str, value: Any) -> str:
+        """Normaliza identificador según tipo de columna (tel/imei) o retorna string limpio."""
         if column == "tel":
             return normalize_msisdn(value) or str(value).strip()
         if column == "imei":
@@ -212,6 +214,7 @@ def prompt_case_identity(
         return str(value).strip()
 
     def _safe_nunique(column: str) -> int:
+        """Cuenta valores únicos normalizados en columna, retorna 0 si no existe."""
         if column not in getattr(df, "columns", []):
             return 0
         try:
@@ -238,6 +241,7 @@ def prompt_case_identity(
     output_fn(f"[QC] Tipo de bitácora establecido: {modo_bitacora}")
 
     def _limpiar_alias(valor: Optional[str]) -> str:
+        """Limpia alias: reemplaza espacios con _, trunca a 12 caracteres, retorna vacío si None."""
         try:
             if valor is None:
                 return ""
@@ -259,6 +263,7 @@ def prompt_case_identity(
     alias_short = _limpiar_alias(alias_val)
 
     def _first_sorted(column: str) -> Optional[str]:
+        """Retorna el primer valor normalizado ordenado alfanuméricamente de la columna."""
         if column not in getattr(df, "columns", []):
             return None
         try:
@@ -301,12 +306,14 @@ def collect_top_overrides(
     """Solicita los valores de Top N para antenas y contactos."""
 
     def _prompt(prompt: str) -> str:
+        """Solicita input al usuario, retorna string limpio o vacío si falla."""
         try:
             return (input_fn(prompt) or "").strip()
         except Exception:
             return ""
 
     def _parse(raw: str, fallback: int) -> int:
+        """Parsea string a int, retorna fallback si vacío o inválido, asegura no-negativo."""
         if raw == "":
             return fallback
         try:
@@ -446,6 +453,7 @@ def suggest_case_name(
     columns = list(getattr(df, "columns", []))
 
     def _first_nonempty(column: str) -> Optional[str]:
+        """Retorna el primer valor no-vacío de la columna, None si no existe o está vacía."""
         if column not in columns:
             return None
         try:
@@ -521,6 +529,7 @@ def suggest_case_name(
             suffix = ""
 
     def _pick_id(column: str) -> str:
+        """Selecciona identificador de columna: valor único, 'multiN' si hay varios, 'DESCONOCIDO' si falta."""
         if column not in columns:
             return "DESCONOCIDO"
         try:

@@ -455,12 +455,14 @@ def run_schema_location_assistant(
     present = set(columns_menu)
 
     def _normalize(value: Any) -> str:
+        """Normaliza valor de cabecera usando normalize_header_key, retorna vacío si falla."""
         try:
             return normalize_header_key(value)
         except Exception:
             return ""
 
     def _rename_like(df_obj: pd.DataFrame, source: str, target: str) -> pd.DataFrame:
+        """Renombra columna source a target, buscando coincidencia exacta o normalizada."""
         if source == target:
             return df_obj
         if source in df_obj.columns:
@@ -472,6 +474,7 @@ def run_schema_location_assistant(
         return df_obj
 
     def _prompt_index(message: str, limit: int, default: Optional[int] = None) -> Optional[int]:
+        """Solicita índice numérico al usuario con validación de rango [1, limit]."""
         raw = (input_cb(message) or "").strip()
         if raw == "" and default is not None:
             return default
@@ -535,6 +538,7 @@ def run_schema_location_assistant(
                 columns_menu.append(real_target)
 
     def _persist_config_snapshot() -> None:
+        """Persiste snapshot del config dict actual a archivo JSON sin modificar sinónimos."""
         if not (isinstance(config_dict, Mapping) and config_path):
             return
         with open(config_path, "w", encoding="utf-8") as handle:
@@ -549,6 +553,7 @@ def run_schema_location_assistant(
     df = dedupe_columns(df)
 
     def _smoke_schema_postmap(df_check: pd.DataFrame) -> tuple[bool, str]:
+        """Valida que el DataFrame tenga columnas esenciales y coordenadas válidas post-mapeo."""
         esenciales = (config_dict.get("entradas", {}) or {}).get("columnas_esenciales", []) or []
         faltan = [col for col in esenciales if col not in df_check.columns]
         if faltan:
@@ -566,6 +571,7 @@ def run_schema_location_assistant(
         return True, ""
 
     def _ask_map_col(df_obj: pd.DataFrame, colname: str) -> Optional[pd.DataFrame]:
+        """Solicita mapeo interactivo de columna faltante, retorna DataFrame renombrado o sin cambios."""
         if colname in df_obj.columns:
             return df_obj
         output_cb(
@@ -620,6 +626,7 @@ def run_schema_location_assistant(
 
     if "lat" in df.columns and "long" in df.columns and "antena" not in df.columns:
         def _fmt_coord(value: Any) -> str:
+            """Formatea valor como coordenada con 6 decimales o retorna vacío si falla."""
             try:
                 return f"{float(value):.6f}"
             except Exception:

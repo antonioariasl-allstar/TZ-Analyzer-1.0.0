@@ -906,9 +906,11 @@ class MappingWizard:
     # =========================================================================
 
     def _prompt(self, message: str) -> str:
+        """Delega prompt al objeto WizardIO."""
         return self.io.prompt(message)
 
     def _write(self, message: str) -> None:
+        """Delega escritura al objeto WizardIO."""
         self.io.write(message)
     
     # =========================================================================
@@ -980,6 +982,7 @@ class MappingWizard:
     # =========================================================================
     
     def _menu_horizontal(self, cols: List[str], per_line: int = 6) -> str:
+        """Muestra menú de columnas en formato horizontal delegando a format_columns_menu."""
         return format_columns_menu(cols, per_line)
     
     def _show_summary(self) -> None:
@@ -1131,6 +1134,7 @@ class MappingWizard:
         """Loop de confirmación: delega en execute_confirm_loop_flow."""
 
         def _perform_remap(current_df: pd.DataFrame) -> pd.DataFrame:
+            """Ejecuta remapeo de un campo en el loop de confirmación y retorna DataFrame actualizado."""
             self._remap_single_field()
             updated = self._apply_mapping()
             updated = self._handle_identity_fields(updated)
@@ -1138,6 +1142,7 @@ class MappingWizard:
             return updated
 
         def _perform_restart() -> Tuple[pd.DataFrame, Dict[str, Tuple[str, Any]]]:
+            """Reinicia el wizard desde cero creando nueva instancia de MappingWizard."""
             self._write("[QC] Reiniciando mapeo completo...")
             new_wizard = MappingWizard(
                 self.original_df,
@@ -1148,6 +1153,7 @@ class MappingWizard:
             return new_wizard.run()
 
         def _fetch_assignments() -> Dict[str, Tuple[str, Any]]:
+            """Retorna las asignaciones actuales de mapeo."""
             return self.asignadas
 
         return execute_confirm_loop_flow(
