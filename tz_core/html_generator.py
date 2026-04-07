@@ -16,7 +16,10 @@ Architecture: TZ-Analyzer Professional v1.0.0
 """
 
 # Imports necesarios para construir_seccion_interacciones
+import base64
 import json
+import mimetypes
+import os
 import re
 from pathlib import Path
 from typing import Optional, Tuple
@@ -418,6 +421,76 @@ def build_antennas_by_hour_section(
         return sec_html
     except Exception:
         return ""
+
+
+def build_logo_html(config: dict | None = None) -> str:
+    """Construye el bloque <img> con logo embebido en base64 o fallback SVG inline."""
+    try:
+        # Config y atributos visibles
+        _br_all = (config or {}) if config is not None else {}
+        _brand = _br_all.get("brand", {}) or {}
+        _branding = _br_all.get("branding", {}) or {}
+
+        # Alt y ancho deseado
+        _alt = (
+            str((_branding.get("logo_alt") or "")).strip()
+            or str(((_brand.get("logo") or {}).get("alt") or "")).strip()
+            or str(_brand.get("name") or "TZ Analyzer").strip()
+        )
+        try:
+            _w = int(((_brand.get("logo") or {}).get("width_px") or 120))
+        except Exception:
+            _w = 120
+
+        # 1) Si en config viene un base64 directo, úsalo
+        _b64_cfg = _branding.get("logo_base64") or (_brand.get("logo") or {}).get("base64")
+        if isinstance(_b64_cfg, str) and _b64_cfg.strip():
+            b64 = _b64_cfg.strip()
+            if b64.startswith("data:"):
+                src = b64
+            else:
+                # asumir PNG por defecto
+                src = f"data:image/png;base64,{b64}"
+            return f'<img src="{src}" alt="{_alt}" style="height:{_w}px;max-height:{_w}px"/>'
+
+        # 2) Intentar archivo local si la ruta existe (robusto, nombres candidatos)
+        _script_dir = os.path.dirname(os.path.abspath(__file__))
+        _candidates = []
+        # a) paths declarados en config
+        for key_path in [(_branding.get("logo_path") or ""), (((_brand.get("logo") or {}).get("path")) or "")]:
+            p = str(key_path or "").strip()
+            if p:
+                _candidates.append(p)
+        # b) candidatos comunes (soporta el caso "Logo TZ.png")
+        _candidates.extend([
+            "logo_tz.png", "Logo TZ.png", "Logo_TZ.png", "logo.png", "logo.svg", "Logo.png", "Logo.svg"
+        ])
+
+        for rel in _candidates:
+            try:
+                p_abs = rel if os.path.isabs(rel) else os.path.join(_script_dir, rel)
+                if os.path.exists(p_abs) and os.path.isfile(p_abs):
+                    mime, _ = mimetypes.guess_type(p_abs)
+                    mime = mime or ("image/svg+xml" if p_abs.lower().endswith(".svg") else "image/png")
+                    with open(p_abs, "rb") as fh:
+                        data = fh.read()
+                    b64 = base64.b64encode(data).decode("ascii")
+                    return f'<img src="data:{mime};base64,{b64}" alt="{_alt}" style="height:{_w}px;max-height:{_w}px"/>'
+            except Exception:
+                continue
+
+        # 3) Fallback: SVG inline accesible (sin archivos)
+        _svg = (
+            f"<svg xmlns='http://www.w3.org/2000/svg' width='{_w}' height='{int(_w*0.38)}' viewBox='0 0 320 120' role='img' aria-label='{_alt}'>"
+            "<rect width='320' height='120' fill='#0B57D0' rx='12'/>"
+            "<text x='50%' y='53%' dominant-baseline='middle' text-anchor='middle' font-family='Segoe UI, Roboto, Arial, sans-serif' font-size='40' fill='white' font-weight='700'>TZ Analyzer</text>"
+            "</svg>"
+        )
+        svg_uri = "data:image/svg+xml;utf8," + _svg.replace("\n", "")
+        return f"<img src='{svg_uri}' alt='{_alt}' style='height:{_w}px;max-height:{_w}px'/>"
+    except Exception:
+        # ante cualquier problema, evita romper: deja un placeholder textual
+        return "<div style='font-weight:700;font-size:18px'>TZ Analyzer</div>"
 
 def generate_html_header(theme_hex: str, nombre_salida: str) -> str:
     """
