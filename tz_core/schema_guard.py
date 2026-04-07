@@ -35,6 +35,7 @@ def validate_schema_or_abort(
         alts = (config or {}).get("schema", {}).get("location_alternatives", []) or []
 
         def _alt_ok(alt_group):
+            """Verifica si existe al menos una columna válida del grupo alternativo en el DataFrame."""
             cols_needed = []
             for c in alt_group:
                 if c == "lon":

@@ -8,6 +8,7 @@ from datetime import datetime
 
 @dataclass
 class OutputSetup:
+    """Configuración de rutas, nombres de archivo y parámetros para la generación de salida."""
     nombre_salida: str
     carpeta_base: str
     carpeta_salida: str
@@ -43,6 +44,7 @@ def prepare_output_setup(
     """Resolve identity, naming, top overrides y rutas de salida."""
 
     def _sanear_nombre_archivo_local(s: str) -> str:
+        """Sanitiza nombre de archivo eliminando caracteres no válidos y espacios."""
         return sanitize_fn(s, nombre_base)
 
     identity = prompt_case_identity(
@@ -62,6 +64,7 @@ def prepare_output_setup(
     base_auto = suggestion.base_name
 
     def _default_top(key: str, fallback: int) -> int:
+        """Obtiene valor de configuración HTML con fallback por defecto."""
         try:
             return int(config.get("html", {}).get(key, fallback))
         except Exception:

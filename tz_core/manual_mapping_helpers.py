@@ -53,6 +53,7 @@ def build_wizard_io(
     log_enabled = log_enabled_default if log_to_system is None else bool(log_to_system)
 
     def _wizard_input(message: str) -> str:
+        """Callback de entrada para el wizard con logging opcional."""
         if log_enabled and log_debug:
             try:
                 log_debug(f"[Wizard Prompt] {message.strip()}")
@@ -65,6 +66,7 @@ def build_wizard_io(
             return ""
 
     def _wizard_output(message: str) -> None:
+        """Callback de salida para el wizard con impresión y logging opcional."""
         print(message)
         if log_enabled and log_info:
             try:
