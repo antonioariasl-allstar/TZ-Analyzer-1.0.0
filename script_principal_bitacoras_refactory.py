@@ -126,6 +126,7 @@ from tz_core.manual_flow import (
     write_minimal_filter_log_if_needed,
 )
 from tz_core.html_generator import (
+    prepare_report_metrics,
     generate_html_header,
     generate_body_header,
     generate_metadata_section,
@@ -434,155 +435,27 @@ def generar_informe_html(df: pd.DataFrame, archivo_kml: str, carpeta_salida: str
     
     from datetime import datetime
     
-    kml_name = os.path.basename(archivo_kml)
-    kmz_name = os.path.splitext(kml_name)[0] + ".kmz"
-
-    # Integración de campos canónicos no esenciales en resultados
-    df_html = df.copy()
-    if "alias" in df.columns:
-        df_html["Alias"] = df["alias"]
-    if "usuario" in df.columns:
-        df_html["Usuario"] = df["usuario"]
-    if "abonado" in df.columns:
-        df_html["Abonado"] = df["abonado"]
-
-    # Asegurar que los campos se incluyan en la generación de KML/KMZ
-    kml_data = {}
-    if "alias" in df.columns:
-        kml_data["Alias"] = df["alias"].tolist()
-    if "usuario" in df.columns:
-        kml_data["Usuario"] = df["usuario"].tolist()
-    if "abonado" in df.columns:
-        kml_data["Abonado"] = df["abonado"].tolist()
-
-    if bool(CONFIG.get("salida", {}).get("separar_kml_kmz", False)):
-        # El HTML se guarda en carpeta_salida (raíz). KML está en /kml y KMZ en /kmz
-        kml_href = os.path.join("kml", kml_name) if os.path.basename(os.path.dirname(archivo_kml)).lower() == "kml" else kml_name
-        kmz_rel  = os.path.join("kmz", kmz_name)
-        kmz_abs  = os.path.join(carpeta_salida, kmz_rel)
-        kmz_exists = os.path.exists(kmz_abs)
-        kmz_link = f' | <a href="{kmz_rel}" download>Descargar KMZ</a>' if kmz_exists else ""
-    else:
-        kml_href = kml_name
-        kmz_abs  = os.path.join(carpeta_salida, kmz_name)
-        kmz_exists = os.path.exists(kmz_abs)
-        kmz_link = f' | <a href="{kmz_name}" download>Descargar KMZ</a>' if kmz_exists else ""
-
-    # --- Métricas rápidas ---
-    total = int(len(df))
-    bbox_global = {"lat_min": -90.0, "lat_max": 90.0, "lon_min": -180.0, "lon_max": 180.0}
-    df_coords = sanitize_latlon(df, bbox=bbox_global)
-    lat_num = df_coords.get("lat", pd.Series(dtype=float))
-    lon_num = df_coords.get("long", pd.Series(dtype=float))
-    valid_coord = int((lat_num.notna() & lon_num.notna()).sum())
-    coord_validas = int(valid_coord)
-    coord_invalidas = int(total - coord_validas)
-
-    # antenas únicas (mismo filtro que la tabla: sin nombres inválidos y con coords válidas)
-    if "antena" in df.columns:
-        s_ant = df["antena"].astype(str).str.strip()
-        invalid_names = {"", "0", "null", "none", "nan", "sin inf", "sin inf.", "s/i"}
-        m_name = ~s_ant.str.lower().isin(invalid_names)
-
-        m_coord = lat_num.notna() & lon_num.notna()
-        activaciones_total = len(df)
-        coord_validas   = int(m_coord.sum())
-        coord_invalidas = int(activaciones_total - coord_validas)
-
-        ant_series_f = s_ant[m_name & m_coord]
-        ant_uniq = int(ant_series_f.nunique()) if not ant_series_f.empty else 0
-
-        if not ant_series_f.empty:
-            vc = ant_series_f.value_counts()
-            top_antena = vc.index[0]
-            top_count = int(vc.iloc[0])
-            top_pct = (top_count / len(ant_series_f) * 100.0)
-        else:
-            top_antena, top_count, top_pct = "—", 0, 0.0
-    else:
-        ant_uniq = 0
-        top_antena, top_count, top_pct = "—", 0, 0.0
-        print(f"Antenas únicas (KPI): {ant_uniq} — Top antena: {top_antena} ({top_count})")
-
-    # celdas únicas (robusto: usa LAC+CID si ambos; si no, el que exista)
-    cel_label = "Celdas (CID) únicas"
-    cel_uniq = 0
-    try:
-        has_cid = any(c in df.columns for c in ["celda", "cid", "cellid", "cell_id"])
-        has_lac = any(c in df.columns for c in ["lac", "lac_id", "lacid"])
-        if has_cid and has_lac:
-            ccol = next(c for c in ["celda", "cid", "cellid", "cell_id"] if c in df.columns)
-            lcol = next(c for c in ["lac", "lac_id", "lacid"] if c in df.columns)
-            s_c = df[ccol].dropna().astype(str).str.strip()
-            s_l = df[lcol].dropna().astype(str).str.strip()
-            m_c = s_c != ""
-            m_l = s_l != ""
-            if (m_c.any() and m_l.any()):
-                cel_label = "Parejas LAC+CID únicas"
-                cel_uniq = int(df.loc[m_c.index[m_c] & m_l.index[m_l], [lcol, ccol]].drop_duplicates().shape[0])
-            elif m_c.any():
-                cel_label = "Celdas (CID) únicas"
-                cel_uniq = int(s_c[m_c].nunique())
-            elif m_l.any():
-                cel_label = "LAC únicas"
-                cel_uniq = int(s_l[m_l].nunique())
-        elif has_cid:
-            ccol = next(c for c in ["celda", "cid", "cellid", "cell_id"] if c in df.columns)
-            s_c = df[ccol].dropna().astype(str).str.strip()
-            s_c = s_c[s_c != ""]
-            cel_uniq = int(s_c.nunique()) if not s_c.empty else 0
-        elif has_lac:
-            lcol = next(c for c in ["lac", "lac_id", "lacid"] if c in df.columns)
-            s_l = df[lcol].dropna().astype(str).str.strip()
-            s_l = s_l[s_l != ""]
-            cel_label = "LAC únicas"
-            cel_uniq = int(s_l.nunique()) if not s_l.empty else 0
-    except Exception as e:
-        log(f"[WARN] generar_informe_html: Error calculando celdas únicas: {e}")
-
-    # rango de fechas/horas (visual dd/mm/aaaa HH:MM — dd/mm/aaaa HH:MM)
-    rango_str = "Sin datos"
-
-    if "fecha" in df.columns:
-        # Preferir combinar fecha+hora si existe 'hora'
-        dt = None
-        try:
-            if "hora" in df.columns and df["hora"].notna().any():
-                dt = to_datetime_silent(
-                    df["fecha"].astype(str).str.strip() + " " + df["hora"].astype(str).str.strip(),
-                    dayfirst=True, errors="coerce"
-                ).dropna()
-            else:
-                # Solo fecha: tomar 00:00 para el inicio y 23:59 para el fin
-                fechas = to_datetime_silent(df["fecha"], dayfirst=True, errors="coerce").dropna()
-                if not fechas.empty:
-                    fmin = fechas.min().normalize()                        # 00:00
-                    fmax = (fechas.max().normalize() + pd.Timedelta(hours=23, minutes=59))
-                    rango_str = f"{fmt_dt(fmin)} — {fmt_dt(fmax)}"
-                else:
-                    rango_str = "Sin datos"
-        except Exception as e:
-            log(f"[WARN] generar_informe_html: Error procesando rango de fechas: {e}")
-            dt = None
-
-        if dt is not None and not dt.empty:
-            min_ts, max_ts = dt.min(), dt.max()
-            rango_str = f"{fmt_dt(min_ts)} — {fmt_dt(max_ts)}"
-        elif dt is None:
-            # ya se resolvió arriba (solo fecha) o quedó Sin datos
-            rango_str = rango_str if 'rango_str' in locals() else "Sin datos"
-    else:
-        rango_str = "Sin datos"
-
-
-    # color tema para acentos (del CONFIG si está)
-    try:
-        theme_hex = CONFIG.get("style", {}).get("theme_hex", "#ff00ff")
-    except Exception:
-        theme_hex = "#ff00ff"
-
-    # fecha/hora generación
-    gen_dt = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    metrics = prepare_report_metrics(
+        df, archivo_kml, carpeta_salida,
+        CONFIG if 'CONFIG' in globals() and isinstance(CONFIG, dict) else None,
+    )
+    kml_name = metrics["kml_name"]
+    kmz_name = metrics["kmz_name"]
+    kml_href = metrics["kml_href"]
+    kmz_link = metrics["kmz_link"]
+    kmz_abs = metrics["kmz_abs"]
+    total = metrics["total"]
+    coord_validas = metrics["coord_validas"]
+    coord_invalidas = metrics["coord_invalidas"]
+    ant_uniq = metrics["ant_uniq"]
+    top_antena = metrics["top_antena"]
+    top_count = metrics["top_count"]
+    top_pct = metrics["top_pct"]
+    cel_uniq = metrics["cel_uniq"]
+    cel_label = metrics["cel_label"]
+    rango_str = metrics["rango_str"]
+    theme_hex = metrics["theme_hex"]
+    gen_dt = metrics["gen_dt"]
 
     # --- Identificación del número analizado (delegada a tz_core.html_generator) ---
     ident_rows = build_identification_rows(
