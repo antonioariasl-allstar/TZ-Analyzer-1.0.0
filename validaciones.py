@@ -103,6 +103,7 @@ def _safe_to_datetime(
 
     # Mezcla: intentamos elemento a elemento (para evitar advertencias)
     def _parse_cell(v: Any) -> Any:
+        """Intenta parsear una celda individual a datetime manejando seriales de Excel."""
         if _is_excel_serial(v):
             ts = _excel_serial_to_timestamp(v)
             return ts if ts is not None else pd.NaT
@@ -172,6 +173,7 @@ def _to_float_safe(series: pd.Series) -> Tuple[pd.Series, int]:
     Retorna (serie_float, cantidad_invalidos).
     """
     def _clean(v: Any) -> Any:
+        """Limpia un valor eliminando espacios y reemplazando comas por puntos antes de conversión."""
         if v is None:
             return np.nan
         try:
@@ -193,6 +195,7 @@ def _coerce_azimut(series: pd.Series) -> Tuple[pd.Series, int]:
     Retorna (serie_float, cantidad_invalidos).
     """
     def _conv(v: Any) -> Any:
+        """Convierte un valor a float validando rango de azimut [0, 359] o devuelve NaN."""
         try:
             f = float(str(v).strip().replace(",", "."))
             if 0 <= f < 360:
@@ -307,6 +310,7 @@ def validar_datos(df: pd.DataFrame, columnas_esenciales: List[str]) -> Tuple[pd.
             az_f, inv_az = _coerce_azimut(df["azimut"])
             # preservar 0 como válido y formatear sin decimales si es entero
             def _fmt_az(v: float) -> str:
+                """Formatea valor de azimut para presentación, sin decimales si es entero."""
                 if np.isnan(v):
                     return _SIN_INF
                 # 0–359 pueden traer coma; mostramos sin decimales si es entero
