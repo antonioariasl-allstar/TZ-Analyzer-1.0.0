@@ -23,19 +23,29 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
 
 ---
 
-## ⚠️ **ESTADO ACTUAL DEL PROYECTO (28-OCT-2025)**
+## ⚠️ **ESTADO ACTUAL DEL PROYECTO (06-ABR-2026)**
 
 **✅ SISTEMA COMPLETAMENTE FUNCIONAL:** El TZ Analyzer está operativo y genera correctamente HTML, KMZ, y archivos de hashes.
 
 **🔧 MODULARIZACIÓN ÉPICA COMPLETADA (OCT-2025):** 
-- **47/47 tests PASANDO** (100% SUCCESS) - Logrado bajo protocolo de máxima paranoia
+- **250/252 tests PASANDO (2 skipped esperados)** - Logrado bajo protocolo de máxima paranoia
 - **Test E2E habilitado:** Resuelto problema crítico de no determinismo que tenía el test deshabilitado desde hace semanas
-- **18 módulos extraídos con éxito:** 
+- **25+ módulos extraídos con éxito:** 
   - `time_utils`, `validation_utils`, `format_utils` (funciones puras, cero dependencias)
   - `html_helpers`, `file_utils`, `dataframe_utils` (utilidades especializadas) 
   - `config_manager`, `data_loader` (gestión de datos)
   - `analytics` (análisis forense y estadísticas)
   - `logging_utils` (sistema de logging centralizado) ✨ **NUEVO EN FASE 9C**
+  - `mapping_wizard` (wizard interactivo de mapeo QC)
+  - `output_pipeline` (pipeline de generación de salidas)
+  - `schema_utils` (validación y gestión de esquemas)
+  - `ui_utils` (interacción con usuario y prompts)
+  - `types` (dataclasses tipadas para el pipeline)
+  - `kml_generator` (generación KML/KMZ completa)
+  - `geo_utils` (cálculos geográficos)
+  - `manual_flow` (flujo de modo manual/filtros)
+  - `html_toc` (tabla de contenidos HTML)
+  - `interacciones_builder` (sección de interacciones HTML)
 - **Limpieza código duplicado:** FASE 9D eliminó 171 líneas duplicadas ✨ **NUEVO**
 - **Estabilidad comprobada:** Los cambios modulares **estabilizaron** el output, eliminando elementos no deterministas
 
@@ -92,20 +102,32 @@ TZ-Analyzer/
 ├── README.md                              # Este archivo
 ├── TODO.md                                # Tareas y observaciones
 ├── .gitignore                             # Archivos excluidos del repo
-├── tz_core/                               # 🔧 Framework modular (18 módulos)
+├── tz_core/                               # Framework modular (25+ módulos)
+│   ├── __init__.py
 │   ├── time_utils.py                      # Utilidades de tiempo y fecha
 │   ├── validation_utils.py                # Validaciones y normalización
-│   ├── format_utils.py                    # Formateo de datos
-│   ├── html_helpers.py                    # Generación de HTML
-│   ├── file_utils.py                      # Gestión de archivos
 │   ├── dataframe_utils.py                 # Utilidades de DataFrames
 │   ├── config_manager.py                  # Gestión de configuración
 │   ├── data_loader.py                     # Carga de datos Excel
-│   ├── analytics.py                       # Análisis forense y estadísticas
-│   └── logging_utils.py                   # Sistema de logging centralizado ✨ NUEVO
+│   ├── file_utils.py                      # Gestión de archivos
+│   ├── html_generator.py                  # Generación de secciones HTML
+│   ├── html_toc.py                        # Tabla de contenidos HTML
+│   ├── kml_generator.py                   # Generación KML/KMZ
+│   ├── geo_utils.py                       # Cálculos geográficos
+│   ├── schema_utils.py                    # Validación de esquemas
+│   ├── mapping_wizard.py                  # Wizard interactivo de mapeo
+│   ├── output_pipeline.py                 # Pipeline de salidas
+│   ├── ui_utils.py                        # Interacción con usuario
+│   ├── manual_flow.py                     # Flujo modo manual/filtros
+│   ├── logging_utils.py                   # Sistema de logging
+│   ├── interacciones_builder.py           # Sección interacciones HTML
+│   └── types.py                           # Dataclasses tipadas
 └── tests/
-    └── test_e2e_regresion.py              # Tests E2E y validación KMZ
-    └── unit/                              # Tests unitarios por componente
+  ├── integration/
+  │   ├── test_e2e_regresion.py          # Tests E2E y golden
+  │   ├── test_hour_ranges_flow.py       # Flujo de rangos horarios
+  │   └── test_manual_flow_option1.py    # Flujo manual opción 1
+  └── unit/                              # Tests unitarios (250+ tests)
 ```
 
 ---
@@ -208,11 +230,17 @@ Versión **1.0.0** — Fase de consolidación técnica.
 Para ejecutar las pruebas de regresión:
 
 ```bash
-# Tests E2E completos con validación golden
-python tests/test_e2e_regresion.py
+# Configurar PYTHONPATH (Windows PowerShell)
+$env:PYTHONPATH = (Get-Location).Path
 
-# Tests unitarios por componente
-python -m pytest tests/unit/
+# Correr suite completa
+pytest tests/ -v --tb=short
+
+# Solo tests unitarios
+pytest tests/unit/ -v
+
+# Solo tests de integración
+pytest tests/integration/ -v
 ```
 
 Los tests validan estructura KMZ, generación HTML y integridad del pipeline completo.
@@ -256,5 +284,5 @@ Ejemplo de sección `style`:
 
 ## 🧾 Licencia
 
-© 2025 — *Desarrollo interno por Tony Zero (Omar Arias)*.  
+© 2025-2026 — *Desarrollo interno por Tony Zero (Omar Arias)*.  
 Distribución o reproducción no autorizada **prohibida**.
