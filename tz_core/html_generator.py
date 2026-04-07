@@ -43,6 +43,7 @@ from tz_core.runtime_utils import collect_env_snapshot
 from tz_core.time_utils import to_datetime_silent, normalize_hour_to_hhmmss
 from tz_core.bitacora_normalization import (
     parse_duration_seconds,
+    sanitize_latlon,
     normalize_msisdn,
     normalize_imei,
 )
@@ -70,6 +71,87 @@ def resolve_top_antennas_n(config: dict | None, overrides: dict | None, default:
         return int(default)
     except Exception:
         return int(default)
+
+
+def build_antennas_table(df: pd.DataFrame, config: dict | None = None) -> str:
+    """Construye tabla HTML de todas las antenas con coords, conteo y azimuts frecuentes."""
+    top_tab_html = "<p class='small'>No se encontraron antenas.</p>"
+    if "antena" in df.columns:
+        df_a = df.copy()
+        df_a["antena"] = df_a.get("antena", "").astype(str).str.strip()
+        _invalid_names = {"", "0", "null", "none", "nan", "sin inf", "sin inf.", "s/i"}
+        df_a = df_a[~df_a["antena"].str.lower().isin(_invalid_names)]
+
+        if not df_a.empty:
+            # timestamp (fecha + hora si existe)
+            if "fecha" in df_a.columns:
+                hora_str = df_a.get("hora", "").astype(str).str[:8]
+                ts = to_datetime_silent(
+                    df_a["fecha"].astype(str).str.strip() + " " + hora_str,
+                    errors="coerce", dayfirst=True
+                )
+                df_a["_ts"] = ts
+            else:
+                df_a["_ts"] = pd.NaT
+
+            # azimut entero (para frecuencia)
+            az = pd.to_numeric(df_a.get("azimut", pd.Series(dtype=float)), errors="coerce").round().astype("Int64")
+            df_a["_az_i"] = az
+
+            # coords numéricas validadas con helper central
+            bbox_all = {"lat_min": -90.0, "lat_max": 90.0, "lon_min": -180.0, "lon_max": 180.0}
+            try:
+                df_a = sanitize_latlon(df_a, lat_col="lat", lon_col="long", bbox=bbox_all)
+            except Exception:
+                pass
+            df_a["_lat"] = pd.to_numeric(df_a.get("lat", pd.Series(dtype=float)), errors="coerce")
+            df_a["_lon"] = pd.to_numeric(df_a.get("long", pd.Series(dtype=float)), errors="coerce")
+            df_a = df_a[df_a["_lat"].notna() & df_a["_lon"].notna()]
+
+        # Construimos entradas y ordenamos por conteo (desc)
+        entries = []
+        for antenna, g in df_a.groupby("antena", dropna=False):
+            cnt = int(len(g))
+            lat_v = g["_lat"].dropna()
+            lon_v = g["_lon"].dropna()
+            lat_s = f"{lat_v.iloc[0]:.6f}" if not lat_v.empty else "—"
+            lon_s = f"{lon_v.iloc[0]:.6f}" if not lon_v.empty else "—"
+            azvc = g["_az_i"].dropna().value_counts().head(3)
+            az_s = ", ".join([f"{int(k)}° ({int(v)})" for k, v in azvc.items()]) if not azvc.empty else "—"
+            entries.append((cnt, antenna, lat_s, lon_s, az_s))
+
+        entries.sort(key=lambda x: x[0], reverse=True)
+
+        rows = []
+        for idx, (cnt, antenna, lat_s, lon_s, az_s) in enumerate(entries, start=1):
+            # Si hay coordenadas válidas, convertir la antena en link a Google Maps
+            if lat_s != "—" and lon_s != "—":
+                ant_cell = f'<a href="https://www.google.com/maps?q={lat_s},{lon_s}" target="_blank" rel="noopener">{antenna}</a>'
+            else:
+                ant_cell = antenna
+
+            rows.append(
+                f"<tr>"
+                f"<td class='mono'>{idx}</td>"
+                f"<td>{ant_cell}</td>"
+                f"<td class='mono nowrap'>{lat_s}</td>"
+                f"<td class='mono nowrap'>{lon_s}</td>"
+                f"<td class='mono'>{cnt:,}</td>"
+                f"<td>{az_s}</td>"
+                f"</tr>"
+            )
+
+        if rows:
+            top_tab_html = (
+                "<table class='tbl'>"
+                "<thead><tr>"
+                "<th>#</th><th>Antena</th><th>Lat</th><th>Long</th><th>Conteo</th><th>Azimuts frecuentes</th>"
+                "</tr></thead><tbody>"
+                + "".join(rows) +
+                "</tbody></table>"
+            )
+
+    return top_tab_html
 
 
 def build_top_antennas_section(
