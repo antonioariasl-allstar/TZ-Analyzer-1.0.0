@@ -710,10 +710,18 @@ def build_logo_html(config: dict | None = None) -> str:
             p = str(key_path or "").strip()
             if p:
                 _candidates.append(p)
-        # b) candidatos comunes (soporta el caso "Logo TZ.png")
+        # a.1) subdirectorio assets/ (ubicación canónica del logo)
+        _assets_dir = os.path.join(_script_dir, "assets")
+        for _logo_name in ["Logo TZ.png", "logo_tz.png", "Logo_TZ.png", "logo.png", "logo.svg", "Logo.png", "Logo.svg"]:
+            _candidates.append(os.path.join(_assets_dir, _logo_name))
+        # a.2) mismo directorio tz_core/ (legacy)
         _candidates.extend([
             "logo_tz.png", "Logo TZ.png", "Logo_TZ.png", "logo.png", "logo.svg", "Logo.png", "Logo.svg"
         ])
+        # a.3) raíz del proyecto (fallback)
+        _project_root = os.path.dirname(_script_dir)
+        for _logo_name in ["Logo TZ.png", "logo_tz.png", "Logo_TZ.png", "logo.png", "Logo.png"]:
+            _candidates.append(os.path.join(_project_root, _logo_name))
 
         for rel in _candidates:
             try:
