@@ -214,37 +214,9 @@ def _build_wizard_io(log_to_system: Optional[bool] = None) -> WizardIO:
         log_info=log_info,
     )
 
-# === SECCI�"N: WIZARD DE MAPEO DE COLUMNAS (detecci�n, mapeo manual, QC) ===
-# � M�DULO EXTRA&#205;DO EN EPIC 15 - 27/12/2025
-#
-# La funci�n _wizard_qc_mapeo() (382 l�neas, marcada PELIGRO EXTREMO) fue
-# exitosamente extra�da a tz_core/mapping_wizard.py con protocolo paranoico.
-#
-# MIGRACI�"N:
-# - C�digo original: L183-565 (382 l�neas de l�gica cr�tica)
-# - Nuevo m�dulo: tz_core/mapping_wizard.py (MappingWizard class)
-# - Import: from tz_core.mapping_wizard import MappingWizard (uso directo vía helper)
-# - Compatibilidad: 100% - firma id�ntica, comportamiento preservado
-#
-# ARQUITECTURA NUEVA:
-# - MappingWizard: Clase profesional con separaci�n de responsabilidades
-# - UI Layer: _menu_horizontal(), _ask_column_*(), _show_*()
-# - Logic Layer: _map_essentials(), _map_non_essentials(), _apply_mapping()
-# - Confirmation Layer: _confirm_loop() con recursi�n (opci�n N)
-#
-# VALIDACI�"N:
-# - Sintaxis: py_compile OK
-# - Imports: m�dulo carga correctamente
-# - Tests: Pendiente validaci�n E2E con archivo real
-#
-# BENEFICIOS:
-# - Reducci�n monolito: -382 l�neas (-6.4%)
-# - Testeable: Clase permite mocking de inputs
-# - Mantenible: Separaci�n clara de responsabilidades
-# - Documentado: Docstrings completos + arquitectura clara
-#
-# COMMIT: Pendiente tras validaci�n paranoica completa
-# =========================================================================
+# === SECCIÓN: WIZARD DE MAPEO DE COLUMNAS ===
+# Módulo extraído a tz_core/mapping_wizard.py (Epic 15, dic 2025)
+# Import: from tz_core.mapping_wizard import MappingWizard
 
 
 def _persist_user_synonym(canonical: str, encabezado: str) -> None:
