@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Dataclasses compartidas que definen las estructuras de datos del pipeline de TZ Analyzer."""
+
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
