@@ -175,9 +175,3 @@ def placeholder_function():
     - Funciones de normalización de texto
     """
     pass
-
-# TODO: Extraer funciones del script principal:
-# - Funciones sin dependencias externas
-# - Helpers matemáticos/formateo
-# - Utilidades de archivos
-# - Helpers de fecha/hora puros

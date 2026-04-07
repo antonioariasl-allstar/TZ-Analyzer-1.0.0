@@ -257,7 +257,7 @@ def etiqueta_rango(hora: Any, rangos_cfg: List[Dict[str, Any]], default: str = "
 
 
 # Funciones auxiliares para mantener compatibilidad con nombres originales
-# TODO: Deprecar en futuras versiones cuando se complete la modularización
+# Alias de compatibilidad con nombres internos anteriores a la modularización
 _hhmmss_to_time_or_none = hhmmss_to_time_or_none
 _en_rango = en_rango_tiempo
 _clasificar_rango_sv = clasificar_rango_sv

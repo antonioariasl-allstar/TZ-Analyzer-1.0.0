@@ -88,14 +88,6 @@ def cargar_config() -> Dict[str, Any]:
         # En caso de cualquier error, retornar configuración por defecto
         return DEFAULT_CONFIG
 
-
-# =====================================
-# TODO: Extraer más funciones de configuración aquí:
-# - cfg_build_rename_map()
-# - cfg_add_user_synonym() 
-# - get_config()
-# ====================================
-    
     def add_user_synonym(self, key, synonym):
         """Agregar sinónimo definido por usuario"""
         pass
@@ -189,10 +181,6 @@ def cfg_build_rename_map(CONFIG: dict) -> dict:
     except Exception: 
         pass
     return rename_map
-
-
-# TODO: Extraer del script principal:
-# - cfg_add_user_synonym()
 
 
 def atomic_write_json(path: str, data: dict):

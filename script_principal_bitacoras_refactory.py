@@ -459,9 +459,6 @@ def _modo_manual():
     return modo_manual(CONFIG)
 
 
-# === RUN_TZ_ANALYSIS (INICIO) ================================================
-# Puente público para GUI: recibe parámetros, evita prompts y retorna rutas.
-# Pegar ESTE bloque ENCIMA de `def main():` (sangría cero).
 def run_tz_analysis(
     ruta_entrada: str,
     hoja,                          # int o str o None

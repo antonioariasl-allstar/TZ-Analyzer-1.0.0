@@ -137,7 +137,7 @@ def limpiar_texto_validacion(texto: Any) -> str:
 
 
 # Funciones auxiliares para mantener compatibilidad con nombres originales
-# TODO: Deprecar en futuras versiones cuando se complete la modularización
+# Alias de compatibilidad con nombres internos anteriores a la modularización
 _tiene_valor = tiene_valor
 _es_num = es_num
 _a_float = a_float
