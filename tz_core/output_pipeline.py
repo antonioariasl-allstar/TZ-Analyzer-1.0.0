@@ -66,7 +66,7 @@ def produce_case_outputs(
 
     interactions_html = ""
     try:
-        interactions_html = build_interactions_section(df, dias_cfg, columnas_cfg)
+        interactions_html = build_interactions_section(df, dias_cfg, columnas_cfg, config=cfg, logger=logger)
         if logger:
             logger(f"[DEBUG] Interacciones: {len(interactions_html)} chars")
     except Exception as exc:

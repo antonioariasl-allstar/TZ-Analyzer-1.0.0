@@ -56,7 +56,7 @@ def test_produce_outputs_generates_assets(tmp_path):
         hoja="Hoja1",
         error_report_path="errores.txt",
         discarded_coords=2,
-        build_interactions_section=lambda df, dias, cols: f"inter_{dias}",
+        build_interactions_section=lambda df, dias, cols, **kw: f"inter_{dias}",
         build_contacts_section=lambda df, cols: "contacts",
         generar_html_fn=generar_html,
         relocate_kmz_fn=relocate_kmz_file,
