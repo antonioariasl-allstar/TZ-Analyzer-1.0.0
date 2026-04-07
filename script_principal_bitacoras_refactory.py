@@ -2953,8 +2953,8 @@ def main():
 
 
     log("[salidas] Generando KML/KMZ…")
-    from tz_core.kml_generator import generar_kml as _generar_kml_core
-    archivo_kml, desc_coords = _generar_kml_core(df, archivo_kml, config=CONFIG, flat=False, override_tops=OVERRIDE_TOPS)
+    from tz_core.kml_generator import generar_kml
+    archivo_kml, desc_coords = generar_kml(df, archivo_kml, config=CONFIG, flat=False, override_tops=OVERRIDE_TOPS)
     log(f"[salidas] KML listo: {archivo_kml}")
 
     # === BLOQUE HTML/SECCIONES (delegado) ===
