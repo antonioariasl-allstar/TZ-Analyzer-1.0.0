@@ -306,7 +306,7 @@ def _apply_qc_placeholders(
 # Fallbacks de importación
 # =========================
 try:
-    from validaciones import validar_datos, guardar_errores  # OK si existe
+    from tz_core.validaciones import validar_datos, guardar_errores
 except Exception:
     # Fallback mínimo (no rompe el flujo)
     from datetime import datetime

@@ -51,7 +51,7 @@ def modo_manual(config: dict):
     """
     # Imports dinámicos (para evitar ciclos y mantener compatibilidad)
     from tz_core.kml_generator import generar_kml_puntos_libres
-    from utilidades import seleccionar_carpeta
+    from .utilidades import seleccionar_carpeta
     
     # Import de color_utils para _solicitar_color_tema
     try:
