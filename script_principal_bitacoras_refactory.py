@@ -740,7 +740,7 @@ def main():
         generar_html_fn=generar_informe_html_core,
         override_tops=OVERRIDE_TOPS,
         html_seccion_interacciones="",
-        html_seccion_todos_contactos=globals().get("HTML_SECCION_TODOS_CONTACTOS"),
+        html_seccion_todos_contactos="",
         relocate_kmz_fn=relocate_kmz_file,
     )
 
@@ -771,11 +771,6 @@ def main():
     log(f"[salidas] KML listo: {archivo_kml}")
 
     # === BLOQUE HTML/SECCIONES (delegado) ===
-    def _store_contactos(html):
-        """Almacena el HTML de la sección de todos los contactos en variable global."""
-        global HTML_SECCION_TODOS_CONTACTOS
-        HTML_SECCION_TODOS_CONTACTOS = html or ""
-
     run_outputs_flow(
         df=df,
         config=CONFIG,
@@ -801,7 +796,7 @@ def main():
         cwd_fn=os.getcwd,
         log_file_path=globals().get("LOG_FILE"),
         set_interactions_section=lambda _html: None,
-        set_contacts_section=_store_contactos,
+        set_contacts_section=lambda _html: None,
     )
 if __name__ == "__main__":
     bootstrap_config()
