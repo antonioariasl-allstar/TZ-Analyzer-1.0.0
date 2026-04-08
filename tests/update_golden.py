@@ -8,11 +8,9 @@ import os
 import tempfile
 import pandas as pd
 
-from script_principal_bitacoras_refactory import (
-    generar_kml,
-    generar_informe_html,
-    bootstrap_config,
-)
+from tz_core.kml_generator import generar_kml
+from tz_core.html_generator import generar_informe_html
+from script_principal_bitacoras_refactory import bootstrap_config
 from tests.normalize_outputs import normalize_kml_from_kmz, normalize_html
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -49,11 +47,12 @@ def main() -> None:
     os.makedirs(GOLDEN_DIR, exist_ok=True)
     df = _load_df_imei20()
     bootstrap_config()
+    from script_principal_bitacoras_refactory import CONFIG
 
     out_dir = tempfile.mkdtemp(prefix='tz_e2e_')
     kmz_base = os.path.join(out_dir, 'e2e.kml')
 
-    generar_kml(df, kmz_base, flat=False)
+    generar_kml(df, kmz_base, config=CONFIG, flat=False)
     html_path = generar_informe_html(
         df=df,
         archivo_kml=kmz_base,
