@@ -138,22 +138,17 @@ from tz_core.manual_flow import (
     handle_manual_html_generation,
     write_minimal_filter_log_if_needed,
 )
-from tz_core.html_generator import (
-    generar_informe_html as generar_informe_html_core,
-    prepare_report_metrics,
-    generate_html_header,
-    generate_body_header,
-    generate_metadata_section,
-    generate_kpi_section,
-    build_logo_html,
+from tz_core.html_generator import generar_informe_html as generar_informe_html_core
+from tz_core.html.kpi import prepare_report_metrics, generate_kpi_section
+from tz_core.html.header import generate_html_header, generate_body_header, build_logo_html
+from tz_core.html.metadata import generate_metadata_section, build_identification_rows, inject_technical_metadata
+from tz_core.html.antennas import (
     build_antennas_table,
-    build_identification_rows,
-    build_top_contacts_sections,
     build_top_antennas_section,
     build_antennas_by_hour_section,
-    inject_technical_metadata,
     resolve_top_antennas_n,
 )
+from tz_core.html.contacts import build_top_contacts_sections
 from tz_core.time_filters import (
     _solicitar_filtros_tiempo,
     _aplicar_filtros_tiempo,
