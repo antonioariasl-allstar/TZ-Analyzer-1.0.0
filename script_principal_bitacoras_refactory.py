@@ -415,8 +415,6 @@ from tz_core.interacciones_builder import construir_seccion_interacciones
 CONFIG = None
 OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejecución)
 
-HTML_SECCION_INTERACCIONES = ""
-
 from tz_core.time_utils import to_datetime_silent, _to_datetime_series, _fmt_hms
 
 # --- Anti-hojas: ignorar ocultas y elegir visible ---
@@ -741,7 +739,7 @@ def main():
         output_fn=print,
         generar_html_fn=generar_informe_html_core,
         override_tops=OVERRIDE_TOPS,
-        html_seccion_interacciones=HTML_SECCION_INTERACCIONES,
+        html_seccion_interacciones="",
         html_seccion_todos_contactos=globals().get("HTML_SECCION_TODOS_CONTACTOS"),
         relocate_kmz_fn=relocate_kmz_file,
     )
@@ -773,11 +771,6 @@ def main():
     log(f"[salidas] KML listo: {archivo_kml}")
 
     # === BLOQUE HTML/SECCIONES (delegado) ===
-    def _store_interacciones(html):
-        """Almacena el HTML de la sección de interacciones en variable global."""
-        global HTML_SECCION_INTERACCIONES
-        HTML_SECCION_INTERACCIONES = html or ""
-
     def _store_contactos(html):
         """Almacena el HTML de la sección de todos los contactos en variable global."""
         global HTML_SECCION_TODOS_CONTACTOS
@@ -807,7 +800,7 @@ def main():
         path_exists=os.path.exists,
         cwd_fn=os.getcwd,
         log_file_path=globals().get("LOG_FILE"),
-        set_interactions_section=_store_interacciones,
+        set_interactions_section=lambda _html: None,
         set_contacts_section=_store_contactos,
     )
 if __name__ == "__main__":
