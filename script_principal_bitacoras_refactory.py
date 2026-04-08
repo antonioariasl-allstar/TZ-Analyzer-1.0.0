@@ -789,7 +789,7 @@ def main():
         output_fn=print,
         path_exists=os.path.exists,
         cwd_fn=os.getcwd,
-        log_file_path=globals().get("LOG_FILE"),
+        log_file_path=None,
         set_interactions_section=lambda _html: None,
         set_contacts_section=lambda _html: None,
     )
