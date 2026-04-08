@@ -413,7 +413,6 @@ from tz_core.interacciones_builder import construir_seccion_interacciones
 
 # CONFIG inicializado al nivel de módulo (se carga una sola vez)
 CONFIG = None
-OVERRIDE_TOPS = None  # override temporal de Top N (se rellena en tiempo de ejecución)
 
 from tz_core.time_utils import to_datetime_silent, _to_datetime_series, _fmt_hms
 
@@ -456,7 +455,7 @@ def run_tz_analysis(
             carpeta_salida = None
 
     # --- Preparar overrides (Top N, Solo KMZ) ---
-    #   1) Top N: el script ya contempla OVERRIDE_TOPS si existe en globals()
+    #   1) Top N: override_tops se pasa como variable local
     #   2) Solo KMZ: el script consulta CONFIG["salida"]["solo_kmz"]
     global CONFIG
     try:
@@ -466,7 +465,7 @@ def run_tz_analysis(
         CONFIG["salida"]["solo_kmz"] = bool(solo_kmz)
     except Exception:
         pass
-    globals()["OVERRIDE_TOPS"] = {
+    override_tops = {
         "antenas": int(top_antenas) if str(top_antenas).isdigit() else 5,
         "contactos": int(top_contactos) if str(top_contactos).isdigit() else 5,
     }
@@ -480,7 +479,7 @@ def run_tz_analysis(
             ruta_entrada=ruta_entrada,
             hoja=hoja,
             carpeta_salida=carpeta_salida,
-            override_tops=globals().get("OVERRIDE_TOPS"),
+            override_tops=override_tops,
             color_mock_fn=color_mock,
         )
         restore = mp_ctx.get("restore")
@@ -714,11 +713,7 @@ def main():
     top_antenas = output_setup.top_antenas
     top_contactos = output_setup.top_contactos
 
-    # Propagar overrides a nivel global para que las secciones HTML los lean
-    try:
-        globals()["OVERRIDE_TOPS"] = {"antenas": int(top_antenas), "contactos": int(top_contactos)}
-    except Exception:
-        pass
+    override_tops = {"antenas": int(top_antenas), "contactos": int(top_contactos)}
 
     nombre_salida = output_setup.nombre_salida
     carpeta_base = output_setup.carpeta_base
@@ -738,7 +733,7 @@ def main():
         logger=log,
         output_fn=print,
         generar_html_fn=generar_informe_html_core,
-        override_tops=OVERRIDE_TOPS,
+        override_tops=override_tops,
         html_seccion_interacciones="",
         html_seccion_todos_contactos="",
         relocate_kmz_fn=relocate_kmz_file,
@@ -767,14 +762,14 @@ def main():
 
     log("[salidas] Generando KML/KMZ…")
     from tz_core.kml_generator import generar_kml
-    archivo_kml, desc_coords = generar_kml(df, archivo_kml, config=CONFIG, flat=False, override_tops=OVERRIDE_TOPS)
+    archivo_kml, desc_coords = generar_kml(df, archivo_kml, config=CONFIG, flat=False, override_tops=override_tops)
     log(f"[salidas] KML listo: {archivo_kml}")
 
     # === BLOQUE HTML/SECCIONES (delegado) ===
     run_outputs_flow(
         df=df,
         config=CONFIG,
-        override_tops=OVERRIDE_TOPS,
+        override_tops=override_tops,
         nombre_salida=nombre_salida,
         archivo_kml=archivo_kml,
         carpeta_base=carpeta_base,
