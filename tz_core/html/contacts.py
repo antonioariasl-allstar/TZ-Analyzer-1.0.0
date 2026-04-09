@@ -1,7 +1,7 @@
 """
 Módulo de tablas de contactos del reporte HTML.
 
-Extraído de html_generator.py en Fase F4.4.
+Módulo de generación de secciones HTML de contactos.
 Contiene funciones para generar secciones de top contactos (por conteo y duración)
 y wrapper para la sección completa de todos los contactos.
 """

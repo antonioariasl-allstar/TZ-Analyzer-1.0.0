@@ -1,7 +1,7 @@
 """
 Módulo de generación de encabezados HTML.
 
-Extraído de html_generator.py en Fase F4.
+Módulo de generación de headers HTML.
 Contiene las funciones para construir el logo, encabezado HTML (<head>) 
 y encabezado del cuerpo (<body><header>).
 """

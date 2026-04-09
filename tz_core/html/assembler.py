@@ -100,14 +100,14 @@ def generar_informe_html(
     theme_hex = metrics["theme_hex"]
     gen_dt = metrics["gen_dt"]
 
-    # --- Identificación del número analizado (delegada a tz_core.html_generator) ---
+    # --- Identificación del número analizado (delegada a tz_core.html.metadata) ---
     ident_rows = build_identification_rows(
         df,
         config if config is not None else None,
     )
 
 
-    # --- Top contactos (delegado a tz_core.html_generator) ---
+    # --- Top contactos (delegado a tz_core.html.contacts) ---
     overrides_ctx = (
         override_tops
         if override_tops is not None

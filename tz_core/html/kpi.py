@@ -1,7 +1,7 @@
 """
 Módulo de KPIs y métricas del reporte HTML.
 
-Extraído de html_generator.py en Fase F4.2.
+Módulo de generación de KPIs HTML.
 Contiene las funciones para calcular métricas del reporte (prepare_report_metrics)
 y generar la sección visual de KPIs (generate_kpi_section).
 """
