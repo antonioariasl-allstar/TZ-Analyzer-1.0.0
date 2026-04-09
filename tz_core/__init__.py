@@ -38,16 +38,6 @@ from .time_utils import (
     to_datetime_series,
     format_seconds_hms,
     RANGOS_SV,
-    # Aliases para compatibilidad hacia atrás
-    _hhmmss_to_time_or_none,
-    _en_rango,
-    _clasificar_rango_sv,
-    _parse_hhmmss_to_minutes,
-    _minutes_from_any,
-    _construir_rangos_cfg,
-    _en_rango_minutos,
-    _to_datetime_series,
-    _fmt_hms,
 )
 
 # dataframe_utils
@@ -56,7 +46,6 @@ from .dataframe_utils import (
     pick_first_existing_column,
     coalesce_duplicates,
     apply_schema_renames,
-    _dedupe_columns,
     _pick_col,
     _coalesce_duplicates,
 )
@@ -70,10 +59,6 @@ from .validation_utils import (
     normalizar_numero,
     es_entero_valido,
     limpiar_texto_validacion,
-    # Aliases para compatibilidad hacia atrás
-    _tiene_valor,
-    _es_num,
-    _a_float
 )
 
 # ui_utils - Funciones de interfaz de usuario extraídas para modularización
