@@ -136,6 +136,7 @@ def build_top_contacts_sections(
                     "<tbody>" + "".join(rows) + "</tbody></table>"
                 )
 
+            g_dur = pd.Series(dtype=float)
             if d_col:
                 g_dur = (
                     d.groupby("_c_norm", dropna=False)["_sec"]
@@ -169,9 +170,51 @@ def build_top_contacts_sections(
                     if rows:
                         top_contactos_dur_html = (
                             "<table class='tbl'>"
-                            "<thead><tr><th class='right'>#</th><th>Contacto</th><th>Duración total</th></tr></thead>"
+                            "<thead><tr><th class='right'>#</th><th>Contacto</th><th>Duráción total</th></tr></thead>"
                             "<tbody>" + "\n".join(rows) + "</tbody></table>"
                         )
+
+    # Análisis de perfiles de comunicación
+    analisis_html = ""
+    if not g_cnt.empty and c_col:
+        # Obtener sets de contactos en cada top
+        set_cnt = set(g_cnt.index)
+        set_dur = set(g_dur.index) if not g_dur.empty else set()
+
+        # Clasificar contactos
+        dominantes = sorted(set_cnt & set_dur)  # En ambos tops
+        solo_duracion = sorted(set_dur - set_cnt) if set_dur else []  # Solo en duración
+        solo_frecuencia = sorted(set_cnt - set_dur)  # Solo en frecuencia
+
+        # Construir líneas del análisis
+        lineas = []
+
+        if dominantes:
+            nums_dom = ", ".join(str(n) for n in dominantes)
+            lineas.append(f"• <strong>Dominantes ({len(dominantes)}):</strong> {nums_dom} — lideran en frecuencia y duración")
+
+        if solo_duracion:
+            nums_conv = ", ".join(str(n) for n in solo_duracion)
+            lineas.append(f"• <strong>Conversadores ({len(solo_duracion)}):</strong> {nums_conv} — alta duración, baja frecuencia")
+
+        if solo_frecuencia:
+            nums_brev = ", ".join(str(n) for n in solo_frecuencia)
+            lineas.append(f"• <strong>Contactos breves ({len(solo_frecuencia)}):</strong> {nums_brev} — alta frecuencia, baja duración")
+
+        # Generar HTML solo si hay algo que mostrar
+        if lineas:
+            contenido = "<br>".join(lineas)
+            analisis_html = (
+                f'<div style="background:#f8f9fa;border-left:4px solid var(--accent);'
+                f'padding:12px 16px;margin:16px 0;border-radius:4px;font-size:0.9em;">'
+                f'<strong>Observación — Análisis de patrones de comunicación:</strong><br>'
+                f'{contenido}'
+                f'</div>'
+            )
+
+    # Insertar análisis al final de la sección (después de ambas tablas)
+    if analisis_html:
+        top_contactos_dur_html = top_contactos_dur_html + analisis_html
 
     return top_contactos_cnt_html, top_contactos_dur_html, _topC
 

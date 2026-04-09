@@ -162,7 +162,7 @@ def generar_informe_html(
   
     <section>
     <h2>Contactos con más comunicación</h2>
-    <p class="nota"><b>Nota:</b> en esta sección se muestran dos TOP LIST de los principales contactos con los que registra mayor interacciones tanto entrantes como salientes. el primer top list se construyo a partir del recuento de las interacciones tanto salietes como entrantes; el segundo se construyo a partir de los contactos con los que acumula más minutos tanto en interaciones entrantes como salientes. Le servirá para detectar patrones en la comunicación del número analizado.</p>
+    <p class="nota"><b>Nota:</b> Esta sección presenta los principales contactos del número analizado según dos criterios independientes: recuento total de interacciones y duración acumulada de las comunicaciones. Cada tabla permite identificar patrones diferenciados en la dinámica de contacto.</p>
     <div class="two">
       <div>
         <h3 class="small">Top List por recuento de interacciones <span class="sub">(Top {_topC})</span></h3>
