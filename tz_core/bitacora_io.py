@@ -11,8 +11,8 @@ import os
 from typing import Optional
 
 try:  # pragma: no cover - depende del entorno (Tkinter)
-    from .utilidades import seleccionar_archivo as _sel_archivo
-    from .utilidades import seleccionar_carpeta as _sel_carpeta
+    from .ui_utils import seleccionar_archivo as _sel_archivo
+    from .ui_utils import seleccionar_carpeta as _sel_carpeta
 except Exception:  # pragma: no cover - fallback de consola
     _sel_archivo = None
     _sel_carpeta = None
