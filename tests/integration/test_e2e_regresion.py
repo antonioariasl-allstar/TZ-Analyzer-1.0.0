@@ -31,7 +31,7 @@ except ImportError:
 from script_principal_bitacoras_refactory import (
     bootstrap_config,
 )
-from tz_core.html_generator import generar_informe_html
+from tz_core.html.assembler import generar_informe_html
 from tz_core.kml_generator import generar_kml
 from tests.normalize_outputs import normalize_kml_from_kmz, normalize_html
 
