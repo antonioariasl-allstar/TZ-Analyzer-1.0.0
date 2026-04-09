@@ -27,12 +27,12 @@ from typing import Any, Optional
 
 from tz_core.bitacora_normalization import normalize_imei, parse_duration_seconds
 
-# Import de validation_utils para _a_float
+# Import de validation_utils para a_float
 try:
-    from .validation_utils import _a_float
+    from .validation_utils import a_float
 except ImportError:
     # Fallback si validation_utils no está disponible
-    def _a_float(val) -> Optional[float]:
+    def a_float(val) -> Optional[float]:
         """Fallback básico para convertir a float"""
         try:
             return float(val)
@@ -74,17 +74,17 @@ def _formatear_valor_para_burbuja(col: str, val: Any) -> str:
 
     # lat/long -> 6 decimales
     if col in {"lat", "long"}:
-        f = _a_float(val)
+        f = a_float(val)
         return None if f is None else f"{f:.6f}"
 
     # azimut / lac -> enteros si son numéricos; si no, se deja el texto
     if col in {"azimut", "lac"}:
-        f = _a_float(val)
+        f = a_float(val)
         return s if f is None else str(int(round(f)))
 
     # celda -> entero si es numérico; si no, se deja el texto (p.ej., "C102")
     if col == "celda":
-        f = _a_float(val)
+        f = a_float(val)
         return s if f is None else str(int(round(f)))
 
     # imei -> cadena limpia sin .0 ni notación científica

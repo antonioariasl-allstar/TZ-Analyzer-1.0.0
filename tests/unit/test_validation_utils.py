@@ -129,17 +129,17 @@ class TestCompatibilidad:
     
     def test_aliases_existen(self):
         """Los aliases deben existir para compatibilidad."""
-        from tz_core.validation_utils import _tiene_valor, _es_num, _a_float
+        from tz_core.validation_utils import _tiene_valor, _es_num, a_float
         
         # Deben ser la misma función
         assert _tiene_valor is tiene_valor
         assert _es_num is es_num
-        assert _a_float is a_float
+        assert a_float is a_float
     
     def test_aliases_funcionan(self):
         """Los aliases deben funcionar igual que las funciones principales."""
-        from tz_core.validation_utils import _tiene_valor, _es_num, _a_float
+        from tz_core.validation_utils import _tiene_valor, _es_num, a_float
         
         assert _tiene_valor(42) == tiene_valor(42)
         assert _es_num(3.14) == es_num(3.14)
-        assert _a_float("3,14") == a_float("3,14")
+        assert a_float("3,14") == a_float("3,14")

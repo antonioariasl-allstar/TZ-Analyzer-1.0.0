@@ -140,4 +140,3 @@ def limpiar_texto_validacion(texto: Any) -> str:
 # Alias de compatibilidad con nombres internos anteriores a la modularización
 _tiene_valor = tiene_valor
 _es_num = es_num
-_a_float = a_float
