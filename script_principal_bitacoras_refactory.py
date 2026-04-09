@@ -136,7 +136,7 @@ from tz_core.manual_flow import (
     apply_time_filter_prompt,
     write_minimal_filter_log_if_needed,
 )
-from tz_core.html_generator import generar_informe_html as generar_informe_html_core
+from tz_core.html.assembler import generar_informe_html as generar_informe_html_core
 from tz_core.html.contacts import build_top_contacts_sections
 from tz_core.time_filters import (
     solicitar_filtros_tiempo,

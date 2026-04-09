@@ -1,7 +1,7 @@
 """
 Módulo de metadatos y datos de identificación del reporte HTML.
 
-Extraído de html_generator.py en Fase F4.3.
+Módulo de generación de metadata HTML.
 Contiene funciones para generar secciones de metadatos, identificación (IMEI/teléfono),
 e inyección de metadatos técnicos post-escritura en el archivo HTML.
 

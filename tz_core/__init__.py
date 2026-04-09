@@ -6,7 +6,6 @@ Módulos disponibles (ACTIVOS):
 - utils: Utilidades comunes y helpers
 - config_manager: Gestión de configuración y mapeo
 - data_loader: Carga de datos Excel/TSV/CSV
-- html_generator: Generación de reportes HTML (híbrido)
 - time_utils: Utilidades de tiempo (funciones puras)
 - validation_utils: Utilidades de validación (NUEVO - funciones puras)
 
@@ -24,7 +23,6 @@ __author__ = "Omar Arias (Tony Zero)"
 # from .data_validator import DataValidator
 # from .data_processor import AnalysisEngine
 # from .kml_generator import KMLGenerator
-# from .html_generator import HTMLReportGenerator
 # from .ui_helpers import UIWizards
 
 # time_utils - Funciones de tiempo extraídas para modularización
@@ -98,8 +96,6 @@ from .time_filters import (
 # runtime_utils - Metadata del entorno de ejecucion
 from .runtime_utils import collect_env_snapshot
 
-# html_generator - Helpers de HTML
-# html_generator - Compatibilidad legacy (implementación en tz_core.html.*)
 from .html.antennas import (
     resolve_top_antennas_n,
     build_top_antennas_section,
