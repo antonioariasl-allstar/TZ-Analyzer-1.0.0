@@ -134,10 +134,6 @@ def solicitar_overrides_topn(config: Dict[str, Any]) -> Optional[Dict[str, int]]
     return ovr if ovr else None
 
 
-# Alias para compatibilidad con nombres originales del monolito
-_solicitar_overrides_topn = solicitar_overrides_topn
-
-
 def gather_dataset_metadata(
     *,
     log_fn: Callable[[str], None],

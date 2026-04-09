@@ -63,8 +63,6 @@ from .validation_utils import (
 # ui_utils - Funciones de interfaz de usuario extraídas para modularización
 from .ui_utils import (
     solicitar_overrides_topn,
-    # Aliases para compatibilidad hacia atrás
-    _solicitar_overrides_topn
 )
 
 # text_utils - Funciones de procesamiento de texto extraídas para modularización  
