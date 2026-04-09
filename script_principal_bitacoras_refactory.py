@@ -70,8 +70,8 @@ import sys
 import time
 import traceback
 import warnings
-from datetime import datetime, time as _time
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -99,7 +99,6 @@ from tz_core.manual_mapping_helpers import (
     run_manual_mapping as _run_manual_mapping,
     build_wizard_io as _build_wizard_io_helper,
 )
-from tz_core.html_helpers import fmt_datetime as fmt_dt
 from tz_core.logging_utils import (
     log as _log_impl,
     get_logs,
@@ -138,15 +137,6 @@ from tz_core.manual_flow import (
     write_minimal_filter_log_if_needed,
 )
 from tz_core.html_generator import generar_informe_html as generar_informe_html_core
-from tz_core.html.kpi import prepare_report_metrics, generate_kpi_section
-from tz_core.html.header import generate_html_header, generate_body_header, build_logo_html
-from tz_core.html.metadata import generate_metadata_section, build_identification_rows, inject_technical_metadata
-from tz_core.html.antennas import (
-    build_antennas_table,
-    build_top_antennas_section,
-    build_antennas_by_hour_section,
-    resolve_top_antennas_n,
-)
 from tz_core.html.contacts import build_top_contacts_sections
 from tz_core.time_filters import (
     _solicitar_filtros_tiempo,
@@ -384,12 +374,11 @@ from tz_core.schema_utils import (
     apply_qc_placeholders,
 )
 from tz_core.color_utils import color_mock
-from tz_core.dataframe_utils import _pick_col
 from tz_core.bitacora_utils import (
     coalesce_cols as _coalesce_cols,
     fmt_lista as _fmt_lista,
 )
-from tz_core.analytics import construir_seccion_todos_contactos, generar_historial_cambios_antena
+from tz_core.analytics import construir_seccion_todos_contactos
 from tz_core.file_utils import (
     escribe_hashes_txt,
     write_detailed_hashes_report,
@@ -399,7 +388,6 @@ from tz_core.file_utils import (
 )
 from tz_core.schema_guard import validate_schema_or_abort
 from tz_core.output_pipeline import produce_case_outputs
-from tz_core.html_toc import apply_toc
 from tz_core.ingestion_pipeline import run_ingestion_pipeline
 from tz_core.interacciones_builder import construir_seccion_interacciones
 
@@ -408,7 +396,6 @@ from tz_core.interacciones_builder import construir_seccion_interacciones
 # CONFIG inicializado al nivel de módulo (se carga una sola vez)
 CONFIG = None
 
-from tz_core.time_utils import to_datetime_silent, _to_datetime_series, _fmt_hms
 
 # --- Anti-hojas: ignorar ocultas y elegir visible ---
 
