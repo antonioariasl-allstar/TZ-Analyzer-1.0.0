@@ -144,7 +144,7 @@ def test_produce_outputs_handles_interaction_errors(tmp_path):
 
 
 def test_generar_informe_html_inserta_interacciones(tmp_path):
-    from tz_core.html_generator import generar_informe_html
+    from tz_core.html.assembler import generar_informe_html
 
     df = pd.DataFrame(
         {
@@ -173,7 +173,7 @@ def test_generar_informe_html_inserta_interacciones(tmp_path):
 
 
 def test_generar_informe_html_inserta_todos_contactos(tmp_path):
-    from tz_core.html_generator import generar_informe_html
+    from tz_core.html.assembler import generar_informe_html
 
     df = pd.DataFrame(
         {
