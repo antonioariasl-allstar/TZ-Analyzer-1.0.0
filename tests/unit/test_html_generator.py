@@ -48,7 +48,7 @@ def test_inject_metadata_inserts_snapshot_block(tmp_path, monkeypatch):
         "usuario": "tester",
     }
 
-    monkeypatch.setattr(html_generator, "collect_env_snapshot", lambda _: snapshot)
+    monkeypatch.setattr("tz_core.html.metadata.collect_env_snapshot", lambda _: snapshot)
 
     assert html_generator.inject_technical_metadata(str(path), config)
     resultado = path.read_text(encoding="utf-8")
