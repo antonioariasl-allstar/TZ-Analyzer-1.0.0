@@ -97,8 +97,6 @@ from .schema_utils import (
 from .time_filters import (
     solicitar_filtros_tiempo,
     aplicar_filtros_tiempo,
-    _solicitar_filtros_tiempo,
-    _aplicar_filtros_tiempo,
 )
 
 # runtime_utils - Metadata del entorno de ejecucion
