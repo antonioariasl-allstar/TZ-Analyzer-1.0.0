@@ -46,8 +46,6 @@ from .dataframe_utils import (
     pick_first_existing_column,
     coalesce_duplicates,
     apply_schema_renames,
-    _pick_col,
-    _coalesce_duplicates,
 )
 
 # validation_utils - Funciones de validación extraídas para modularización
@@ -64,8 +62,6 @@ from .validation_utils import (
 # ui_utils - Funciones de interfaz de usuario extraídas para modularización
 from .ui_utils import (
     solicitar_overrides_topn,
-    # Aliases para compatibilidad hacia atrás
-    _solicitar_overrides_topn
 )
 
 # text_utils - Funciones de procesamiento de texto extraídas para modularización  
@@ -97,8 +93,6 @@ from .schema_utils import (
 from .time_filters import (
     solicitar_filtros_tiempo,
     aplicar_filtros_tiempo,
-    _solicitar_filtros_tiempo,
-    _aplicar_filtros_tiempo,
 )
 
 # runtime_utils - Metadata del entorno de ejecucion

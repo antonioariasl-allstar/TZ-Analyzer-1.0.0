@@ -114,11 +114,6 @@ def pick_first_existing_column(df: pd.DataFrame, candidates: Iterable[Optional[s
     return None
 
 
-def _pick_col(df: pd.DataFrame, candidates: Iterable[Optional[str]]) -> Optional[str]:  # pragma: no cover
-    """Alias interno de pick_first_existing_column para compatibilidad."""
-    return pick_first_existing_column(df, candidates)
-
-
 def apply_schema_renames(
     df: pd.DataFrame,
     synonym_map: Optional[Dict[str, str]] = None,
@@ -206,12 +201,3 @@ def coalesce_duplicates(
         seen.add(col)
 
     return df
-
-
-def _coalesce_duplicates(
-    df: pd.DataFrame,
-    prefer: Optional[List[str]] = None,
-    original_columns: Optional[List[str]] = None,
-) -> pd.DataFrame:  # pragma: no cover
-    """Alias interno de coalesce_duplicates para compatibilidad."""
-    return coalesce_duplicates(df, prefer=prefer, original_columns=original_columns)

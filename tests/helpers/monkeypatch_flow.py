@@ -41,7 +41,7 @@ def apply_run_monkeypatch(
     _keep("seleccionar_carpeta")
     _keep("_input_str")
     _keep("_seleccionar_hoja_visible")
-    _keep("_solicitar_overrides_topn")
+    _keep("solicitar_overrides_topn")
     _keep("_solicitar_color_tema")
 
     def _menu_principal_mock():
@@ -71,7 +71,7 @@ def apply_run_monkeypatch(
     g["seleccionar_archivo"] = _sel_arch_mock
     g["seleccionar_carpeta"] = _sel_carp_mock
     g["_input_str"] = _input_str_mock
-    g["_solicitar_overrides_topn"] = _ovr_mock
+    g["solicitar_overrides_topn"] = _ovr_mock
     g["_solicitar_color_tema"] = _color_mock
 
     orig_input = getattr(builtins, "input", None)

@@ -324,17 +324,10 @@ def generar_informe_html(
     #     y manda "Todas las antenas..." hasta el final, ANTES de escribir el archivo.
     try:
         # Columnas y validadores reutilizados por heatmap/rangos
-        def _pick_col(_df, candidatos):
-            """Selecciona y retorna la primera columna existente de una lista de candidatas."""
-            for c in candidatos:
-                if c in _df.columns:
-                    return c
-            return None
-
-        col_ant = _pick_col(df, ["antena", "nombre_antena", "cell_name"])
-        col_lat = _pick_col(df, ["lat", "latitud", "latitude"])
-        col_lon = _pick_col(df, ["long", "lon", "longitud", "lng", "longitude"])
-        col_az  = _pick_col(df, ["azimut", "azimuth", "azi", "angulo"])
+        col_ant = pick_first_existing_column(df, ["antena", "nombre_antena", "cell_name"])
+        col_lat = pick_first_existing_column(df, ["lat", "latitud", "latitude"])
+        col_lon = pick_first_existing_column(df, ["long", "lon", "longitud", "lng", "longitude"])
+        col_az  = pick_first_existing_column(df, ["azimut", "azimuth", "azi", "angulo"])
 
         try:
             _bbox = config.get("geografia", {}).get("sv_bbox", None) if (config is not None) else None

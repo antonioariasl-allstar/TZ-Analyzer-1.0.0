@@ -139,8 +139,8 @@ from tz_core.manual_flow import (
 from tz_core.html_generator import generar_informe_html as generar_informe_html_core
 from tz_core.html.contacts import build_top_contacts_sections
 from tz_core.time_filters import (
-    _solicitar_filtros_tiempo,
-    _aplicar_filtros_tiempo,
+    solicitar_filtros_tiempo,
+    aplicar_filtros_tiempo,
 )
 
 # =========================
@@ -634,8 +634,8 @@ def main():
         validate_schema_fn=validate_schema_or_abort_local,
         validar_datos_fn=validar_datos,
         time_filter_option=opcion,
-        solicitar_filtros_fn=_solicitar_filtros_tiempo,
-        aplicar_filtros_fn=_aplicar_filtros_tiempo,
+        solicitar_filtros_fn=solicitar_filtros_tiempo,
+        aplicar_filtros_fn=aplicar_filtros_tiempo,
         logger=log,
         output_fn=print,
         run_manual_mapping_fn=_run_manual_mapping,
