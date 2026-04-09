@@ -18,7 +18,7 @@ from string import Template
 import numpy as np
 import pandas as pd
 
-from tz_core.dataframe_utils import _pick_col
+from tz_core.dataframe_utils import pick_first_existing_column
 from tz_core.bitacora_normalization import sanitize_latlon, parse_duration_seconds
 from tz_core.time_utils import _to_datetime_series, _fmt_hms
 
@@ -37,7 +37,7 @@ def construir_seccion_interacciones(
     columnas_config = columnas_config or {}
     cfg = config or {}
 
-    col_contacto = _pick_col(
+    col_contacto = pick_first_existing_column(
         df,
         [
             columnas_config.get("contacto"),
@@ -53,7 +53,7 @@ def construir_seccion_interacciones(
         ],
     ) or "tel_contacto"
 
-    col_duracion = _pick_col(
+    col_duracion = pick_first_existing_column(
         df,
         [
             columnas_config.get("duracion"),
@@ -64,9 +64,9 @@ def construir_seccion_interacciones(
             "duracion_llamada",
         ],
     )
-    col_lat = _pick_col(df, [columnas_config.get("lat"), "lat", "latitude", "latitud"])
-    col_long = _pick_col(df, [columnas_config.get("long"), columnas_config.get("lon"), "long", "lon", "longitud"])
-    col_antena = _pick_col(
+    col_lat = pick_first_existing_column(df, [columnas_config.get("lat"), "lat", "latitude", "latitud"])
+    col_long = pick_first_existing_column(df, [columnas_config.get("long"), columnas_config.get("lon"), "long", "lon", "longitud"])
+    col_antena = pick_first_existing_column(
         df,
         [
             columnas_config.get("antena"),
@@ -77,8 +77,8 @@ def construir_seccion_interacciones(
             "site",
         ],
     )
-    col_azimut = _pick_col(df, [columnas_config.get("azimut"), "azimut", "azimuth", "azi", "angulo"])
-    col_tipo = _pick_col(
+    col_azimut = pick_first_existing_column(df, [columnas_config.get("azimut"), "azimut", "azimuth", "azi", "angulo"])
+    col_tipo = pick_first_existing_column(
         df,
         [
             columnas_config.get("tipo"),
@@ -89,8 +89,8 @@ def construir_seccion_interacciones(
             "tipo_llamada",
         ],
     )
-    col_celda = _pick_col(df, [columnas_config.get("celda"), "celda", "cod_celda_inicial", "cell_id", "cgi"])
-    col_hora = _pick_col(df, [columnas_config.get("hora"), "hora", "hora_inicial", "time", "timestamp"])
+    col_celda = pick_first_existing_column(df, [columnas_config.get("celda"), "celda", "cod_celda_inicial", "cell_id", "cgi"])
+    col_hora = pick_first_existing_column(df, [columnas_config.get("hora"), "hora", "hora_inicial", "time", "timestamp"])
 
     bbox_cfg = None
     try:

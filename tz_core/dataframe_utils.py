@@ -114,11 +114,6 @@ def pick_first_existing_column(df: pd.DataFrame, candidates: Iterable[Optional[s
     return None
 
 
-def _pick_col(df: pd.DataFrame, candidates: Iterable[Optional[str]]) -> Optional[str]:  # pragma: no cover
-    """Alias interno de pick_first_existing_column para compatibilidad."""
-    return pick_first_existing_column(df, candidates)
-
-
 def apply_schema_renames(
     df: pd.DataFrame,
     synonym_map: Optional[Dict[str, str]] = None,
