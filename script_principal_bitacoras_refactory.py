@@ -286,70 +286,7 @@ def _apply_qc_placeholders(
     )
 
 
-# =========================
-# Fallbacks de importación
-# =========================
-try:
-    from tz_core.validaciones import validar_datos, guardar_errores
-except Exception:
-    # Fallback mínimo (no rompe el flujo)
-    from datetime import datetime
-
-    def validar_columnas(dataframe, columnas_esperadas):
-        """Retorna lista de columnas esperadas que faltan en el dataframe."""
-        return [col for col in columnas_esperadas if col not in dataframe.columns]
-
-    def validar_datos(df, columnas_esenciales):
-        """Valida datos del DataFrame: columnas esenciales, formatos de fecha/hora y coordenadas."""
-        errores = []
-        faltantes = validar_columnas(df, columnas_esenciales)
-        if faltantes:
-            errores.append(f"[FALLBACK] Faltan columnas esenciales: {', '.join(faltantes)}")
-
-        # Garantizar fecha/hora como texto tolerante (sin convertir si no hay)
-        if 'fecha' in df.columns:
-            try:
-                df['fecha'] = pd.to_datetime(df['fecha'], errors='coerce', dayfirst=True)
-                mask = df['fecha'].isna()
-                df.loc[~mask, 'fecha'] = df.loc[~mask, 'fecha'].dt.strftime("%d/%m/%Y")
-                df.loc[mask, 'fecha'] = "Sin Inf."
-            except Exception:
-                df['fecha'] = "Sin Inf."
-
-        if 'hora' in df.columns:
-            try:
-                horas = pd.to_datetime(df['hora'].astype(str).str[:8], format="%H:%M:%S", errors="coerce")
-                maskh = horas.isna()
-                df.loc[~maskh, 'hora'] = horas.dt.strftime("%H:%M:%S")
-                df.loc[maskh, 'hora'] = "Sin Inf."
-            except Exception:
-                df['hora'] = "Sin Inf."
-
-        # Coordenadas tolerantes
-        for c in ('lat', 'long'):
-            if c in df.columns:
-                df[c] = pd.to_numeric(df[c], errors='coerce')
-        if 'lat' in df.columns and 'long' in df.columns:
-            maskc = df['lat'].isna() | df['long'].isna()
-            if maskc.any():
-                errores.append(f"[FALLBACK] {maskc.sum()} filas con coordenadas inválidas.")
-                df[['lat', 'long']] = df[['lat', 'long']].astype(object)
-                df.loc[maskc, ['lat', 'long']] = "Sin Inf."
-        return df, errores
-
-    def guardar_errores(errores, carpeta_salida, nombre_base):
-        """Guarda los errores detectados en archivo errores.txt en la carpeta de salida."""
-        os.makedirs(carpeta_salida, exist_ok=True)
-        # ahora: usar siempre el BASE unificado
-        archivo_errores = os.path.join(carpeta_salida, "errores.txt")
-        with open(archivo_errores, "w", encoding="utf-8") as f:
-            if errores:
-                f.write(f"[{datetime.now().isoformat(sep=' ', timespec='seconds')}] Errores detectados:\n")
-                for e in errores:
-                    f.write(f"- {e}\n")
-            else:
-                f.write(f"[{datetime.now().isoformat(sep=' ', timespec='seconds')}] No se detectaron errores.\n")
-        return archivo_errores
+from tz_core.validation_utils import validar_datos, guardar_errores
 
 # =========================
 # Configuración externa
