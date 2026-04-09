@@ -47,7 +47,6 @@ from .dataframe_utils import (
     coalesce_duplicates,
     apply_schema_renames,
     _pick_col,
-    _coalesce_duplicates,
 )
 
 # validation_utils - Funciones de validación extraídas para modularización
