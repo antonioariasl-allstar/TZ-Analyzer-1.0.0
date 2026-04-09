@@ -5,7 +5,17 @@ from __future__ import annotations
 from datetime import datetime
 from types import SimpleNamespace
 
-import tz_core.html_generator as html_generator
+from tz_core.html.metadata import (
+    inject_technical_metadata,
+    _build_meta_block,
+    _inject_block,
+)
+from tz_core.html.antennas import (
+    resolve_top_antennas_n,
+    build_top_antennas_section,
+    build_antennas_by_hour_section,
+)
+import pandas as pd
 import tz_core.runtime_utils as runtime_utils
 
 
@@ -16,7 +26,7 @@ def test_inject_metadata_disabled_noop(tmp_path):
 
     config = {"html": {"metadatos_tecnicos": {"enabled": False}}}
 
-    assert not html_generator.inject_technical_metadata(str(path), config)
+    assert not inject_technical_metadata(str(path), config)
     assert path.read_text(encoding="utf-8") == original
 
 
@@ -50,7 +60,7 @@ def test_inject_metadata_inserts_snapshot_block(tmp_path, monkeypatch):
 
     monkeypatch.setattr("tz_core.html.metadata.collect_env_snapshot", lambda _: snapshot)
 
-    assert html_generator.inject_technical_metadata(str(path), config)
+    assert inject_technical_metadata(str(path), config)
     resultado = path.read_text(encoding="utf-8")
 
     assert "Metadatos técnicos (ampliado)" in resultado
@@ -69,7 +79,7 @@ def test_build_meta_block_handles_modes_and_versions():
         "usuario": "tester",
     }
 
-    block = html_generator._build_meta_block(snapshot, "ampliado", True)
+    block = _build_meta_block(snapshot, "ampliado", True)
 
     assert "Metadatos" in block
     assert "UnitOS" in block
@@ -79,7 +89,7 @@ def test_build_meta_block_handles_modes_and_versions():
 
 
 def test_build_meta_block_returns_empty_without_values():
-    block = html_generator._build_meta_block({}, "minimo", False)
+    block = _build_meta_block({}, "minimo", False)
     assert block == ""
 
 
@@ -87,7 +97,7 @@ def test_inject_block_prefers_meta_sections():
     block = "<div>meta</div>"
     html = '<html><body><section class="meta-card"></section></body></html>'
 
-    nuevo, injected = html_generator._inject_block(html, block)
+    nuevo, injected = _inject_block(html, block)
 
     assert injected
     assert nuevo.count(block) == 1
@@ -99,11 +109,11 @@ def test_inject_block_fallbacks_to_body_and_append():
     html_body = "<html><body><section></section></body></html>"
     html_plain = "<html><div>sin body</div></html>"
 
-    in_body, injected_body = html_generator._inject_block(html_body, block)
+    in_body, injected_body = _inject_block(html_body, block)
     assert injected_body
     assert "<body" in in_body and block in in_body
 
-    appended, injected_append = html_generator._inject_block(html_plain, block)
+    appended, injected_append = _inject_block(html_plain, block)
     assert injected_append
     assert appended.endswith(block)
 
@@ -138,22 +148,22 @@ def test_resolve_top_antennas_n_prefers_override_then_config():
     cfg = {"top_antenas": 7, "html": {"top_antenas_n": 9}}
     overrides = {"antenas": 5}
 
-    assert html_generator.resolve_top_antennas_n(cfg, overrides, default=3) == 5
+    assert resolve_top_antennas_n(cfg, overrides, default=3) == 5
 
     # Sin override usa config
-    assert html_generator.resolve_top_antennas_n(cfg, None, default=3) == 7
+    assert resolve_top_antennas_n(cfg, None, default=3) == 7
 
     # Sin top_antenas usa html.top_antenas_n
     cfg2 = {"html": {"top_antenas_n": 4}}
-    assert html_generator.resolve_top_antennas_n(cfg2, None, default=3) == 4
+    assert resolve_top_antennas_n(cfg2, None, default=3) == 4
 
     # Fallback a default ante valores inválidos
     cfg_bad = {"top_antenas": "no-int"}
-    assert html_generator.resolve_top_antennas_n(cfg_bad, None, default=11) == 11
+    assert resolve_top_antennas_n(cfg_bad, None, default=11) == 11
 
 
 def test_build_top_antennas_section_respects_override_and_bbox():
-    df = html_generator.pd.DataFrame(
+    df = pd.DataFrame(
         [
             {"antena": "A1", "lat": 13.7, "long": -89.2, "azimut": 10},
             {"antena": "A1", "lat": 13.71, "long": -89.21, "azimut": 10},
@@ -165,7 +175,7 @@ def test_build_top_antennas_section_respects_override_and_bbox():
     cfg = {"top_antenas": 1}
     overrides = {"antenas": 2}
 
-    html = html_generator.build_top_antennas_section(df, cfg, overrides)
+    html = build_top_antennas_section(df, cfg, overrides)
 
     assert "id=\"resumen-antenas\"" in html
     # Override 2 → debe contener A1 y A2, pero no A3
@@ -176,7 +186,7 @@ def test_build_top_antennas_section_respects_override_and_bbox():
 
 
 def test_build_antennas_by_hour_section_basic():
-    df = html_generator.pd.DataFrame(
+    df = pd.DataFrame(
         [
             {"antena": "A1", "hora": "06:30:00", "lat": 13.7, "long": -89.2, "azimut": 10},
             {"antena": "A2", "hora": "13:00:00", "lat": 13.71, "long": -89.21, "azimut": 20},
@@ -184,7 +194,7 @@ def test_build_antennas_by_hour_section_basic():
         ]
     )
 
-    html = html_generator.build_antennas_by_hour_section(df, {"html": {"top_antenas_n": 2}}, overrides=None)
+    html = build_antennas_by_hour_section(df, {"html": {"top_antenas_n": 2}}, overrides=None)
 
     assert 'id="antenas-rangos"' in html
     assert "Mañana" in html and "Tarde" in html and "Madrugada" in html
@@ -192,7 +202,7 @@ def test_build_antennas_by_hour_section_basic():
 
 
 def test_build_antennas_by_hour_section_respects_override():
-    df = html_generator.pd.DataFrame(
+    df = pd.DataFrame(
         [
             {"antena": "A1", "hora": "10:00", "lat": 13.7, "long": -89.2},
             {"antena": "A2", "hora": "10:30", "lat": 13.71, "long": -89.21},
@@ -200,13 +210,13 @@ def test_build_antennas_by_hour_section_respects_override():
         ]
     )
 
-    html = html_generator.build_antennas_by_hour_section(df, None, overrides={"antenas": 1})
+    html = build_antennas_by_hour_section(df, None, overrides={"antenas": 1})
 
     assert html.count("<tr><td class='mono'>") == 1
 
 
 def test_build_antennas_by_hour_section_parses_nonstandard_hours():
-    df = html_generator.pd.DataFrame(
+    df = pd.DataFrame(
         [
             {"antena": "A1", "hora": "6.30", "lat": 13.7, "long": -89.2},
             {"antena": "A2", "hora": "14-20", "lat": 13.71, "long": -89.21},
@@ -214,7 +224,7 @@ def test_build_antennas_by_hour_section_parses_nonstandard_hours():
         ]
     )
 
-    html = html_generator.build_antennas_by_hour_section(df, {"html": {"top_antenas_n": 5}}, overrides=None)
+    html = build_antennas_by_hour_section(df, {"html": {"top_antenas_n": 5}}, overrides=None)
 
     assert "Mañana" in html and "Tarde" in html and "Noche" in html
 
