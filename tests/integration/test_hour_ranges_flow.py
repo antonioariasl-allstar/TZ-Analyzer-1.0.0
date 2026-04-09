@@ -3,7 +3,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from tz_core import html_generator, kml_generator
+from tz_core.html import antennas as html_generator
+from tz_core import kml_generator
 
 
 def _sample_df():
