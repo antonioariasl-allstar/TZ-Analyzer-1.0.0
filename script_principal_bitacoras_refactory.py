@@ -135,7 +135,6 @@ from tz_core.output_flow import prepare_output_setup
 from tz_core.manual_flow import (
     normalize_and_validate_schema,
     apply_time_filter_prompt,
-    handle_manual_html_generation,
     write_minimal_filter_log_if_needed,
 )
 from tz_core.html_generator import generar_informe_html as generar_informe_html_core
@@ -716,23 +715,6 @@ def main():
     archivo_kml = output_setup.archivo_kml
     archivo_kmz = output_setup.archivo_kmz
     carpeta_kml = output_setup.carpeta_kml
-
-    informe_html = handle_manual_html_generation(
-        config=CONFIG,
-        df=df,
-        archivo_kml=archivo_kml,
-        carpeta_salida=carpeta_salida,
-        nombre_salida=nombre_salida,
-        hoja=hoja,
-        carpeta_base=carpeta_base,
-        logger=log,
-        output_fn=print,
-        generar_html_fn=generar_informe_html_core,
-        override_tops=override_tops,
-        html_seccion_interacciones="",
-        html_seccion_todos_contactos="",
-        relocate_kmz_fn=relocate_kmz_file,
-    )
 
     write_minimal_filter_log_if_needed(
         result=time_filters,
