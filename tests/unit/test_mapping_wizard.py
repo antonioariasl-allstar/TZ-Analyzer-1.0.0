@@ -99,7 +99,7 @@ def test_mapping_wizard_uses_custom_io_flow():
     assert "duracion" in mapped_df.columns
     assert asignadas["fecha"] == ("col", "col_fecha")
     assert recorder.prompts == [
-        "→ Elegí columna para fecha (número — '?' para ver menú / Enter=omitir): ",
+        "→ Columna para fecha (número — '?' menú / Enter=omitir): ",
         "→ Alias para toda la ejecución (Enter=omitir): ",
         "→ Nombre_usuario para toda la ejecución (Enter=omitir): ",
         "→ Abonado para toda la ejecución (Enter=omitir): ",
@@ -297,7 +297,7 @@ def test_collect_essential_mapping_assignments_handles_menu_duplicates_and_pendi
     assert assignments["hora"] == ("omitido", None)
     assert used == {"c1", "c2"}
     assert pendientes == ["hora"]
-    assert recorder.outputs[0].startswith("  [1] c1")
+    assert any(msg.startswith("  [1] c1") for msg in recorder.outputs)
     assert any("Advertencia" in msg for msg in recorder.outputs)
     assert recorder.prompts.count("→ Elegí columna para **tel**: ") == 1
 

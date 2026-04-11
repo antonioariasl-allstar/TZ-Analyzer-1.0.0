@@ -91,6 +91,9 @@ def build_top_contacts_sections(
 
     _topC = _resolve_top_limit()
 
+    g_cnt = pd.Series(dtype=float)
+    g_dur = pd.Series(dtype=float)
+
     if c_col:
         d = df.copy()
         d["_contacto_raw"] = d[c_col].astype(str).str.strip()
