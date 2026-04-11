@@ -436,6 +436,7 @@ def collect_non_essential_mapping_assignments(
     etiquetas: Optional[Dict[str, str]] = None,
     initial_assignments: Optional[Dict[str, Tuple[str, Any]]] = None,
     per_line: int = 6,
+    df: Optional["pd.DataFrame"] = None,
 ) -> Dict[str, Tuple[str, Any]]:
     """Itera el loop de no esenciales devolviendo asignaciones actualizadas."""
 
@@ -444,8 +445,15 @@ def collect_non_essential_mapping_assignments(
 
     for canonical in canonicals:
         etiqueta_visible = etiquetas.get(canonical, canonical)
+        ctx = FIELD_CONTEXT.get(canonical, {})
+        desc = ctx.get("desc", "")
+        hint = ctx.get("hint", "")
+        if desc:
+            write_fn(f"\n  📌 {etiqueta_visible}: {desc}")
+        if hint:
+            write_fn(f"     {hint}")
         prompt_msg = (
-            f"→ Elegí columna para {etiqueta_visible} (n / 'F valor' / Enter=omitir — '?' para ver menú): "
+            f"→ Columna para {etiqueta_visible} (n / 'F valor' / Enter=omitir — '?' menú): "
         )
 
         while True:
@@ -468,6 +476,8 @@ def collect_non_essential_mapping_assignments(
 
             if decision.action == "assign" and decision.column:
                 assignments[canonical] = ("col", decision.column)
+                if df is not None:
+                    preview_column_sample(df, decision.column, write_fn)
                 break
 
             assignments[canonical] = ("omitido", None)
@@ -1147,6 +1157,7 @@ class MappingWizard:
             etiquetas=self.etiquetas_mapeo,
             initial_assignments=self.asignadas,
             per_line=6,
+            df=self.original_df,
         )
     
     def _apply_mapping(self) -> pd.DataFrame:
