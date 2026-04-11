@@ -363,6 +363,7 @@ def collect_essential_mapping_assignments(
     initial_used_columns: Optional[Set[str]] = None,
     initial_pendings: Optional[List[str]] = None,
     per_line: int = 6,
+    df: Optional["pd.DataFrame"] = None,
 ) -> Tuple[Dict[str, Tuple[str, Any]], Set[str], List[str]]:
     """Itera el loop de esenciales devolviendo estructuras actualizadas."""
 
@@ -373,8 +374,15 @@ def collect_essential_mapping_assignments(
 
     for canonical in canonicals:
         etiqueta_visible = etiquetas.get(canonical, canonical)
+        ctx = FIELD_CONTEXT.get(canonical, {})
+        desc = ctx.get("desc", "")
+        hint = ctx.get("hint", "")
+        if desc:
+            write_fn(f"\n  📌 {etiqueta_visible}: {desc}")
+        if hint:
+            write_fn(f"     {hint}")
         prompt_msg = (
-            f"→ Elegí columna para {etiqueta_visible} (número — '?' para ver menú / Enter=omitir): "
+            f"→ Columna para {etiqueta_visible} (número — '?' menú / Enter=omitir): "
         )
 
         while True:
@@ -404,6 +412,8 @@ def collect_essential_mapping_assignments(
                 used_columns.add(decision.column)
                 while canonical in pendientes:
                     pendientes.remove(canonical)
+                if df is not None:
+                    preview_column_sample(df, decision.column, write_fn)
                 break
 
             if decision.action == "duplicate" and decision.column:
@@ -1109,6 +1119,7 @@ class MappingWizard:
             initial_used_columns=self.usadas,
             initial_pendings=self.pendientes,
             per_line=6,
+            df=self.original_df,
         )
         self.asignadas = asignadas
         self.usadas = usadas
