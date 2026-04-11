@@ -70,6 +70,9 @@ import sys
 import time
 import traceback
 import warnings
+
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', category=FutureWarning)
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -180,7 +183,7 @@ def bootstrap_config() -> None:
 
 # Flag para modo wizard de mapeo manual (QC)
 MANUAL_QC_MAPPING = True
-WIZARD_IO_LOGGING_ENABLED = os.getenv("TZ_WIZARD_LOGGING", "1").lower() not in {"0", "false", "off"}
+WIZARD_IO_LOGGING_ENABLED = os.getenv("TZ_WIZARD_LOGGING", "0").lower() not in {"0", "false", "off"}
 
 ALIAS_VISIBLES = {
     "tel": "tel_analizado",
