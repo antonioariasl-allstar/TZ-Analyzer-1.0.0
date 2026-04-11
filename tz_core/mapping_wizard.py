@@ -293,6 +293,66 @@ def collect_quick_remap_operations(
     return operations
 
 
+FIELD_CONTEXT: Dict[str, Dict[str, str]] = {
+    "fecha": {
+        "desc": "Fecha del evento telefónico",
+        "hint": "Formatos comunes: DD/MM/YYYY, YYYY-MM-DD",
+    },
+    "hora": {
+        "desc": "Hora del evento",
+        "hint": "Formatos: HH:MM:SS o columna con fecha+hora completa",
+    },
+    "tel": {
+        "desc": "Número telefónico investigado (origen)",
+        "hint": "Ej: 50370001234, +50370001234, 70001234",
+    },
+    "imei": {
+        "desc": "IMEI del dispositivo móvil investigado",
+        "hint": "15 dígitos. Ej: 860766049463800",
+    },
+    "interaccion": {
+        "desc": "Tipo de evento: llamada, SMS, datos",
+        "hint": "Valores típicos: VOZ, SMS, DATOS, LLAMADA",
+    },
+    "contacto": {
+        "desc": "Número con quien se comunicó el investigado",
+        "hint": "Número destino de la llamada o mensaje",
+    },
+    "lat": {
+        "desc": "Latitud GPS de la antena (posición Norte-Sur)",
+        "hint": "Rango El Salvador: 13.0 a 14.5",
+    },
+    "long": {
+        "desc": "Longitud GPS de la antena (posición Este-Oeste)",
+        "hint": "Rango El Salvador: -90.1 a -87.7 (negativa)",
+    },
+    "azimut": {
+        "desc": "Orientación de la antena en grados",
+        "hint": "0-360° (0=Norte, 90=Este, 180=Sur, 270=Oeste)",
+    },
+    "antena": {
+        "desc": "Código o nombre de la antena/celda",
+        "hint": "Ej: 39512-0473-3, BTS_12345, nombre de sitio",
+    },
+    "celda": {
+        "desc": "Código identificador de celda telefónica",
+        "hint": "Opcional. Complementa la antena",
+    },
+    "direccion": {
+        "desc": "Dirección física donde está la antena",
+        "hint": "Opcional. Puede ser la misma columna que antena",
+    },
+    "imsi": {
+        "desc": "IMSI de la tarjeta SIM",
+        "hint": "Opcional. 15 dígitos",
+    },
+    "duracion": {
+        "desc": "Duración de la llamada o evento",
+        "hint": "Opcional. En segundos, minutos o HH:MM:SS",
+    },
+}
+
+
 def collect_essential_mapping_assignments(
     canonicals: List[str],
     columns_menu: List[str],
@@ -422,6 +482,24 @@ def format_columns_menu(cols: List[str], per_line: int = 6) -> str:
         rows.append("  " + "  |  ".join(current))
 
     return "\n".join(rows)
+
+
+def preview_column_sample(
+    df: pd.DataFrame,
+    column_name: str,
+    write_fn: Callable[[str], None],
+    max_rows: int = 3,
+) -> None:
+    """Muestra valores de ejemplo de una columna seleccionada."""
+    if column_name not in df.columns:
+        return
+    sample = df[column_name].dropna().head(max_rows)
+    if sample.empty:
+        write_fn(f"  (columna '{column_name}' está vacía)")
+        return
+    write_fn(f"  Vista previa de '{column_name}':")
+    for val in sample:
+        write_fn(f"    {val}")
 
 
 def build_mapping_intro_lines(
