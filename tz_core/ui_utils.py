@@ -54,11 +54,16 @@ def collect_manual_mode_context(
     cfg = config or {}
 
     while True:
-        output_fn("\nSeleccione el modo de trabajo:")
+        output_fn("\nSeleccione el modo de procesamiento:\n")
         output_fn("[1] Procesar bitácora completa")
-        output_fn("[2] Procesar por tiempo (día / rango de días / rango de horas)")
-        output_fn("[3] Ingresar antenas manualmente")
-
+        output_fn("    → Genera informe HTML + mapa KML/KMZ con todos los registros")
+        output_fn("    → Ideal para análisis forense completo de un caso\n")
+        output_fn("[2] Procesar bitácora filtrada por tiempo")
+        output_fn("    → Analiza período específico: día, rango de días o rango de horas")
+        output_fn("    → Útil para enfocar en ventanas temporales de interés\n")
+        output_fn("[3] Ingresar antenas manualmente (sin bitácora)")
+        output_fn("    → Crea archivo KML desde coordenadas GPS directas")
+        output_fn("    → Modo avanzado para ploteo rápido de ubicaciones\n")
         resp = (input_fn("Opción (1/2/3, Enter=1): ") or "").strip() or "1"
 
         if resp == "3":

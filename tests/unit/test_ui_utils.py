@@ -40,7 +40,7 @@ def test_collect_manual_mode_context_returns_option_and_config():
 
     assert ctx.option == "2"
     assert ctx.config["color"] == "blue"
-    assert any("Seleccione el modo de trabajo" in line for line in outputs)
+    assert any("Seleccione el modo de procesamiento" in line for line in outputs)
 
 
 def test_collect_manual_mode_context_loops_through_manual_mode():
