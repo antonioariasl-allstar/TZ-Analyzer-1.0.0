@@ -349,21 +349,33 @@ def solicitar_color_tema(CONFIG, input_mock=None):
     palette = style.get("palette") or []   # lista de [nombre, "#hex"]
 
     # Construir el prompt
-    print("")  # pequeña separación visual
+    print("")
     if palette:
-        print("Colores sugeridos (visibles en Google Earth):")
-        for i, item in enumerate(palette, start=1):
+        print("Selección de color para visualización en Google Earth:\n")
+        print("  Si procesa múltiples bitácoras del mismo caso, use un color")
+        print("  diferente para cada una (facilita distinguirlas en el mapa).\n")
+        # Mostrar primeros 8 colores como acceso rápido
+        quick = min(8, len(palette))
+        for i in range(quick):
             try:
-                nombre, hexv = item[0], item[1]
+                nombre, hexv = palette[i][0], palette[i][1]
             except Exception:
-                # por si el ítem no tiene la forma esperada
                 continue
-            print(f"  [{i}] {nombre}  {hexv}")
-        print(f"  [0] Usar el predeterminado ({default_hex})")
-
-        resp = input_func("Elegí número o pegá un HEX (Enter = predeterminado): ").strip()
+            print(f"  [{i+1}] {nombre}  {hexv}")
+        print(f"\n  [0] Usar predeterminado ({default_hex})")
+        print(f"  [+] Ver todos los colores ({len(palette)} disponibles)\n")
+        resp = input_func("Número, código HEX, o '+' para ver más (Enter=predeterminado): ").strip()
+        if resp == "+":
+            print(f"\nTodos los colores disponibles ({len(palette)}):\n")
+            for i, item in enumerate(palette, start=1):
+                try:
+                    nombre, hexv = item[0], item[1]
+                except Exception:
+                    continue
+                print(f"  [{i}] {nombre}  {hexv}")
+            print(f"\n  [0] Usar predeterminado ({default_hex})\n")
+            resp = input_func("Número o código HEX (Enter=predeterminado): ").strip()
     else:
-        # Sin paleta configurada, conservamos el comportamiento clásico
         resp = input_func(f"Ingresá color tema en hex (Enter = {default_hex}): ").strip()
 
     # Normalizar elección
