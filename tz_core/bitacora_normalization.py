@@ -124,6 +124,7 @@ __all__ = [
     "parse_duration_seconds",
     "normalize_imei",
     "normalize_msisdn",
+    "normalize_temporal_fields",
 ]
 
 
@@ -232,3 +233,79 @@ def normalize_msisdn(value: object, *, allow_plus: bool = True) -> Optional[str]
     if not s.isdigit():
         return None
     return ("+" + s) if prefix_plus else s
+
+
+def normalize_temporal_fields(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Detecta y normaliza campos temporales en el DataFrame post-wizard.
+
+    Casos manejados:
+    A) 'fecha' contiene datetime combinado (YYYY-MM-DD HH:MM:SS o similar):
+       - Parsea como datetime completo
+       - Sobreescribe 'fecha' con componente date (dd/mm/yyyy)
+       - Crea 'hora' con componente time (HH:MM:SS) si no existe o está vacía
+       - Crea 'datetime_evento' como datetime64[ns]
+    B) 'fecha' y 'hora' existen como columnas separadas:
+       - Construye 'datetime_evento' combinando ambas
+       - No altera 'fecha' ni 'hora'
+    C) Solo existe 'fecha' (sin hora):
+       - 'datetime_evento' = fecha a las 00:00:00
+    D) Solo existe 'hora' o ninguna columna temporal:
+       - 'datetime_evento' = NaT, no rompe flujo
+
+    No modifica columnas no temporales. Tolerante a errores (coerce).
+    'datetime_evento' es siempre datetime64[ns], nunca string.
+    """
+    df = df.copy()
+
+    _DATETIME_PATTERN = re.compile(
+        r"^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}"
+    )
+
+    def _is_combined_datetime(series: pd.Series) -> bool:
+        """Devuelve True si la mayoría de valores no-nulos parecen datetime combinado."""
+        sample = series.dropna().astype(str).str.strip().head(10)
+        if sample.empty:
+            return False
+        matches = sample.apply(lambda v: bool(_DATETIME_PATTERN.match(v)))
+        return matches.sum() >= max(1, len(sample) // 2)
+
+    fecha_col = "fecha" if "fecha" in df.columns else None
+    hora_col = "hora" if "hora" in df.columns else None
+
+    datetime_evento = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
+
+    # --- CASO A: fecha contiene datetime combinado ---
+    if fecha_col and _is_combined_datetime(df[fecha_col]):
+        parsed = pd.to_datetime(df[fecha_col], errors="coerce", dayfirst=False)
+        datetime_evento = parsed
+        df["fecha"] = parsed.dt.strftime("%d/%m/%Y").where(parsed.notna(), "SinInf")
+        hora_vacia = (
+            hora_col is None
+            or df[hora_col].isna().all()
+            or df[hora_col].astype(str).str.strip().isin(["", "Sin Inf.", "SinInf"]).all()
+        )
+        if hora_vacia:
+            df["hora"] = parsed.dt.strftime("%H:%M:%S").where(parsed.notna(), "Sin Inf.")
+
+    # --- CASO B: fecha y hora como columnas separadas ---
+    elif fecha_col and hora_col:
+        _sample = df[fecha_col].dropna().astype(str).str.strip().head(5)
+        _dayfirst = not _sample.str.match(r"^\d{4}-\d{2}-\d{2}$").any()
+        fecha_parsed = pd.to_datetime(df[fecha_col], errors="coerce", dayfirst=_dayfirst)
+        hora_str = df[hora_col].astype(str).str.strip()
+        combined_str = fecha_parsed.dt.strftime("%Y-%m-%d").fillna("1970-01-01") + " " + hora_str
+        combined = pd.to_datetime(combined_str, errors="coerce", dayfirst=False)
+        mask_valid = fecha_parsed.notna() & combined.notna()
+        datetime_evento[mask_valid] = combined[mask_valid]
+
+    # --- CASO C: solo fecha ---
+    elif fecha_col:
+        fecha_parsed = pd.to_datetime(df[fecha_col], errors="coerce", dayfirst=True)
+        datetime_evento = fecha_parsed.dt.normalize()
+
+    # --- CASO D: solo hora o ninguna ---
+    # datetime_evento queda NaT — no rompe flujo
+
+    df["datetime_evento"] = datetime_evento
+    return df

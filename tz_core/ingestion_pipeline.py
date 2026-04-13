@@ -20,6 +20,7 @@ from tz_core.mapping_wizard import (
     finalize_manual_mapping_dataframe,
     normalize_wizard_datetime_fields,
 )
+from tz_core.bitacora_normalization import normalize_temporal_fields
 from tz_core.qc_engine import run_qc
 
 
@@ -85,6 +86,7 @@ def run_ingestion_pipeline(
         df_norm, _mapeo = run_manual_mapping_fn(df_norm, wizard_io=wizard_io)
         df_norm = finalize_manual_mapping_dataframe(df_norm)
 
+    df_norm = normalize_temporal_fields(df_norm)
     df_norm = normalize_wizard_datetime_fields(df_norm, warn_writer=lambda msg: out(msg))
 
     df_norm, errores = validar_datos_fn(df_norm, columnas_esenciales)
