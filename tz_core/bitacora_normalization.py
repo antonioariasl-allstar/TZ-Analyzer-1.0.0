@@ -125,6 +125,7 @@ __all__ = [
     "normalize_imei",
     "normalize_msisdn",
     "normalize_temporal_fields",
+    "normalize_contact_fields",
 ]
 
 
@@ -308,4 +309,62 @@ def normalize_temporal_fields(df: pd.DataFrame) -> pd.DataFrame:
     # datetime_evento queda NaT — no rompe flujo
 
     df["datetime_evento"] = datetime_evento
+    return df
+
+
+def normalize_contact_fields(df: pd.DataFrame) -> pd.DataFrame:
+    """QC-4: Normalización estructural conservadora de campos telefónicos.
+
+    Crea columnas derivadas sin modificar los originales:
+      - tel_limpio: tel normalizado estructuralmente
+      - contacto_limpio: contacto normalizado estructuralmente
+      - contacto_valido: bool — True si contacto_limpio es un número usable
+
+    Reglas de validación (global, no dependiente de país):
+      - Solo dígitos con posible '+' inicial
+      - Longitud entre 7 y 15 caracteres
+      - No puede ser secuencia de solo ceros
+    """
+    def _is_valid(value) -> bool:
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return False
+        s = str(value)
+        digits = s.lstrip("+")
+        if not digits.isdigit():
+            return False
+        if len(digits) == 0:
+            return False
+        if len(digits) < 7 or len(digits) > 15:
+            return False
+        if all(c == "0" for c in digits):
+            return False
+        return True
+
+    try:
+        if "tel" in df.columns:
+            df["tel_limpio"] = df["tel"].apply(
+                lambda v: normalize_msisdn(v) if not (isinstance(v, float) and pd.isna(v)) else None
+            )
+        else:
+            df["tel_limpio"] = None
+
+        if "contacto" in df.columns:
+            df["contacto_limpio"] = df["contacto"].apply(
+                lambda v: normalize_msisdn(v) if not (isinstance(v, float) and pd.isna(v)) else None
+            )
+            df["contacto_valido"] = df["contacto_limpio"].apply(_is_valid)
+        else:
+            df["contacto_limpio"] = None
+            df["contacto_valido"] = False
+
+    except Exception as e:
+        import warnings
+        warnings.warn(f"normalize_contact_fields: error inesperado — {e}")
+        if "tel_limpio" not in df.columns:
+            df["tel_limpio"] = None
+        if "contacto_limpio" not in df.columns:
+            df["contacto_limpio"] = None
+        if "contacto_valido" not in df.columns:
+            df["contacto_valido"] = False
+
     return df
