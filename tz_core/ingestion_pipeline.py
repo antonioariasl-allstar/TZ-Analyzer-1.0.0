@@ -6,6 +6,7 @@ listo tras mapeo de schema, normalización de fecha/hora y filtros de tiempo.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
@@ -93,17 +94,22 @@ def run_ingestion_pipeline(
     df_norm, errores = validar_datos_fn(df_norm, columnas_esenciales)
 
     # --- QC Engine ---
-    qc_result = run_qc(df_norm)
-    out("")
-    for linea in qc_result.resumen:
-        out(f"  {linea}")
-    out(f"\nCalidad del archivo: {qc_result.score}/100")
-    if qc_result.bloqueante:
-        out("\n⚠️  ADVERTENCIA: se detectaron problemas críticos en los datos.")
-        respuesta = input("¿Desea continuar de todas formas? (S/N): ").strip().upper()
-        if respuesta != "S":
-            import sys
-            sys.exit(0)
+    try:
+        qc_result = run_qc(df_norm)
+    except Exception as e:
+        logging.error(f"[QC] run_qc falló inesperadamente: {type(e).__name__}: {e}")
+        qc_result = None
+    if qc_result is not None:
+        out("")
+        for linea in qc_result.resumen:
+            out(f"  {linea}")
+        out(f"\nCalidad del archivo: {qc_result.score}/100")
+        if qc_result.bloqueante:
+            out("\n⚠️  ADVERTENCIA: se detectaron problemas críticos en los datos.")
+            respuesta = input("¿Desea continuar de todas formas? (S/N): ").strip().upper()
+            if respuesta != "S":
+                import sys
+                sys.exit(0)
 
     time_filters: TimeFilterResult = apply_time_filter_prompt(
         option=time_filter_option,
