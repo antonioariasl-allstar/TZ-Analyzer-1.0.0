@@ -372,7 +372,11 @@ def collect_essential_mapping_assignments(
     pendientes = list(initial_pendings or [])
     etiquetas = etiquetas or {}
 
-    for canonical in canonicals:
+    i = 0
+    while i < len(canonicals):
+        canonical = canonicals[i]
+        go_back = False
+
         etiqueta_visible = etiquetas.get(canonical, canonical)
         ctx = FIELD_CONTEXT.get(canonical, {})
         desc = ctx.get("desc", "")
@@ -402,6 +406,9 @@ def collect_essential_mapping_assignments(
                 if canonical not in pendientes:
                     pendientes.append(canonical)
                 assignments[canonical] = ("omitido", None)
+                confirm_resp = prompt_fn("Campo omitido. (S=Confirmar, A=Atrás): ").strip().upper()
+                if confirm_resp == "A":
+                    go_back = True
                 break
 
             if decision.action == "assign" and decision.column:
@@ -414,7 +421,18 @@ def collect_essential_mapping_assignments(
                     pendientes.remove(canonical)
                 if df is not None:
                     preview_column_sample(df, decision.column, write_fn)
-                break
+                confirm_resp = prompt_fn("¿Es correcta? (S=Sí, N=Elegir otra, A=Atrás): ").strip().upper()
+                if confirm_resp == "N":
+                    assignments[canonical] = ("omitido", None)
+                    used_columns.discard(decision.column)
+                    continue
+                elif confirm_resp == "A":
+                    assignments[canonical] = ("omitido", None)
+                    used_columns.discard(decision.column)
+                    go_back = True
+                    break
+                else:
+                    break
 
             if decision.action == "duplicate" and decision.column:
                 write_fn(
@@ -424,6 +442,20 @@ def collect_essential_mapping_assignments(
                 continue
 
             prompt_msg = "  [QC] Entrada inválida. Debe ser un número de la lista (o Enter=omitir): "
+
+        if go_back:
+            if i > 0:
+                prev_canonical = canonicals[i - 1]
+                prev_assign = assignments.get(prev_canonical)
+                if prev_assign and prev_assign[0] == "col":
+                    used_columns.discard(prev_assign[1])
+                assignments[prev_canonical] = ("omitido", None)
+                if prev_canonical not in pendientes:
+                    pendientes.append(prev_canonical)
+                i -= 1
+            # Si i == 0, repite el primer campo sin retroceder más
+        else:
+            i += 1
 
     return assignments, used_columns, pendientes
 
