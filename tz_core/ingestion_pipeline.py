@@ -21,7 +21,7 @@ from tz_core.mapping_wizard import (
     finalize_manual_mapping_dataframe,
     normalize_wizard_datetime_fields,
 )
-from tz_core.bitacora_normalization import normalize_temporal_fields, normalize_contact_fields
+from tz_core.bitacora_normalization import normalize_temporal_fields, normalize_contact_fields, normalize_event_fields
 from tz_core.qc_engine import run_qc
 
 
@@ -89,6 +89,7 @@ def run_ingestion_pipeline(
 
     df_norm = normalize_temporal_fields(df_norm)
     df_norm = normalize_contact_fields(df_norm)
+    df_norm = normalize_event_fields(df_norm, col_tipo="interaccion")
     df_norm = normalize_wizard_datetime_fields(df_norm, warn_writer=lambda msg: out(msg))
 
     df_norm, errores = validar_datos_fn(df_norm, columnas_esenciales)

@@ -126,6 +126,7 @@ __all__ = [
     "normalize_msisdn",
     "normalize_temporal_fields",
     "normalize_contact_fields",
+    "normalize_event_fields",
 ]
 
 
@@ -367,4 +368,45 @@ def normalize_contact_fields(df: pd.DataFrame) -> pd.DataFrame:
         if "contacto_valido" not in df.columns:
             df["contacto_valido"] = False
 
+    return df
+
+
+def normalize_event_fields(
+    df: pd.DataFrame,
+    col_tipo: Optional[str] = None,
+) -> pd.DataFrame:
+    """QC-5: Clasifica eventos y genera flag analítico.
+
+    Crea dos columnas derivadas sin modificar las originales:
+      - tipo_evento_normalizado: VOZ, SMS, DATOS o DESCONOCIDO
+      - evento_valido_analisis: True para VOZ y SMS, False para el resto
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame post-wizard.
+    col_tipo : str | None
+        Nombre de la columna que contiene el tipo de evento (ej. "interaccion").
+        Si es None o no existe en df, todo queda DESCONOCIDO.
+    """
+    def _classify(value) -> str:
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return "DESCONOCIDO"
+        text = str(value).strip().upper()
+        if not text:
+            return "DESCONOCIDO"
+        if "DATOS" in text:
+            return "DATOS"
+        if "SMS" in text:
+            return "SMS"
+        if "VOZ" in text or "CALL" in text or "LLAMADA" in text:
+            return "VOZ"
+        return "DESCONOCIDO"
+
+    if col_tipo is None or col_tipo not in df.columns:
+        df["tipo_evento_normalizado"] = "DESCONOCIDO"
+    else:
+        df["tipo_evento_normalizado"] = df[col_tipo].map(_classify)
+
+    df["evento_valido_analisis"] = df["tipo_evento_normalizado"].isin({"VOZ", "SMS"})
     return df
