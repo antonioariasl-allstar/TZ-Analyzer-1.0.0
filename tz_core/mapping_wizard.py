@@ -507,11 +507,20 @@ def collect_non_essential_mapping_assignments(
                 break
 
             if decision.action == "assign" and decision.column:
-                assignments[canonical] = ("col", decision.column)
                 if df is not None:
                     preview_column_sample(df, decision.column, write_fn)
-                break
-
+                confirm = prompt_fn("  ¿Correcto? (S=Sí, N=Elegir otra): ").strip().upper()
+                if confirm == "S":
+                    assignments[canonical] = ("col", decision.column)
+                    break
+                elif confirm == "N":
+                    continue
+                else:
+                    write_fn("  Entrada inválida. Use S o N.")
+                    continue
+            if decision.action == "invalid":
+                write_fn("  Entrada inválida. Use número, 'F valor' o Enter.")
+                continue
             assignments[canonical] = ("omitido", None)
             break
 
@@ -846,10 +855,10 @@ def resolve_non_essential_selection(
     try:
         idx = int(sel)
     except Exception:
-        return NonEssentialSelectionDecision(action="omit")
+        return NonEssentialSelectionDecision(action="invalid")
 
     if not (1 <= idx <= len(columns_menu)):
-        return NonEssentialSelectionDecision(action="omit")
+        return NonEssentialSelectionDecision(action="invalid")
 
     return NonEssentialSelectionDecision(action="assign", column=columns_menu[idx - 1])
 

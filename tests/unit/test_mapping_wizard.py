@@ -305,7 +305,7 @@ def test_collect_essential_mapping_assignments_handles_menu_duplicates_and_pendi
 
 
 def test_collect_non_essential_mapping_assignments_supports_fixed_and_invalid_defaults():
-    recorder = _FakeIORecorder(["?", "2", "F valor", "foo"])
+    recorder = _FakeIORecorder(["?", "2", "S", "F valor", "foo"])
 
     assignments = collect_non_essential_mapping_assignments(
         canonicals=["alias", "duracion", "custom"],
@@ -722,10 +722,10 @@ def test_resolve_non_essential_selection_defaults_to_omit_on_invalid():
     menu = ["c1"]
 
     decision = resolve_non_essential_selection("99", menu)
-    assert decision.action == "omit"
+    assert decision.action == "invalid"
 
     decision = resolve_non_essential_selection("foo", menu)
-    assert decision.action == "omit"
+    assert decision.action == "invalid"
 
 
 def test_resolve_confirm_loop_option_maps_primary_actions():
