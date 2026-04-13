@@ -20,6 +20,7 @@ from tz_core.mapping_wizard import (
     finalize_manual_mapping_dataframe,
     normalize_wizard_datetime_fields,
 )
+from tz_core.qc_engine import run_qc
 
 
 @dataclass
@@ -87,6 +88,19 @@ def run_ingestion_pipeline(
     df_norm = normalize_wizard_datetime_fields(df_norm, warn_writer=lambda msg: out(msg))
 
     df_norm, errores = validar_datos_fn(df_norm, columnas_esenciales)
+
+    # --- QC Engine ---
+    qc_result = run_qc(df_norm)
+    out("")
+    for linea in qc_result.resumen:
+        out(f"  {linea}")
+    out(f"\nCalidad del archivo: {qc_result.score}/100")
+    if qc_result.bloqueante:
+        out("\n⚠️  ADVERTENCIA: se detectaron problemas críticos en los datos.")
+        respuesta = input("¿Desea continuar de todas formas? (S/N): ").strip().upper()
+        if respuesta != "S":
+            import sys
+            sys.exit(0)
 
     time_filters: TimeFilterResult = apply_time_filter_prompt(
         option=time_filter_option,
