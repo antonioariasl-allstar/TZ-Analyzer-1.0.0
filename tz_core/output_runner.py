@@ -64,9 +64,14 @@ def run_outputs_flow(
         )
 
         try:
-            html_path = resultado_salidas.get("html") if isinstance(resultado_salidas, dict) else None
-            kmz_path = resultado_salidas.get("kmz") if isinstance(resultado_salidas, dict) else None
-            hashes_path = resultado_salidas.get("hashes") if isinstance(resultado_salidas, dict) else None
+            if isinstance(resultado_salidas, dict):
+                html_path = resultado_salidas.get("html")
+                kmz_path = resultado_salidas.get("kmz")
+                hashes_path = resultado_salidas.get("hashes")
+            else:
+                html_path = getattr(resultado_salidas, "informe_html", None)
+                kmz_path = getattr(resultado_salidas, "kmz_path", None)
+                hashes_path = getattr(resultado_salidas, "hashes_path", None)
             logger(f"[salidas] HTML={html_path} KMZ={kmz_path} HASHES={hashes_path}")
         except Exception:
             pass
