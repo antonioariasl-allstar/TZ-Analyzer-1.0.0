@@ -88,6 +88,21 @@ def run_qc(df: pd.DataFrame) -> QCResult:
         if pct_fecha > 0:
             resumen.append(f"{sev}: fecha inválida/vacía en {pct_fecha}% de registros")
 
+    # --- HORA (peso 10) ---
+    if "hora" not in df.columns:
+        flags["hora"] = {"ausente": True, "pct_invalida": 100.0, "severidad": "ADVERTENCIA"}
+        penalizacion += 10
+        resumen.append("ADVERTENCIA: columna 'hora' ausente — penalización máxima")
+    else:
+        invalidas_h = df["hora"].isna() | (df["hora"].astype(str).str.strip().isin(["", "SinInf", "nan", "None"]))
+        pct_hora = round(invalidas_h.sum() / n * 100, 1)
+        sev = "ADVERTENCIA" if pct_hora > 10 else "OK"
+        pen = round(10 * pct_hora / 100)
+        flags["hora"] = {"pct_invalida": pct_hora, "severidad": sev}
+        penalizacion += pen
+        if pct_hora > 0:
+            resumen.append(f"{sev}: hora inválida/vacía en {pct_hora}% de registros")
+
     # --- COORDENADAS (peso 10) ---
     if "lat" not in df.columns or "long" not in df.columns:
         flags["coords"] = {"ausente": True, "pct_nula": 100.0, "severidad": "ADVERTENCIA"}
