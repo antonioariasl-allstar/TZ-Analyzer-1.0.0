@@ -508,9 +508,9 @@ def suggest_case_name(
             fmax = fechas_valid.max().strftime("%d-%m-%Y")
             date_range = fmin if fmin == fmax else f"{fmin}__{fmax}"
         else:
-            date_range = timestamp_fn().strftime("%d-%m-%Y")
+            date_range = timestamp_fn().strftime("%Y-%m-%d")
     else:
-        date_range = timestamp_fn().strftime("%d-%m-%Y")
+        date_range = timestamp_fn().strftime("%Y-%m-%d")
 
     suffix = ""
     if filters:
@@ -563,11 +563,10 @@ def suggest_case_name(
     if alias_id == "DESCONOCIDO" and alias_part != "sin_alias":
         alias_id = alias_part
 
-    stamp = timestamp_fn().strftime("%Y-%m-%d_%H-%M")
     pieces = [mode_label or "AUTO", principal_id or "DESCONOCIDO"]
     if alias_id and alias_id != "DESCONOCIDO":
         pieces.append(alias_id)
-    pieces.append(stamp)
+    pieces.append(date_range)
     base_raw = "_".join(filter(None, pieces))
     base_name = sanitize_fn(base_raw)
 
