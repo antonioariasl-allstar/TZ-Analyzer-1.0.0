@@ -101,9 +101,9 @@ def test_mapping_wizard_uses_custom_io_flow():
     assert recorder.prompts == [
         "→ Columna para fecha (número — '?' menú / Enter=omitir): ",
         "¿Es correcta? (S=Sí, N=Elegir otra, A=Atrás): ",
-        "→ Alias para toda la ejecución (Enter=omitir): ",
-        "→ Nombre_usuario para toda la ejecución (Enter=omitir): ",
-        "→ Abonado para toda la ejecución (Enter=omitir): ",
+        "→ Alias (identificador corto del caso o sujeto; se usa en nombres de archivo): ",
+        "→ Nombre_usuario (nombre descriptivo del investigado o referencia visible en informe): ",
+        "→ Abonado (titular de la línea o SIM, si aplica): ",
         "→ Opción (S/N/R): ",
     ]
     assert any("=== Resumen de mapeo ===" in msg for msg in recorder.outputs)
@@ -413,8 +413,8 @@ def test_collect_identity_overrides_prompts_only_missing_fields():
 
     assert overrides == {"abonado": "VIP"}
     assert recorder.prompts == [
-        "→ Nombre_usuario para toda la ejecución (Enter=omitir): ",
-        "→ Abonado para toda la ejecución (Enter=omitir): ",
+        "→ Nombre_usuario (nombre descriptivo del investigado o referencia visible en informe): ",
+        "→ Abonado (titular de la línea o SIM, si aplica): ",
     ]
 
 

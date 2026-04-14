@@ -388,6 +388,7 @@ def collect_essential_mapping_assignments(
         ctx = FIELD_CONTEXT.get(canonical, {})
         desc = ctx.get("desc", "")
         hint = ctx.get("hint", "")
+        write_fn(format_columns_menu(columns_menu, per_line=per_line))
         if desc:
             write_fn(f"\n  📌 {etiqueta_visible}: {desc}")
         if hint:
@@ -464,6 +465,7 @@ def collect_essential_mapping_assignments(
         else:
             i += 1
 
+    _detect_shared_datetime(assignments, df, prompt_fn, write_fn)
     return assignments, used_columns, pendientes
 
 
@@ -487,6 +489,7 @@ def collect_non_essential_mapping_assignments(
         ctx = FIELD_CONTEXT.get(canonical, {})
         desc = ctx.get("desc", "")
         hint = ctx.get("hint", "")
+        write_fn(format_columns_menu(columns_menu, per_line=per_line))
         if desc:
             write_fn(f"\n  📌 {etiqueta_visible}: {desc}")
         if hint:
@@ -689,9 +692,14 @@ def collect_identity_overrides(
         if not needs_identity_field_prompt(df, field):
             continue
 
+        _field_hints = {
+            "alias": "→ Alias (identificador corto del caso o sujeto; se usa en nombres de archivo): ",
+            "nombre_usuario": "→ Nombre_usuario (nombre descriptivo del investigado o referencia visible en informe): ",
+            "abonado": "→ Abonado (titular de la línea o SIM, si aplica): ",
+        }
         try:
             response = prompt_fn(
-                f"→ {field.capitalize()} para toda la ejecución (Enter=omitir): "
+                _field_hints.get(field, f"→ {field.capitalize()} para toda la ejecución (Enter=omitir): ")
             )
         except Exception:
             response = ""
@@ -996,6 +1004,56 @@ def confirm_remap_selection(
         f"[QC] Remapearás: [{display_index}] {canonical}. ¿Confirmás? (s/N): "
     ).strip().lower()
     return response == "s"
+
+
+def _detect_shared_datetime(
+    assignments: Dict[str, Tuple[str, Any]],
+    df: Optional["pd.DataFrame"],
+    prompt_fn: Callable[[str], str],
+    write_fn: Callable[[str], None],
+) -> None:
+    """Detecta columna fecha/hora compartida con datetime completo y ofrece separación."""
+
+    fecha_assign = assignments.get("fecha")
+    hora_assign = assignments.get("hora")
+
+    if not (
+        fecha_assign and fecha_assign[0] == "col"
+        and hora_assign and hora_assign[0] == "col"
+        and fecha_assign[1] == hora_assign[1]
+    ):
+        return
+
+    if df is None or fecha_assign[1] not in df.columns:
+        return
+
+    col = fecha_assign[1]
+    sample = df[col].dropna().head(5)
+    if sample.empty:
+        return
+
+    parsed = pd.to_datetime(sample, errors="coerce", dayfirst=True)
+    has_time = parsed.dropna().apply(
+        lambda ts: ts.hour != 0 or ts.minute != 0 or ts.second != 0
+    )
+    sample_str = sample.astype(str)
+    looks_like_datetime = sample_str.str.contains(r"[ T]\d{2}:\d{2}", regex=True)
+
+    if not (has_time.any() or looks_like_datetime.any()):
+        return
+
+    write_fn(
+        f"\n  [QC] Se detectó que 'fecha' y 'hora' usan la misma columna ('{col}') con datetime completo.\n"
+        f"  Opciones:\n"
+        f"    [1] Separar automáticamente: fecha = YYYY-MM-DD / hora = HH:MM:SS\n"
+        f"    [2] Mantener como está\n"
+        f"    [3] Remapear hora"
+    )
+    resp = prompt_fn("  → Opción (1/2/3, Enter=1): ").strip()
+    if resp == "" or resp == "1":
+        assignments["_datetime_split"] = ("fijo", col)
+    elif resp == "3":
+        assignments["hora"] = ("omitido", None)
 
 
 class MappingWizard:
