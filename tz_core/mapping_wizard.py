@@ -123,7 +123,7 @@ def normalize_wizard_datetime_fields(
 
         if "fecha" in df.columns:
             fecha_text = df["fecha"].astype(str).str.strip()
-            fecha_dt = pd.Series(pd.NaT, index=fecha_text.index)
+            fecha_dt = pd.Series(pd.NaT, index=fecha_text.index, dtype="datetime64[ns]")
 
             mask_iso = fecha_text.str.match(r"^\d{4}-\d{2}-\d{2}$")
             if mask_iso.any():
@@ -145,7 +145,7 @@ def normalize_wizard_datetime_fields(
 
         if "hora" in df.columns:
             hora_text = df["hora"].astype(str).str.strip()
-            hora_dt = pd.Series(pd.NaT, index=df.index)
+            hora_dt = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
 
             mask_hms = hora_text.str.match(r"^\d{1,2}:\d{2}(:\d{2})?$")
             if mask_hms.any():
@@ -163,11 +163,18 @@ def normalize_wizard_datetime_fields(
             mask_remaining = ~mask_hms & hora_text.ne("")
             if mask_remaining.any():
                 prefixed = "1970-01-01 " + hora_text.loc[mask_remaining]
-                hora_dt.loc[mask_remaining] = pd.to_datetime(
-                    prefixed,
-                    errors="coerce",
-                    dayfirst=True,
-                )
+                def _strip_tz(v):
+                    try:
+                        ts = pd.to_datetime(v, dayfirst=True, errors="coerce")
+                        if ts is pd.NaT:
+                            return pd.NaT
+                        if hasattr(ts, "tzinfo") and ts.tzinfo is not None:
+                            ts = ts.tz_localize(None)
+                        return ts
+                    except Exception:
+                        return pd.NaT
+                _parsed = prefixed.map(_strip_tz)
+                hora_dt.loc[mask_remaining] = pd.to_datetime(_parsed, errors="coerce", utc=False)
 
             hora_out = pd.Series("", index=df.index, dtype=object)
 
