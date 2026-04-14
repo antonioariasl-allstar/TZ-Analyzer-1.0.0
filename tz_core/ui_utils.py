@@ -362,10 +362,20 @@ def prompt_output_routing(
     output_fn(f"  - {base_name}_errores.txt\n")
     output_fn("Si desea cambiar el nombre base, escríbalo ahora (solo base, sin extensión).")
 
-    resp = (input_fn(f"Nombre base del KML (Enter = {base_name}): ") or "").strip()
-    if resp and re.fullmatch(r"#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?", resp):
-        output_fn("Eso parece un color hex, no un nombre de archivo. Usaré el sugerido.")
-        resp = ""
+    _CHARS_PROHIBIDOS = r'\/:*?"<>|'
+    while True:
+        resp = (input_fn(f"Nombre base del KML (Enter = {base_name}): ") or "").strip()
+        if not resp:
+            resp = ""
+            break
+        if any(c in resp for c in _CHARS_PROHIBIDOS):
+            output_fn(f'Nombre inválido. Evite caracteres: \\ / : * ? " < > |')
+            continue
+        if re.fullmatch(r"#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?", resp):
+            output_fn("Eso parece un color hex, no un nombre de archivo. Usaré el sugerido.")
+            resp = ""
+            break
+        break
 
     nombre_salida = sanitize_fn(resp) if resp else base_name
 
