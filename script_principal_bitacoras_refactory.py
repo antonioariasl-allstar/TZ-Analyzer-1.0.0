@@ -511,13 +511,12 @@ def main():
         config=CONFIG,
         input_fn=input,
         output_fn=print,
-        color_picker=_pick_color,
+        color_picker=lambda cfg: cfg,
         manual_mode_callback=_run_manual_mode,
     )
     opcion = context.option
     CONFIG = context.config
     log(f"Modo válido seleccionado: {opcion}")
-    log("Configuración de colores completada")
     
     dataset = gather_dataset_metadata(
         log_fn=log,
@@ -531,6 +530,8 @@ def main():
 
     archivo_entrada = dataset.archivo
     hoja = dataset.hoja
+    CONFIG = _pick_color(CONFIG) or CONFIG
+    log("Configuración de colores completada")
     df = dataset.dataframe
 
     log_dataset_stats("carga_inicial", df, logger=log)
