@@ -363,18 +363,7 @@ def solicitar_color_tema(CONFIG, input_mock=None):
                 continue
             print(f"  [{i+1}] {nombre}  {hexv}")
         print(f"\n  [0] Usar predeterminado ({default_hex})")
-        print(f"  [+] Ver todos los colores ({len(palette)} disponibles)\n")
-        resp = input_func("Número, código HEX, o '+' para ver más (Enter=predeterminado): ").strip()
-        if resp == "+":
-            print(f"\nTodos los colores disponibles ({len(palette)}):\n")
-            for i, item in enumerate(palette, start=1):
-                try:
-                    nombre, hexv = item[0], item[1]
-                except Exception:
-                    continue
-                print(f"  [{i}] {nombre}  {hexv}")
-            print(f"\n  [0] Usar predeterminado ({default_hex})\n")
-            resp = input_func("Número o código HEX (Enter=predeterminado): ").strip()
+        resp = input_func("Número o código HEX (Enter=predeterminado): ").strip()
     else:
         resp = input_func(f"Ingresá color tema en hex (Enter = {default_hex}): ").strip()
 
