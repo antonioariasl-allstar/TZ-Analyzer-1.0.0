@@ -295,6 +295,8 @@ def normalize_temporal_fields(df: pd.DataFrame) -> pd.DataFrame:
         _sample = df[fecha_col].dropna().astype(str).str.strip().head(5)
         _dayfirst = not _sample.str.match(r"^\d{4}-\d{2}-\d{2}$").any()
         fecha_parsed = pd.to_datetime(df[fecha_col], errors="coerce", dayfirst=_dayfirst)
+        if not pd.api.types.is_datetime64_any_dtype(fecha_parsed):
+            fecha_parsed = fecha_parsed.astype("datetime64[ns]")
         hora_str = df[hora_col].astype(str).str.strip()
         combined_str = fecha_parsed.dt.strftime("%Y-%m-%d").fillna("1970-01-01") + " " + hora_str
         combined = pd.to_datetime(combined_str, errors="coerce", dayfirst=False)
@@ -304,6 +306,8 @@ def normalize_temporal_fields(df: pd.DataFrame) -> pd.DataFrame:
     # --- CASO C: solo fecha ---
     elif fecha_col:
         fecha_parsed = pd.to_datetime(df[fecha_col], errors="coerce", dayfirst=True)
+        if not pd.api.types.is_datetime64_any_dtype(fecha_parsed):
+            fecha_parsed = fecha_parsed.astype("datetime64[ns]")
         datetime_evento = fecha_parsed.dt.normalize()
 
     # --- CASO D: solo hora o ninguna ---
