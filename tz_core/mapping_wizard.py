@@ -579,13 +579,15 @@ def build_mapping_intro_lines(
     instructions: Optional[str] = None,
     show_header_once: bool = False,
     per_line: int = 6,
+    show_columns: bool = True,
 ) -> List[str]:
     """Genera las líneas estándar para introducir un bloque de mapeo."""
 
     lines: List[str] = []
     if show_header_once:
         lines.append("\n[QC] Columnas disponibles (una sola vez):")
-    lines.append(format_columns_menu(columns_menu, per_line=per_line))
+    if show_columns:
+        lines.append(format_columns_menu(columns_menu, per_line=per_line))
     lines.append(f"\n[QC] === Mapeo {title} ===")
     if instructions:
         lines.append(instructions)
@@ -1252,6 +1254,7 @@ class MappingWizard:
             title="NO ESENCIALES",
             columns_menu=self.cols_menu,
             instructions="  Podés: elegir número, escribir 'F <valor fijo>' o Enter=omitir.",
+            show_columns=False,
         ):
             self._write(line)
 
