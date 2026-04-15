@@ -279,42 +279,38 @@ def build_top_contacts_sections(
     # Análisis de perfiles de comunicación
     analisis_html = ""
     if not g_cnt.empty and c_col:
-        # Obtener sets de contactos en cada top
-        set_cnt = set(g_cnt.index)
-        set_dur = set(g_dur.index) if not g_dur.empty else set()
-
-        # Clasificar contactos
-        dominantes = sorted(set_cnt & set_dur)  # En ambos tops
-        solo_duracion = sorted(set_dur - set_cnt) if set_dur else []  # Solo en duración
-        solo_frecuencia = sorted(set_cnt - set_dur)  # Solo en frecuencia
-
-        # Construir líneas del análisis
-        lineas = []
-
-        if dominantes:
-            nums_dom = ", ".join(str(n) for n in dominantes)
-            lineas.append(f"• <strong>Dominantes ({len(dominantes)}):</strong> {nums_dom} — lideran en frecuencia y duración")
-
-        if solo_duracion:
-            nums_conv = ", ".join(str(n) for n in solo_duracion)
-            lineas.append(f"• <strong>Conversadores ({len(solo_duracion)}):</strong> {nums_conv} — alta duración, baja frecuencia")
-
-        if solo_frecuencia:
-            nums_brev = ", ".join(str(n) for n in solo_frecuencia)
-            lineas.append(f"• <strong>Contactos breves ({len(solo_frecuencia)}):</strong> {nums_brev} — alta frecuencia, baja duración")
-
-        # Generar HTML solo si hay algo que mostrar
-        if lineas:
-            contenido = "<br>".join(lineas)
-            analisis_html = (
-                f'<div style="background:#f8f9fa;border-left:4px solid var(--accent);'
-                f'padding:12px 16px;margin:16px 0;border-radius:4px;font-size:0.9em;">'
-                f'<strong>Observación — Análisis de patrones de comunicación:</strong><br>'
-                f'{contenido}'
-                f'</div>'
+        metricas = calcular_metricas_contactos(
+            d,
+            destino_col=c_col,
+            duracion_col=d_col,
+        )
+        if metricas:
+            interpretacion = interpretar_contactos(
+                metricas,
+                total_interacciones=total_cnt,
+                total_duracion=total_sec,
             )
-
-    # Insertar análisis al final de la sección (después de ambas tablas)
+            orden = [k for k in g_cnt.index if k in interpretacion][:int(_topC)]
+            tarjetas = []
+            for numero in orden:
+                r = interpretacion[numero]
+                tarjetas.append(
+                    f'<div style="margin:8px 0;padding:10px 14px;background:#fff;'
+                    f'border-left:3px solid var(--accent);border-radius:3px;">'
+                    f'<strong>{numero}</strong> '
+                    f'<span style="font-size:0.8em;background:var(--accent);color:#fff;'
+                    f'padding:2px 6px;border-radius:3px;">{r["categoria"]}</span><br>'
+                    f'<span style="font-size:0.88em;color:#444;">{r["narrativa"]}</span>'
+                    f'</div>'
+                )
+            if tarjetas:
+                analisis_html = (
+                    '<div style="background:#f8f9fa;border-left:4px solid var(--accent);'
+                    'padding:12px 16px;margin:16px 0;border-radius:4px;font-size:0.9em;">'
+                    '<strong>An\u00e1lisis de perfiles de comunicaci\u00f3n:</strong><br>'
+                    + "".join(tarjetas)
+                    + '</div>'
+                )
     if analisis_html:
         top_contactos_dur_html = top_contactos_dur_html + analisis_html
 
