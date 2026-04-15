@@ -14,6 +14,105 @@ from tz_core.logging_utils import log
 from tz_core.analytics import construir_seccion_todos_contactos
 
 
+# ── helpers de detección ──────────────────────────────────────────────────────
+
+_CONTACT_COLS = [
+    "tel_contacto", "contacto", "destino", "b_number", "bnumber",
+    "numero_contacto", "callednumber", "to", "receptor",
+    "receptor_numero", "numero_destino",
+]
+_DUR_COLS   = ["duracion", "duration", "segundos", "tiempo"]
+_FECHA_COLS = ["fecha", "date", "fecha_hora", "datetime", "fecha_inicio"]
+
+
+def _detectar_columnas(df: pd.DataFrame):
+    """Detecta columnas de contacto, duración y fecha disponibles en df."""
+    c_col = next((c for c in _CONTACT_COLS if c in df.columns), None)
+    d_col = next((c for c in _DUR_COLS     if c in df.columns), None)
+    f_col = next((c for c in _FECHA_COLS   if c in df.columns), None)
+    return None, c_col, f_col, d_col  # origen_col, destino_col, fecha_col, duracion_col
+
+
+def calcular_metricas_contactos(
+    df: pd.DataFrame,
+    origen_col: str | None = None,
+    destino_col: str | None = None,
+    fecha_col: str | None = None,
+    duracion_col: str | None = None,
+) -> dict:
+    """
+    Calcula métricas enriquecidas por contacto para interpretación forense.
+    No modifica df. No genera HTML. Solo retorna datos.
+
+    Retorna dict: { numero_normalizado: { métricas } }
+    """
+    if df is None or df.empty:
+        return {}
+
+    if not all([destino_col or origen_col, fecha_col, duracion_col]):
+        origen_col_, destino_col_, fecha_col_, duracion_col_ = _detectar_columnas(df)
+        origen_col   = origen_col   or origen_col_
+        destino_col  = destino_col  or destino_col_
+        fecha_col    = fecha_col    or fecha_col_
+        duracion_col = duracion_col or duracion_col_
+
+    c_col = destino_col or origen_col
+    if not c_col or c_col not in df.columns:
+        return {}
+
+    cols = [c_col]
+    if duracion_col and duracion_col in df.columns:
+        cols.append(duracion_col)
+    if fecha_col and fecha_col in df.columns:
+        cols.append(fecha_col)
+    d = df[cols].copy()
+
+    d["_contacto"] = (
+        d[c_col].astype(str).str.strip()
+        .map(lambda v: normalize_msisdn(v) or v)
+    )
+    d = d[(d["_contacto"] != "") & d["_contacto"].notna()]
+    if d.empty:
+        return {}
+
+    d["_c_norm"] = d["_contacto"].str.replace(r"\D+", "", regex=True)
+    d.loc[d["_c_norm"] == "", "_c_norm"] = d["_contacto"]
+
+    if duracion_col and duracion_col in d.columns:
+        d["_sec"] = d[duracion_col].map(
+            lambda x: float(parse_duration_seconds(x, default=0.0))
+        )
+    else:
+        d["_sec"] = 0.0
+
+    if fecha_col and fecha_col in d.columns:
+        d["_fecha"] = pd.to_datetime(d[fecha_col], errors="coerce").dt.normalize()
+    else:
+        d["_fecha"] = pd.NaT
+
+    resultado = {}
+    for numero, grupo in d.groupby("_c_norm", dropna=False):
+        total_int = len(grupo)
+        total_dur = float(grupo["_sec"].sum())
+        prom_dur  = round(total_dur / total_int, 2) if total_int > 0 else 0.0
+
+        fechas_validas = grupo["_fecha"].dropna()
+        dias_activos   = int(fechas_validas.nunique()) if not fechas_validas.empty else 0
+        primer_c = fechas_validas.min().date().isoformat() if not fechas_validas.empty else None
+        ultimo_c = fechas_validas.max().date().isoformat() if not fechas_validas.empty else None
+
+        resultado[numero] = {
+            "total_interacciones":   total_int,
+            "total_duracion_seg":    total_dur,
+            "promedio_duracion_seg": prom_dur,
+            "dias_activos":          dias_activos,
+            "primer_contacto":       primer_c,
+            "ultimo_contacto":       ultimo_c,
+        }
+
+    return resultado
+
+
 def build_top_contacts_sections(
     df: pd.DataFrame,
     config: Optional[dict] = None,
