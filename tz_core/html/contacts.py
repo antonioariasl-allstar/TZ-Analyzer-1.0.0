@@ -311,8 +311,7 @@ def build_top_contacts_sections(
                     + "".join(tarjetas)
                     + '</div>'
                 )
-    if analisis_html:
-        top_contactos_dur_html = top_contactos_dur_html + analisis_html
+    # analisis_html se renderiza en assembler.py (fuera del layout de dos columnas)
 
     return top_contactos_cnt_html, top_contactos_dur_html, _topC
 

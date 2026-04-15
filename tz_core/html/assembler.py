@@ -42,7 +42,7 @@ from tz_core.bitacora_normalization import (
 from .header import build_logo_html, generate_html_header, generate_body_header
 from .kpi import prepare_report_metrics, generate_kpi_section
 from .metadata import generate_metadata_section, build_identification_rows, inject_technical_metadata
-from .contacts import build_top_contacts_sections, _construir_seccion_todos_contactos
+from .contacts import build_top_contacts_sections, _construir_seccion_todos_contactos, calcular_metricas_contactos, interpretar_contactos
 from .antennas import (
     resolve_top_antennas_n,
     build_antennas_table,
@@ -139,6 +139,44 @@ def generar_informe_html(
     except Exception:
         _topC = 10
 
+    # --- Análisis interpretivo de contactos ---
+    analisis_html = ""
+    try:
+        _metricas = calcular_metricas_contactos(df)
+        if _metricas:
+            _total_duracion = sum(v["total_duracion_seg"] for v in _metricas.values())
+            _interpretacion = interpretar_contactos(
+                _metricas,
+                total_interacciones=len(df),
+                total_duracion=_total_duracion,
+            )
+            _orden = sorted(
+                _interpretacion,
+                key=lambda k: (-_metricas[k]["total_interacciones"], k)
+            )[:int(_topC)]
+            _tarjetas = []
+            for _num in _orden:
+                _r = _interpretacion[_num]
+                _tarjetas.append(
+                    f'<div style="margin:8px 0;padding:10px 14px;background:#fff;'
+                    f'border-left:3px solid var(--accent);border-radius:3px;">'
+                    f'<strong>{_num}</strong> '
+                    f'<span style="font-size:0.8em;background:var(--accent);color:#fff;'
+                    f'padding:2px 6px;border-radius:3px;">{_r["categoria"]}</span><br>'
+                    f'<span style="font-size:0.88em;color:#444;">{_r["narrativa"]}</span>'
+                    f'</div>'
+                )
+            if _tarjetas:
+                analisis_html = (
+                    '<div style="background:#f8f9fa;border-left:4px solid var(--accent);'
+                    'padding:12px 16px;margin:16px 0;border-radius:4px;font-size:0.9em;">'
+                    '<strong>An\u00e1lisis de perfiles de comunicaci\u00f3n:</strong><br>'
+                    + "".join(_tarjetas)
+                    + '</div>'
+                )
+    except Exception:
+        analisis_html = ""
+
     logo_html = build_logo_html(
         config if config is not None else None
     )
@@ -173,6 +211,7 @@ def generar_informe_html(
         {top_contactos_dur_html}
       </div>
     </div>
+    {analisis_html}
   </section>
 
 </body>
