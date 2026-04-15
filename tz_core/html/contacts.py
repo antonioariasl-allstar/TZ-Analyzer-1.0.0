@@ -321,6 +321,100 @@ def build_top_contacts_sections(
     return top_contactos_cnt_html, top_contactos_dur_html, _topC
 
 
+def interpretar_contactos(
+    metricas: dict,
+    total_interacciones: int,
+    total_duracion: float,
+) -> dict:
+    """
+    Interpreta métricas por contacto y retorna categoría, etiquetas y narrativa.
+    Autosuficiente: calcula rankings internamente desde metricas.
+    No genera HTML. No depende de build_top_contacts_sections.
+    """
+    if not metricas or total_interacciones <= 0:
+        return {}
+
+    # --- Rankings internos ---
+    por_frec = sorted(metricas.keys(), key=lambda n: (-metricas[n]["total_interacciones"], n))
+    por_dur  = sorted(metricas.keys(), key=lambda n: (-metricas[n]["total_duracion_seg"], n))
+    rank_frec = {n: i + 1 for i, n in enumerate(por_frec)}
+    rank_dur  = {n: i + 1 for i, n in enumerate(por_dur)}
+
+    # --- Fecha máxima del dataset ---
+    fechas = [m["ultimo_contacto"] for m in metricas.values() if m.get("ultimo_contacto")]
+    max_fecha = max(fechas) if fechas else None
+
+    resultado = {}
+    for numero, m in metricas.items():
+        ti   = m["total_interacciones"]
+        td   = m["total_duracion_seg"]
+        prom = m["promedio_duracion_seg"]
+        dias = m["dias_activos"]
+        ult  = m.get("ultimo_contacto")
+
+        pct_i = (ti / total_interacciones * 100.0) if total_interacciones > 0 else 0.0
+        pct_d = (td / total_duracion * 100.0) if total_duracion > 0 else 0.0
+        rf    = rank_frec[numero]
+        rd    = rank_dur[numero]
+
+        # --- Categoría ---
+        if pct_i >= 15 and pct_d >= 15 and rf <= 3 and rd <= 3:
+            categoria = "dominante"
+        elif pct_d >= 15 and pct_i < 15 and prom > 300:
+            categoria = "conversador"
+        elif pct_i >= 15 and pct_d < 15:
+            categoria = "frecuente"
+        else:
+            categoria = "breve"
+
+        # --- Etiquetas ---
+        etiquetas = []
+        if pct_i >= 30 or pct_d >= 30:
+            etiquetas.append("alta_concentracion")
+        if dias >= 5:
+            etiquetas.append("relacion_sostenida")
+        if max_fecha and ult:
+            from datetime import date, timedelta
+            try:
+                d_max = date.fromisoformat(max_fecha)
+                d_ult = date.fromisoformat(ult)
+                if d_ult >= d_max - timedelta(days=7):
+                    etiquetas.append("contacto_reciente")
+            except ValueError:
+                pass
+        if prom < 30:
+            etiquetas.append("llamadas_breves")
+        if prom > 300:
+            etiquetas.append("llamadas_largas")
+
+        # --- Narrativa ---
+        lineas = []
+        if categoria == "dominante":
+            lineas.append(f"Concentra {pct_i:.1f}% de las interacciones y {pct_d:.1f}% de la duración total.")
+            lineas.append(f"Ocupa la posición #{rf} en frecuencia y #{rd} en duración acumulada.")
+        elif categoria == "conversador":
+            lineas.append(f"Representa {pct_d:.1f}% de la duración total con duración promedio de {int(prom)}s por interacción.")
+            lineas.append(f"Patrón de pocas interacciones prolongadas.")
+        elif categoria == "frecuente":
+            lineas.append(f"Concentra {pct_i:.1f}% de las interacciones con duración promedio baja ({int(prom)}s).")
+            lineas.append(f"Patrón de contacto repetitivo y breve.")
+        else:
+            lineas.append(f"Participación de {pct_i:.1f}% en frecuencia y {pct_d:.1f}% en duración.")
+
+        if "relacion_sostenida" in etiquetas:
+            lineas.append(f"Contacto activo en {dias} días distintos del período analizado.")
+        if "contacto_reciente" in etiquetas:
+            lineas.append(f"Última interacción registrada: {ult}.")
+
+        resultado[numero] = {
+            "categoria":  categoria,
+            "etiquetas":  etiquetas,
+            "narrativa":  " ".join(lineas),
+        }
+
+    return resultado
+
+
 def _construir_seccion_todos_contactos(df, columnas_config=None):
     """Wrapper de compatibilidad - usa tz_core.analytics.construir_seccion_todos_contactos"""
     from tz_core.analytics import construir_seccion_todos_contactos as contactos_modular
