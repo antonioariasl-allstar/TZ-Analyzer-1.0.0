@@ -388,7 +388,6 @@ def collect_essential_mapping_assignments(
         ctx = FIELD_CONTEXT.get(canonical, {})
         desc = ctx.get("desc", "")
         hint = ctx.get("hint", "")
-        write_fn(format_columns_menu(columns_menu, per_line=per_line))
         if desc:
             write_fn(f"\n  📌 {etiqueta_visible}: {desc}")
         if hint:
@@ -489,7 +488,6 @@ def collect_non_essential_mapping_assignments(
         ctx = FIELD_CONTEXT.get(canonical, {})
         desc = ctx.get("desc", "")
         hint = ctx.get("hint", "")
-        write_fn(format_columns_menu(columns_menu, per_line=per_line))
         if desc:
             write_fn(f"\n  📌 {etiqueta_visible}: {desc}")
         if hint:
@@ -1254,7 +1252,7 @@ class MappingWizard:
             title="NO ESENCIALES",
             columns_menu=self.cols_menu,
             instructions="  Podés: elegir número, escribir 'F <valor fijo>' o Enter=omitir.",
-            show_columns=False,
+            show_columns=True,
         ):
             self._write(line)
 
