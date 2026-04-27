@@ -477,19 +477,21 @@ def guardar_errores(errores: List[str], carpeta_salida: str, nombre_base: str) -
         - La configuración del logging corresponde al punto de entrada (run.py).
     """
 
-    if not errores:
-        return None
-
     try:
         os.makedirs(carpeta_salida, exist_ok=True)
     except Exception:
         pass
 
+    if not errores:
+        contenido = ["No se detectaron errores durante el procesamiento."]
+    else:
+        contenido = errores
+
     ruta = os.path.join(carpeta_salida, f"{nombre_base}_errores.txt")
     try:
         with open(ruta, "w", encoding="utf-8") as f:
             f.write("=== Reporte de validación / normalización ===\n")
-            for e in errores:
+            for e in contenido:
                 f.write(f"{e}\n")
         return ruta
     except Exception as ex:
