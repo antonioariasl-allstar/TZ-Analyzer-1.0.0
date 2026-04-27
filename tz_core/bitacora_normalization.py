@@ -180,7 +180,10 @@ def _normalize_decimal_string(value: object) -> Optional[str]:
             return str(int(value))
         if isinstance(value, (float, np.floating, Decimal)):
             d = Decimal(str(value))
-            return format(d, "f").rstrip("0").rstrip(".") or None
+            formatted = format(d, "f")
+            if "." in formatted:
+                formatted = formatted.rstrip("0").rstrip(".")
+            return formatted or None
     except Exception:
         pass
     s = str(value).strip()
@@ -188,7 +191,10 @@ def _normalize_decimal_string(value: object) -> Optional[str]:
         return None
     try:
         d = Decimal(s)
-        return format(d, "f").rstrip("0").rstrip(".") or None
+        formatted = format(d, "f")
+        if "." in formatted:
+            formatted = formatted.rstrip("0").rstrip(".")
+        return formatted or None
     except Exception:
         return None
 
