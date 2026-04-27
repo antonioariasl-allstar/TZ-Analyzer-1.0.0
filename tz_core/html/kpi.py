@@ -220,6 +220,27 @@ def generate_kpi_section(
         >>> print("1,500" in kpis and "20.0%" in kpis)
         True
     """
+    _interp_oraciones = []
+    if ant_uniq > 1:
+        _interp_oraciones.append(
+            "Se observa que el dispositivo registró actividad en múltiples antenas, "
+            "lo que evidencia movilidad dentro del área analizada."
+        )
+    if top_pct >= 30.0:
+        _interp_oraciones.append(
+            "Se identifica concentración de actividad en una antena predominante, "
+            "lo que puede sugerir un punto de permanencia recurrente."
+        )
+    if coord_invalidas > 0:
+        _interp_oraciones.append(
+            "Se registran interacciones sin coordenadas geográficas válidas, "
+            "lo que limita parcialmente el análisis de cobertura espacial."
+        )
+    _interp_kpi_html = (
+        '<p style="font-size:0.88em;color:#555;margin:12px 0 0 0;line-height:1.6;">'
+        + " ".join(_interp_oraciones)
+        + "</p>"
+    ) if _interp_oraciones else ""
     return f"""  <section>
     <h2>Indicadores</h2>
     <div class="kpis">
@@ -246,4 +267,5 @@ def generate_kpi_section(
         <div class="label">Top antena ({top_count:,} — {top_pct:.1f}%)</div>
       </div>
     </div>
+    {_interp_kpi_html}
   </section>"""
