@@ -234,6 +234,25 @@ def generar_informe_html(
     metadata_section = generate_metadata_section(nombre_bitacora, hoja, rango_str, ident_rows)
     kpi_section = generate_kpi_section(total, coord_validas, coord_invalidas, ant_uniq, cel_uniq, cel_label, top_antena, top_count, top_pct)
     
+    # --- Sección de limitaciones ---
+    _moji = any(
+        "?" in str(v)
+        for col in df.select_dtypes(include="object").columns
+        for v in df[col].dropna().head(50)
+    )
+    _items = [
+        "<li>El análisis depende de la calidad y completitud de la bitácora proporcionada.</li>",
+        "<li>Los resultados corresponden únicamente al período y registros analizados.</li>",
+    ]
+    if _moji:
+        _items.append("<li>Se detectaron posibles caracteres no normalizados en algunos campos.</li>")
+    limitaciones_html = (
+        '<section id="limitaciones-analisis">'
+        '<h2>Limitaciones del análisis</h2>'
+        "<ul>" + "".join(_items) + "</ul>"
+        "</section>"
+    )
+
     html = f"""{html_header}
 {body_header}
 {resumen_ejecutivo_html}
@@ -261,7 +280,7 @@ def generar_informe_html(
     </div>
     {analisis_html}
   </section>
-
+{limitaciones_html}
 </body>
 </html>
 """
