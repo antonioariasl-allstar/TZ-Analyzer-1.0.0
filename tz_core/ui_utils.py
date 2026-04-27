@@ -563,11 +563,22 @@ def suggest_case_name(
     if alias_id == "DESCONOCIDO" and alias_part != "sin_alias":
         alias_id = alias_part
 
+    # Sanitizar alias: espacios → "_", remover no alfanuméricos
+    def _sanitize_alias(s: str) -> str:
+        import re
+        s = s.strip().replace(" ", "_")
+        s = re.sub(r"[^\w]", "", s)
+        return s
+
+    alias_limpio = _sanitize_alias(alias_id) if alias_id and alias_id != "DESCONOCIDO" else ""
+
+    timestamp_str = timestamp_fn().strftime("%Y%m%d_%H%M")
+
     pieces = [mode_label or "AUTO", principal_id or "DESCONOCIDO"]
-    if alias_id and alias_id != "DESCONOCIDO":
-        pieces.append(alias_id)
-    pieces.append(date_range)
-    base_raw = "_".join(filter(None, pieces))
+    if alias_limpio:
+        pieces.append(alias_limpio)
+    pieces.append(timestamp_str)
+    base_raw = "_".join(pieces)
     base_name = sanitize_fn(base_raw)
 
     return CaseNameSuggestion(

@@ -209,7 +209,7 @@ def test_suggest_case_name_builds_base_from_identity_and_filters():
         sanitize_fn=lambda value: value,
     )
 
-    assert suggestion.base_name.startswith("TEL_multi2_Alias_01-01-2024__02-01-2024")
+    assert suggestion.base_name.startswith("TEL_multi2_Alias_20240105_1000")
     assert suggestion.tel_part == "111"
     assert "dia_2024-01-03" in suggestion.filter_suffix
 
@@ -234,7 +234,7 @@ def test_suggest_case_name_falls_back_to_alias_part_when_missing_column():
 
     assert suggestion.alias_part == "Apodo"
     assert suggestion.alias_id == "Apodo"
-    assert suggestion.base_name.startswith("imei_desconocido_apodo_05-01-2024")
+    assert suggestion.base_name.startswith("imei_desconocido_apodo_20240106_1230")
 
 
 def test_collect_top_overrides_uses_defaults_and_parses_values():
