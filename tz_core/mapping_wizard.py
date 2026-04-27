@@ -563,12 +563,20 @@ def preview_column_sample(
     if column_name not in df.columns:
         return
     sample = df[column_name].dropna().head(max_rows)
+    sample_full = df[column_name].dropna().head(20)
     if sample.empty:
         write_fn(f"  (columna '{column_name}' está vacía)")
         return
     write_fn(f"  Vista previa de '{column_name}':")
     for val in sample:
         write_fn(f"    {val}")
+    # Advertencia de posibles caracteres corruptos
+    if any("?" in str(v) for v in sample_full):
+        write_fn(
+            "  ⚠ Advertencia: se detectaron '?' en esta columna. "
+            "Posible corrupción de caracteres en el archivo original (encoding). "
+            "Los datos se muestran tal como vienen — no se realizan correcciones automáticas."
+        )
 
 
 def build_mapping_intro_lines(
