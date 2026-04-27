@@ -23,6 +23,7 @@ from tz_core.mapping_wizard import (
 )
 from tz_core.bitacora_normalization import normalize_temporal_fields, normalize_contact_fields, normalize_event_fields
 from tz_core.qc_engine import run_qc
+from tz_core.ui_utils import safe_input, UserCancelledError
 
 
 @dataclass
@@ -107,7 +108,7 @@ def run_ingestion_pipeline(
         out(f"\nCalidad del archivo: {qc_result.score}/100")
         if qc_result.bloqueante:
             out("\n⚠️  ADVERTENCIA: se detectaron problemas críticos en los datos.")
-            respuesta = input("¿Desea continuar de todas formas? (S/N): ").strip().upper()
+            respuesta = safe_input("¿Desea continuar de todas formas? (S/N, C=cancelar): ").upper()
             if respuesta != "S":
                 import sys
                 sys.exit(0)

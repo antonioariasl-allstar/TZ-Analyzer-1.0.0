@@ -60,6 +60,8 @@ RENDIMIENTO Y CONFIABILIDAD:
 import pandas as pd
 from typing import List, Tuple, Optional
 
+from tz_core.ui_utils import safe_input, UserCancelledError
+
 # Importación condicional de openpyxl para detección de hojas ocultas
 try:
     import openpyxl
@@ -146,7 +148,7 @@ def seleccionar_hoja_visible(ruta_excel: str) -> Optional[str]:
         print(f"  [{i}] {name}")
     
     while True:
-        resp = input("Elegí el número de la hoja a procesar (Enter = 1): ").strip()
+        resp = safe_input("Elegí el número de la hoja a procesar (Enter=1, C=cancelar): ")
         idx = 1 if resp == "" else int(resp) if resp.isdigit() else None
         if idx and 1 <= idx <= len(visibles):
             elegido = visibles[idx - 1]
@@ -192,7 +194,7 @@ def seleccionar_hoja(ruta_excel: str) -> Optional[str]:
         print(f"  [{i}] {h}")
     
     while True:
-        resp = input("Elegí el número de la hoja a procesar (Enter = 1): ").strip()
+        resp = safe_input("Elegí el número de la hoja a procesar (Enter=1, C=cancelar): ")
         if resp == "":
             elegido = hojas[0]
             break

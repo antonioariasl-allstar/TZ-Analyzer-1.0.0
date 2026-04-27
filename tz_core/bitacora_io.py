@@ -10,6 +10,8 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+from tz_core.ui_utils import safe_input, UserCancelledError
+
 try:  # pragma: no cover - depende del entorno (Tkinter)
     from .ui_utils import seleccionar_archivo as _sel_archivo
     from .ui_utils import seleccionar_carpeta as _sel_carpeta
@@ -27,7 +29,7 @@ def seleccionar_archivo(titulo: str = "Seleccionar bitácora Excel") -> Optional
             return _sel_archivo()
         except Exception:
             pass
-    ruta = input("Ruta del archivo Excel (.xlsx/.xls): ").strip("\"").strip()
+    ruta = safe_input("Ruta del archivo Excel (.xlsx/.xls) (C=cancelar): ").strip('"')
     return ruta if ruta else None
 
 
@@ -40,7 +42,7 @@ def seleccionar_carpeta(titulo: str = "Seleccionar carpeta de salida") -> Option
             return _sel_carpeta()
         except Exception:
             pass
-    ruta = input("Ruta de la carpeta de salida (Enter = actual): ").strip("\"").strip()
+    ruta = safe_input("Ruta de la carpeta de salida (Enter=actual, C=cancelar): ").strip('"')
     return ruta if ruta else os.getcwd()
 
 

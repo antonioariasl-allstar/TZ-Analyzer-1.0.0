@@ -132,6 +132,7 @@ from tz_core.ui_utils import (
     prompt_output_routing,
     summarize_outputs,
     suggest_case_name,
+    UserCancelledError,
 )
 from tz_core.output_flow import prepare_output_setup
 from tz_core.manual_flow import (
@@ -709,6 +710,8 @@ if __name__ == "__main__":
 
     try:
         main()
+    except UserCancelledError:
+        print("\nProceso cancelado por el usuario.")
     except Exception as e:
         logging.error("Error no controlado: %s", e)
         traceback.print_exc()

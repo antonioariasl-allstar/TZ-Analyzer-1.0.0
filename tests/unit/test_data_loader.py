@@ -195,7 +195,7 @@ class TestSeleccionarHojaVisible:
             mock_print.assert_called_with("Hoja visible detectada: Datos")
     
     @patch('tz_core.data_loader.obtener_hojas_visibles')
-    @patch('builtins.input')
+    @patch('tz_core.data_loader.safe_input')
     def test_seleccion_interactiva_primera_opcion(self, mock_input, mock_obtener_hojas):
         """Test selección interactiva - primera opción (Enter)"""
         mock_obtener_hojas.return_value = (["Datos", "Resumen", "Config"], None)
@@ -212,7 +212,7 @@ class TestSeleccionarHojaVisible:
             assert any("Hoja seleccionada: Datos" in str(call) for call in calls)
     
     @patch('tz_core.data_loader.obtener_hojas_visibles')
-    @patch('builtins.input')
+    @patch('tz_core.data_loader.safe_input')
     def test_seleccion_interactiva_segunda_opcion(self, mock_input, mock_obtener_hojas):
         """Test selección interactiva - segunda opción"""
         mock_obtener_hojas.return_value = (["Datos", "Resumen"], None)
@@ -225,7 +225,7 @@ class TestSeleccionarHojaVisible:
             assert any("Hoja seleccionada: Resumen" in str(call) for call in mock_print.call_args_list)
     
     @patch('tz_core.data_loader.obtener_hojas_visibles')
-    @patch('builtins.input')
+    @patch('tz_core.data_loader.safe_input')
     def test_seleccion_interactiva_input_invalido_luego_valido(self, mock_input, mock_obtener_hojas):
         """Test selección interactiva - input inválido luego válido"""
         mock_obtener_hojas.return_value = (["Datos", "Resumen"], None)
@@ -282,7 +282,7 @@ class TestSeleccionarHoja:
     
     @patch('tz_core.data_loader.seleccionar_hoja_visible')
     @patch('tz_core.data_loader.listar_todas_hojas')
-    @patch('builtins.input')
+    @patch('tz_core.data_loader.safe_input')
     def test_fallback_seleccion_interactiva_enter(self, mock_input, mock_listar_todas, mock_seleccionar_visible):
         """Test fallback con selección interactiva - Enter (primera hoja)"""
         mock_seleccionar_visible.return_value = None
@@ -299,7 +299,7 @@ class TestSeleccionarHoja:
     
     @patch('tz_core.data_loader.seleccionar_hoja_visible')
     @patch('tz_core.data_loader.listar_todas_hojas')
-    @patch('builtins.input')
+    @patch('tz_core.data_loader.safe_input')
     def test_fallback_seleccion_interactiva_numero(self, mock_input, mock_listar_todas, mock_seleccionar_visible):
         """Test fallback con selección interactiva - número específico"""
         mock_seleccionar_visible.return_value = None
@@ -314,7 +314,7 @@ class TestSeleccionarHoja:
     
     @patch('tz_core.data_loader.seleccionar_hoja_visible')
     @patch('tz_core.data_loader.listar_todas_hojas')
-    @patch('builtins.input')
+    @patch('tz_core.data_loader.safe_input')
     def test_fallback_inputs_invalidos_luego_valido(self, mock_input, mock_listar_todas, mock_seleccionar_visible):
         """Test fallback con inputs inválidos luego válido"""
         mock_seleccionar_visible.return_value = None

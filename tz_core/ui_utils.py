@@ -35,6 +35,19 @@ from tz_core.types import (
 )
 
 
+class UserCancelledError(Exception):
+    """Excepción lanzada cuando el usuario cancela el proceso con 'C'."""
+    pass
+
+
+def safe_input(prompt: str, input_func=input) -> str:
+    """Input con soporte de cancelación global. Escribe 'C' para cancelar."""
+    resp = input_func(prompt).strip()
+    if resp.upper() == "C":
+        raise UserCancelledError()
+    return resp
+
+
 def collect_manual_mode_context(
     *,
     config: Optional[Dict[str, Any]],
@@ -110,8 +123,8 @@ def solicitar_overrides_topn(config: Dict[str, Any]) -> Optional[Dict[str, int]]
         defA, defC = 3, 10
 
     print("\n( Opcional ) Ajuste de Top N para esta ejecución:")
-    sa = input(f"Top N de ANTENAS (Enter={defA}): ").strip()
-    sc = input(f"Top N de CONTACTOS (Enter={defC}, escribe 'mismo' para usar el de antenas): ").strip()
+    sa = safe_input(f"Top N de ANTENAS (Enter={defA}, C=cancelar): ")
+    sc = safe_input(f"Top N de CONTACTOS (Enter={defC}, 'mismo' para igualar antenas, C=cancelar): ")
 
     ovr = {}
 

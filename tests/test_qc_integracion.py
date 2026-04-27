@@ -83,7 +83,7 @@ def test_bloqueante_respuesta_n_aborta():
             mock_qc.return_value = MagicMock(
                 score=20, bloqueante=True, resumen=["CRITICO: columna contacto ausente"]
             )
-            with patch("builtins.input", return_value="N"):
+            with patch("tz_core.ingestion_pipeline.safe_input", return_value="N"):
                 with pytest.raises(SystemExit):
                     run_ingestion_pipeline(**_base_kwargs(df))
 
@@ -95,7 +95,7 @@ def test_bloqueante_respuesta_s_continua():
             mock_qc.return_value = MagicMock(
                 score=20, bloqueante=True, resumen=["CRITICO: columna contacto ausente"]
             )
-            with patch("builtins.input", return_value="S"):
+            with patch("tz_core.ingestion_pipeline.safe_input", return_value="S"):
                 result = run_ingestion_pipeline(**_base_kwargs(df))
                 assert result is not None
 
