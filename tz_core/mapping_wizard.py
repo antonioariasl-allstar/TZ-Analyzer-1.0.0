@@ -1064,6 +1064,24 @@ def _detect_shared_datetime(
         assignments["hora"] = ("omitido", None)
 
 
+def _check_duplicate_column_assignments(
+    assignments: Dict[str, Tuple[str, Any]],
+    write_fn: Callable[[str], None],
+) -> None:
+    """Advierte si una misma columna está asignada a múltiples campos."""
+    col_to_fields: Dict[str, list] = {}
+    for field, (assign_type, value) in assignments.items():
+        if assign_type == "col" and value:
+            col_to_fields.setdefault(value, []).append(field)
+    for col, fields in col_to_fields.items():
+        if len(fields) > 1:
+            fields_str = ", ".join(sorted(fields))
+            write_fn(
+                f"\n  [QC] \u26a0 Aviso: la columna '{col}' está siendo usada en múltiples campos ({fields_str}).\n"
+                f"  Esto puede ser intencional según la estructura de la bitácora.\n"
+            )
+
+
 def _check_dual_datetime_columns(
     assignments: Dict[str, Tuple[str, Any]],
     df: Optional["pd.DataFrame"],
@@ -1279,6 +1297,7 @@ class MappingWizard:
         self.usadas = usadas
         self.pendientes = pendientes
         _check_dual_datetime_columns(self.asignadas, self.original_df, self._write)
+        _check_duplicate_column_assignments(self.asignadas, self._write)
     
     def _map_non_essentials(self) -> None:
         """
