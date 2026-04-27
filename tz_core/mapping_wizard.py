@@ -735,7 +735,7 @@ def execute_confirm_loop_flow(
     df = initial_df
 
     while True:
-        write_fn("\n[QC] Confirmar mapeo — S=Confirmar y continuar; N=Volver a mapear; R=Remapear uno:")
+        write_fn("\n[QC] Confirmar mapeo — S=Confirmar; N=Reiniciar mapeo; R=Elegir un campo para corregir:")
         decision = resolve_confirm_loop_option(prompt_fn("→ Opción (S/N/R): "))
 
         if decision.action == "confirm":
