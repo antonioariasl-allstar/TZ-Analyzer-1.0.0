@@ -1064,6 +1064,36 @@ def _detect_shared_datetime(
         assignments["hora"] = ("omitido", None)
 
 
+def _check_dual_datetime_columns(
+    assignments: Dict[str, Tuple[str, Any]],
+    df: Optional["pd.DataFrame"],
+    write_fn: Callable[[str], None],
+) -> None:
+    """Advierte si fecha y hora apuntan a columnas distintas con datetime completo."""
+    fecha_assign = assignments.get("fecha")
+    hora_assign = assignments.get("hora")
+    if not (
+        fecha_assign and fecha_assign[0] == "col"
+        and hora_assign and hora_assign[0] == "col"
+        and fecha_assign[1] != hora_assign[1]
+    ):
+        return
+    if df is None:
+        return
+
+    def _has_full_datetime(col: str) -> bool:
+        if col not in df.columns:
+            return False
+        sample = df[col].dropna().head(10).astype(str)
+        return sample.str.contains(r"\d{4}-\d{2}-\d{2}.*\d{2}:\d{2}", regex=True).any()
+
+    if _has_full_datetime(fecha_assign[1]) and _has_full_datetime(hora_assign[1]):
+        write_fn(
+            "\n  \u26a0 Advertencia: 'fecha' y 'hora' contienen fecha y hora completas. "
+            "Esto puede indicar duplicaci\u00f3n de informaci\u00f3n temporal."
+        )
+
+
 class MappingWizard:
     """
     Wizard interactivo profesional para mapeo de columnas Excel → canónicas.
@@ -1248,6 +1278,7 @@ class MappingWizard:
         self.asignadas = asignadas
         self.usadas = usadas
         self.pendientes = pendientes
+        _check_dual_datetime_columns(self.asignadas, self.original_df, self._write)
     
     def _map_non_essentials(self) -> None:
         """
