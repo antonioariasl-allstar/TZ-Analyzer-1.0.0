@@ -393,7 +393,7 @@ def collect_essential_mapping_assignments(
         if hint:
             write_fn(f"     {hint}")
         prompt_msg = (
-            f"→ Columna para {etiqueta_visible} (número — '?' menú / Enter=omitir): "
+            f"→ Columna para {etiqueta_visible} (número — '?' ver columnas / Enter=omitir): "
         )
 
         while True:
@@ -493,7 +493,7 @@ def collect_non_essential_mapping_assignments(
         if hint:
             write_fn(f"     {hint}")
         prompt_msg = (
-            f"→ Columna para {etiqueta_visible} (n / 'F valor' / Enter=omitir — '?' menú): "
+            f"→ Columna para {etiqueta_visible} (n / 'F valor' / Enter=omitir — '?' ver columnas): "
         )
 
         while True:
@@ -981,9 +981,9 @@ def resolve_remap_single_flow(
 
     if result.show_menu:
         prompt = (
-            f"→ Elegí columna para **{canonical}** (número — '?' menú / Enter=omitir): "
+            f"→ Elegí columna para **{canonical}** (número — '?' ver columnas / Enter=omitir): "
             if is_essential
-            else f"→ Elegí columna para {canonical} (n / 'F valor' / Enter=omitir — '?' menú): "
+            else f"→ Elegí columna para {canonical} (n / 'F valor' / Enter=omitir — '?' ver columnas): "
         )
         return RemapSingleFlowDecision(show_menu=True, prompt_message=prompt)
 
@@ -1408,9 +1408,9 @@ class MappingWizard:
         
         is_essential = can in self.esenciales
         prompt_msg = (
-            f"→ Elegí columna para **{can}** (número — '?' menú / Enter=omitir): "
+            f"→ Elegí columna para **{can}** (número — '?' ver columnas / Enter=omitir): "
             if is_essential
-            else f"→ Elegí columna para {can} (n / 'F valor' / Enter=omitir — '?' menú): "
+            else f"→ Elegí columna para {can} (n / 'F valor' / Enter=omitir — '?' ver columnas): "
         )
 
         while True:
@@ -1432,9 +1432,9 @@ class MappingWizard:
             if flow.duplicate_column:
                 self._write(f"  [QC] '{flow.duplicate_column}' ya está usada por otro esencial.")
                 prompt_msg = (
-                    f"→ Elegí columna para **{can}** (número — '?' menú / Enter=omitir): "
+                    f"→ Elegí columna para **{can}** (número — '?' ver columnas / Enter=omitir): "
                     if is_essential
-                    else f"→ Elegí columna para {can} (n / 'F valor' / Enter=omitir — '?' menú): "
+                    else f"→ Elegí columna para {can} (n / 'F valor' / Enter=omitir — '?' ver columnas): "
                 )
                 continue
 

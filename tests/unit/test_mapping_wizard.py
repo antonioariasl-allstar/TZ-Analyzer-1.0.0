@@ -99,7 +99,7 @@ def test_mapping_wizard_uses_custom_io_flow():
     assert "duracion" in mapped_df.columns
     assert asignadas["fecha"] == ("col", "col_fecha")
     assert recorder.prompts == [
-        "→ Columna para fecha (número — '?' menú / Enter=omitir): ",
+        "→ Columna para fecha (número — '?' ver columnas / Enter=omitir): ",
         "¿Es correcta? (S=Sí, N=Elegir otra, A=Atrás): ",
         "→ Alias (identificador corto del caso o sujeto; se usa en nombres de archivo): ",
         "→ Nombre_usuario (nombre descriptivo del investigado o referencia visible en informe): ",
