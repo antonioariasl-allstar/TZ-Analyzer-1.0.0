@@ -226,9 +226,17 @@ def build_top_antennas_section(
 
             filas.append((ant_fmt, int(r0["activaciones"]), lt_fmt, lg_fmt, az_dom, desg))
 
+        tiene_mojibake = dfv[col_ant].astype(str).str.contains("?", regex=False).any()
         out: list[str] = []
         out.append('<section id="resumen-antenas">')
         out.append(f'<h2>Antenas más activadas (Top {top_n})</h2>')
+        if tiene_mojibake:
+            out.append(
+                '<div class="aviso-dato">'
+                "\u26a0 Se detectaron posibles caracteres no normalizados en nombres de antena. "
+                "Esto puede deberse a la calidad del archivo de origen."
+                "</div>"
+            )
         out.append('<p class="nota"><b>Nota:</b> En esta sección se muestra un top list de las antenas más activadas en el periodo analizado; seguidamente se muestra la ubicación de esas antenas segun sus coordenadas.</p>')
         out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
         out.append('<thead><tr>'
@@ -256,6 +264,7 @@ def build_top_antennas_section(
 #resumen-antenas .tabla-compacta th, #resumen-antenas .tabla-compacta td { border:1px solid #ddd; padding:6px 8px; text-align:left; }
 #resumen-antenas .tabla-compacta th { background:#f2f2f2; }
 #resumen-antenas .tabla-scroll { overflow-x:auto; }
+#resumen-antenas .aviso-dato { background:#fff8e1; border-left:4px solid #f9a825; padding:8px 12px; margin-bottom:12px; font-size:0.95rem; }
 </style>
 """
         )
