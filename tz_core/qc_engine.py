@@ -151,6 +151,26 @@ def run_qc(df: pd.DataFrame) -> QCResult:
         if pct_dur > 0:
             resumen.append(f"{sev}: duración nula en {pct_dur}% de registros")
 
+    # --- MOJIBAKE en columnas string (peso 5) ---
+    str_cols = df.select_dtypes(include="object").columns.tolist()
+    tiene_interrogante = any(
+        df[c].astype(str).str.contains(r"\?", regex=True).any()
+        for c in str_cols
+    )
+    if tiene_interrogante:
+        flags["mojibake"] = {"severidad": "ADVERTENCIA"}
+        penalizacion += 5
+        resumen.append("ADVERTENCIA: se detectaron caracteres no normalizados ('?') en columnas de texto")
+
+    # --- FECHA/HORA DUPLICADA (peso 5) ---
+    if "fecha" in df.columns and "hora" in df.columns:
+        sample_f = df["fecha"].dropna().astype(str).head(10)
+        sample_h = df["hora"].dropna().astype(str).head(10)
+        if len(sample_f) > 0 and sample_f.equals(sample_h.reset_index(drop=True)) if len(sample_f) == len(sample_h) else False:
+            flags["datetime_duplicado"] = {"severidad": "ADVERTENCIA"}
+            penalizacion += 5
+            resumen.append("ADVERTENCIA: 'fecha' y 'hora' contienen valores idénticos — posible columna datetime compartida")
+
     score = max(0, 100 - penalizacion)
     if not resumen:
         resumen.append("OK: sin problemas detectados")

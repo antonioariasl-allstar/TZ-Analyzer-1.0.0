@@ -1054,7 +1054,7 @@ def _detect_shared_datetime(
         f"\n  [QC] Se detectó que 'fecha' y 'hora' usan la misma columna ('{col}') con datetime completo.\n"
         f"  Opciones:\n"
         f"    [1] Separar automáticamente: fecha = YYYY-MM-DD / hora = HH:MM:SS\n"
-        f"    [2] Mantener como está\n"
+        f"    [2] Mantener como está (válido si el archivo usa datetime completo en ambas columnas)\n"
         f"    [3] Remapear hora"
     )
     resp = prompt_fn("  → Opción (1/2/3, Enter=1): ").strip()
@@ -1077,8 +1077,8 @@ def _check_duplicate_column_assignments(
         if len(fields) > 1:
             fields_str = ", ".join(sorted(fields))
             write_fn(
-                f"\n  [QC] \u26a0 Aviso: la columna '{col}' está siendo usada en múltiples campos ({fields_str}).\n"
-                f"  Esto puede ser intencional según la estructura de la bitácora.\n"
+                f"\n  [QC] \u26a0 Aviso: la columna '{col}' está asignada a más de un campo ({fields_str}).\n"
+                f"  Esto es normal cuando, por ejemplo, la dirección y la antena provienen de la misma columna.\n"
             )
 
 
