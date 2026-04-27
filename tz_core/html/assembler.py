@@ -177,6 +177,54 @@ def generar_informe_html(
     except Exception:
         analisis_html = ""
 
+    # --- Resumen ejecutivo narrativo ---
+    resumen_ejecutivo_html = ""
+    try:
+        _oraciones = []
+        _oraciones.append(
+            f"Durante el período analizado, el dispositivo registró "
+            f"<strong>{total}</strong> interacciones."
+        )
+        if '_orden' in locals() and _orden and '_metricas' in locals() and _metricas:
+            _ct_num = _orden[0]
+            _ct_frec = _metricas[_ct_num]["total_interacciones"]
+            _oraciones.append(
+                f"El contacto con mayor frecuencia fue <strong>{_ct_num}</strong>, "
+                f"con {_ct_frec} registros."
+            )
+        if "hora" in df.columns and df["hora"].notna().any():
+            _horas = (
+                pd.to_numeric(
+                    df["hora"].astype(str).str.extract(r"(\d{1,2}):\d{2}")[0],
+                    errors="coerce"
+                ).dropna()
+            )
+            if not _horas.empty:
+                _h = int(_horas.value_counts().idxmax())
+                _h2 = (_h + 1) % 24
+                _oraciones.append(
+                    f"La actividad se concentró principalmente en la franja "
+                    f"<strong>{_h:02d}:00–{_h2:02d}:00</strong> horas."
+                )
+        if top_antena and str(top_antena).strip() not in ("", "nan", "N/A"):
+            _oraciones.append(
+                f"A nivel geográfico, las conexiones se registraron con mayor "
+                f"recurrencia en <strong>{top_antena}</strong>."
+            )
+        if _oraciones:
+            _cuerpo = " ".join(_oraciones)
+            resumen_ejecutivo_html = (
+                '<section id="resumen-ejecutivo" style="'
+                'background:#f0f4f8;border-left:4px solid var(--accent);'
+                'padding:16px 20px;margin:16px 0 24px 0;border-radius:4px;">'
+                '<h2 style="margin-top:0;font-size:1.05em;text-transform:uppercase;'
+                'letter-spacing:0.05em;">Resumen ejecutivo</h2>'
+                f'<p style="margin:0;line-height:1.7;font-size:0.95em;">{_cuerpo}</p>'
+                '</section>'
+            )
+    except Exception:
+        resumen_ejecutivo_html = ""
+
     logo_html = build_logo_html(
         config if config is not None else None
     )
@@ -188,7 +236,7 @@ def generar_informe_html(
     
     html = f"""{html_header}
 {body_header}
-
+{resumen_ejecutivo_html}
 {metadata_section}
 
 {kpi_section}
