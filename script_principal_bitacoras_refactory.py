@@ -173,6 +173,8 @@ def bootstrap_config() -> None:
            T  Z   A N A L Y Z E R
     Bitacoras -> KML/KMZ + Informe HTML
 ===============================================
+     Desarrollado por Omar Arias (Tony Zero)
+===============================================
 """)
     
     # Configuración y mapa de sinónimos usando funciones modulares
