@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Set, Any, Callable, Sequence
 
 import pandas as pd
+from tz_core.ui_utils import UserCancelledError
 
 
 @dataclass
@@ -45,9 +46,14 @@ class WizardIO:
     output_fn: Callable[[str], None] = print
 
     def prompt(self, message: str) -> str:
-        """Obtiene entrada del usuario de forma resiliente."""
+        """Obtiene entrada del usuario. Escribe 'C' para cancelar."""
         try:
-            return self.input_fn(message)
+            resp = self.input_fn(message).strip()
+            if resp.upper() == "C":
+                raise UserCancelledError()
+            return resp
+        except UserCancelledError:
+            raise
         except Exception:
             return ""
 
