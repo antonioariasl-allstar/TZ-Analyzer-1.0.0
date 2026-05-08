@@ -510,6 +510,8 @@ def generar_kml(
 
     def obtener_carpeta_fecha(fecha_dt):
         """Helper para obtener/crear carpeta por fecha"""
+        if fecha_dt == "Sin Inf." or not fecha_dt:
+            return None
         if isinstance(fecha_dt, str):
             try:
                 fecha_dt = datetime.fromisoformat(fecha_dt)
@@ -585,11 +587,13 @@ def generar_kml(
             config=config,
             hr_compact=HR_COMPACT
         )
-        _crear_feature_kml(
-            obtener_carpeta_fecha(it["fecha"]),
-            it["antena"], it["lon"], it["lat"],
-            desc_comp, it["azimut_f"], config
-        )
+        _carpeta = obtener_carpeta_fecha(it["fecha"])
+        if _carpeta is not None:
+            _crear_feature_kml(
+                _carpeta,
+                it["antena"], it["lon"], it["lat"],
+                desc_comp, it["azimut_f"], config
+            )
 
     # 3) Preparar contadores para deduplicación
     pair_global = Counter((it["antena"], it["azimut_i"]) for it in items)
