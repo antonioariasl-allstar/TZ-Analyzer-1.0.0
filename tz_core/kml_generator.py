@@ -326,6 +326,7 @@ def generar_kml(
     if "fecha" in df.columns:
         try:
             df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce", dayfirst=True).dt.strftime("%d/%m/%Y")
+            df["fecha"] = df["fecha"].fillna("Sin Inf.")
         except Exception:
             df["fecha"] = "Sin Inf."
     else:
@@ -570,6 +571,7 @@ def generar_kml(
         datetime.strptime(it["fecha"], "%Y-%m-%d") if "-" in it["fecha"]
         else datetime.strptime(it["fecha"], "%d/%m/%Y")
         for it in items
+        if isinstance(it["fecha"], str) and it["fecha"] != "Sin Inf."
     })
     for fch in fechas_unicas:
         obtener_carpeta_fecha(fch)
