@@ -1,4 +1,4 @@
-# 🛰️ TZ Analyzer – Forensic Data Processor
+# 🛰️ TZ Analyzer — Forensic Data Processor
 
 **Procesador forense de bitácoras telefónicas y motor integral de análisis, correlación y generación de productos forenses.**
 
@@ -6,46 +6,25 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
 
 ---
 
-## 📚 Documentación
-
-**Para documentación completa, consulta [docs/README.md](docs/README.md)**
-
-### 📖 Para Usuarios
-
-- **[Guía de Instalación](docs/user/GUIA_INSTALACION.md)** — Instalación paso a paso
-- **[Guía de Uso Básico](docs/user/GUIA_USO_BASICO.md)** — Cómo usar el sistema
-- **[Preguntas Frecuentes (FAQ)](docs/user/FAQ.md)** — Solución a problemas comunes
-
-### 👨‍💻 Para Desarrolladores
-
-- **🚨 [PROTOCOLO DE SINCRONIZACIÓN](docs/development/PROTOCOLO_SYNC_OBLIGATORIO.md)** — **⚠️ LEER ANTES DE CUALQUIER CAMBIO**
-- **[Arquitectura del Sistema](docs/development/ARQUITECTURA_HIBRIDA_PERMANENTE.md)** — Diseño modular
-- **[Principios de Desarrollo](docs/development/PRINCIPIOS_DESARROLLO_PROFESIONAL.md)** — Estándares de código
-- **[Estrategia de Sincronización](docs/development/ESTRATEGIA_SYNC.md)** — Trabajo casa/oficina
-
----
-
-## ⚠️ Estado actual del proyecto (Abril 2026)
+## ⚠️ Estado actual del proyecto (Mayo 2026)
 
 **✅ Sistema completamente funcional.** TZ Analyzer genera correctamente informes HTML, archivos KMZ para Google Earth y hashes de integridad.
 
-### Refactorización completada (Fase 1 + Fase 2)
+### Consolidación completada (v1.0.0-consolidada)
 
-El proyecto pasó por dos fases mayores de modularización que transformaron un monolito de **2,344 líneas** en una arquitectura modular con un orquestador de **~825 líneas** y **~40 módulos** en el paquete `tz_core/`.
+El proyecto pasó por un proceso de consolidación y modularización que transformó un monolito de **2,344 líneas** en una arquitectura modular con un orquestador de **~825 líneas** y **46 módulos** en el paquete `tz_core/`.
 
-**Fase 1** — Extracción de lógica de negocio del monolito hacia módulos independientes en `tz_core/`: utilidades de tiempo, validación, formato, HTML, archivos, DataFrames, configuración, carga de datos, analytics, logging, esquemas, normalización, UI, mapeo, KML, ingestion pipeline, entre otros.
-
-**Fase 2** — Extracción completa de la generación HTML (`generar_informe_html`) al módulo `tz_core/html_generator.py` (3,460 líneas). Se eliminó el patrón wrapper del monolito; la pipeline de salida invoca directamente los módulos de generación.
+La generación HTML fue descompuesta en submódulos dedicados dentro de `tz_core/html/`: assembler, kpi, contacts, antennas, metadata y header.
 
 **Resultado:**
-- **250 tests** pasando (unitarios + integración + E2E), 2 skipped
+- **332 tests** pasando (unitarios + integración + E2E), 2 skipped
 - **0 regresiones** durante todo el proceso
 - Monolito reducido un **65%** (de 2,344 a ~825 líneas)
 - Metodología atómica: analizar → planificar → ejecutar → test → commit
 
-### Bug conocido
+### Nota de alcance
 
-El logo en el informe HTML aparece como texto raw (`<img src=.../>`) en lugar de renderizar la imagen. Es un bug preexistente (anterior a Fase 2) localizado en `build_logo_html()` dentro de `tz_core/html_generator.py`. Probable causa: el HTML del logo se está escapando en algún punto del template.
+La confiabilidad del sistema está validada para **bitácoras del formato salvadoreño** sobre el cual fue desarrollado. El procesamiento de formatos de otras operadoras o países puede producir resultados incorrectos sin advertencia. Esta es una limitación de alcance conocida, no un fallo arquitectural.
 
 ---
 
@@ -74,22 +53,19 @@ El logo en el informe HTML aparece como texto raw (`<img src=.../>`) en lugar de
   - Rangos horarios personalizables.
   - Branding (logo, marca de agua, pie legal).
 
-- **Suite de pruebas**: 250 tests (unitarios, integración, E2E con golden files) que validan estructura KMZ, generación HTML e integridad del pipeline completo.
+- **Suite de pruebas**: 332 tests (unitarios, integración, E2E con golden files) que validan estructura KMZ, generación HTML e integridad del pipeline completo.
 
 ---
 
-## 🧭 Estructura del proyecto
+## 🧱 Estructura del proyecto
 
 ```
 TZ-Analyzer/
 ├── script_principal_bitacoras_refactory.py  # Orquestador principal (~825 líneas)
-├── utilidades.py                            # Selección de archivos/carpetas (Tkinter + consola)
-├── validaciones.py                          # Normalización defensiva de fecha/hora/coordenadas
 ├── run.py                                   # Entry point alternativo
 ├── config.json                              # Configuración global (estilos, branding, sinónimos)
-├── Logo TZ.png                              # Logo para branding
 │
-├── tz_core/                                 # Paquete principal (~40 módulos)
+├── tz_core/                                 # Paquete principal (46 módulos)
 │   ├── analytics.py                         # Análisis forense y estadísticas
 │   ├── app_runner.py                        # Punto de entrada de la aplicación
 │   ├── bitacora_io.py                       # Lectura/escritura de bitácoras
@@ -99,27 +75,26 @@ TZ-Analyzer/
 │   ├── config_loader.py                     # Carga de configuración
 │   ├── config_manager.py                    # Gestión avanzada de configuración
 │   ├── data_loader.py                       # Carga de datos Excel
-│   ├── data_normalizer.py                   # Normalización general de datos
 │   ├── dataframe_utils.py                   # Utilidades de DataFrames
 │   ├── file_utils.py                        # Gestión de archivos y rutas
 │   ├── format_utils.py                      # Formateo de datos
 │   ├── geo_utils.py                         # Utilidades geográficas
 │   ├── health_utils.py                      # Verificación de salud del sistema
-│   ├── html_generator.py                    # Generación completa de informes HTML (3,460 lín.)
 │   ├── html_helpers.py                      # Helpers de construcción HTML
 │   ├── html_toc.py                          # Tabla de contenidos HTML
-│   ├── html_utils.py                        # Utilidades HTML generales
 │   ├── ingestion_pipeline.py                # Pipeline de ingesta de datos
 │   ├── interacciones_builder.py             # Constructor de sección de interacciones
 │   ├── kml_generator.py                     # Generación de KML/KMZ
 │   ├── logging_utils.py                     # Sistema de logging centralizado
-│   ├── manual_flow.py                       # Flujo de generación HTML manual
+│   ├── manual_flow.py                       # Flujo de regeneración HTML manual
 │   ├── manual_mapping_helpers.py            # Helpers de mapeo manual
 │   ├── manual_mode.py                       # Modo manual de operación
 │   ├── mapping_wizard.py                    # Wizard de mapeo interactivo
 │   ├── output_flow.py                       # Flujo de salida
 │   ├── output_pipeline.py                   # Pipeline de generación de productos
 │   ├── output_runner.py                     # Ejecutor de pipeline de salida
+│   ├── qc_engine.py                         # Motor de control de calidad
+│   ├── qc_type_classifier.py                # Clasificador de tipos para QC
 │   ├── runtime_utils.py                     # Utilidades de runtime
 │   ├── schema_guard.py                      # Guardia de esquema de datos
 │   ├── schema_utils.py                      # Utilidades de esquema
@@ -130,45 +105,44 @@ TZ-Analyzer/
 │   ├── types.py                             # Definiciones de tipos
 │   ├── ui_utils.py                          # Interfaz de usuario (consola)
 │   ├── utils.py                             # Utilidades generales
-│   └── validation_utils.py                  # Validaciones y normalización
+│   ├── validation_utils.py                  # Validaciones y normalización
+│   ├── assets/
+│   │   └── Logo TZ.png                      # Logo para branding
+│   └── html/                                # Submódulos de generación HTML
+│       ├── assembler.py                     # Ensamblador del informe completo
+│       ├── antennas.py                      # Sección de antenas
+│       ├── contacts.py                      # Sección de contactos
+│       ├── header.py                        # Encabezado del informe
+│       ├── kpi.py                           # KPIs y métricas principales
+│       └── metadata.py                      # Metadatos del sujeto
 │
 ├── tz_io/                                   # Entrada/salida de archivos
-│   └── file_io.py                           # Operaciones de archivo
+│   └── file_io.py
 │
 ├── tz_services/                             # Servicios externos
 │   └── geo_tools.py                         # Herramientas geográficas
 │
-├── tests/                                   # Suite de pruebas (250 tests)
+├── tz_cli_click/                            # CLI alternativo (Click)
+│   └── commands/
+│       └── info_backup.py
+│
+├── tests/                                   # Suite de pruebas (332 tests)
 │   ├── integration/                         # Tests E2E y de integración
 │   │   ├── test_e2e_regresion.py            # Regresión E2E con golden files
 │   │   ├── test_hour_ranges_flow.py         # Flujo de rangos horarios
 │   │   └── test_manual_flow_option1.py      # Flujo manual opción 1
-│   ├── unit/                                # Tests unitarios por módulo
-│   │   ├── test_html_generator.py
-│   │   ├── test_output_pipeline.py
-│   │   ├── test_manual_flow.py
-│   │   └── ... (17 archivos de test)
+│   ├── unit/                                # Tests unitarios por módulo (20+ archivos)
 │   ├── helpers/                             # Helpers de testing
+│   ├── golden/                              # Golden files para validación
 │   ├── normalize_outputs.py                 # Normalización de outputs para tests
 │   └── update_golden.py                     # Actualización de golden files
 │
-├── tools/                                   # Herramientas de desarrollo
-│   ├── analisis_dependencias.py             # Análisis de dependencias entre módulos
-│   ├── auditar_codigo_muerto.py             # Detección de código muerto
-│   ├── capture_golden_baseline.py           # Captura de baseline para golden tests
-│   ├── categorizar_funciones.py             # Categorización de funciones del monolito
-│   ├── investigacion_forense.py             # Herramientas de investigación
-│   └── run_baseline_correct.py              # Ejecución de baseline correcta
-│
-├── docs/                                    # Documentación del proyecto
-│   ├── user/                                # Guías de usuario
-│   ├── development/                         # Documentación de desarrollo
-│   ├── technical/                           # Documentación técnica
-│   ├── planning/                            # Planificación y diseño
-│   ├── audits/                              # Auditorías de código
-│   └── legacy/                              # Documentación histórica
-│
-└── .github/workflows/                       # CI/CD (GitHub Actions)
+└── tools/                                   # Herramientas de desarrollo
+    ├── analisis_dependencias.py             # Análisis de dependencias entre módulos
+    ├── auditar_codigo_muerto.py             # Detección de código muerto
+    ├── capture_golden_baseline.py           # Captura de baseline para golden tests
+    ├── investigacion_forense.py             # Herramientas de investigación
+    └── run_baseline_correct.py              # Ejecución de baseline correcta
 ```
 
 ---
@@ -187,7 +161,7 @@ script_principal (orquestador)
     │     └── schema_utils
     │
     ├── output_pipeline         → Generación de productos forenses
-    │     ├── html_generator    → Informe HTML completo (3,460 lín.)
+    │     ├── tz_core/html/     → Informe HTML (assembler + submódulos)
     │     ├── kml_generator     → KML/KMZ para Google Earth
     │     └── output_runner
     │
@@ -215,15 +189,12 @@ script_principal (orquestador)
 
 ### Instalación
 
-```bash
-# Crear entorno virtual (recomendado)
+```powershell
+# Crear entorno virtual
 python -m venv .venv312
 
-# Activar entorno virtual
-# Windows:
+# Activar entorno virtual (Windows PowerShell)
 .venv312\Scripts\activate
-# Linux/Mac:
-source .venv312/bin/activate
 
 # Instalar dependencias
 pip install -r requirements.txt
@@ -231,7 +202,7 @@ pip install -r requirements.txt
 
 ### Ejecución
 
-```bash
+```powershell
 python script_principal_bitacoras_refactory.py
 ```
 
@@ -240,6 +211,25 @@ python script_principal_bitacoras_refactory.py
 3. **Mapeo interactivo de columnas** — Asignar campos esenciales y no esenciales.
 4. **Filtros y opciones** — Filtrar por día, rango de días, rango de horas, Top N.
 5. **Seleccionar carpeta de salida** — Se generan KML/KMZ, informe HTML y hashes.
+
+### Pruebas
+
+```powershell
+# Activar PYTHONPATH antes de correr pytest
+$env:PYTHONPATH = (Get-Location).Path
+
+# Suite completa (332 tests)
+python -m pytest
+
+# Solo tests unitarios
+python -m pytest tests/unit/
+
+# Solo tests de integración
+python -m pytest tests/integration/
+
+# Test E2E con golden files
+python -m pytest tests/integration/test_e2e_regresion.py
+```
 
 ---
 
@@ -252,24 +242,6 @@ El archivo `config.json` permite ajustar:
 - **Sinónimos de columnas**: mapeo automático de variantes.
 - **Rangos horarios**: personalización de madrugada, mañana, tarde, noche.
 - **Top N**: cantidad de antenas y contactos a destacar.
-
----
-
-## 🧪 Pruebas
-
-```bash
-# Suite completa (250 tests)
-python -m pytest
-
-# Solo tests unitarios
-python -m pytest tests/unit/
-
-# Solo tests de integración
-python -m pytest tests/integration/
-
-# Test E2E con golden files
-python -m pytest tests/integration/test_e2e_regresion.py
-```
 
 ---
 
@@ -290,13 +262,12 @@ TZ Analyzer busca **reducir el tiempo de procesamiento** y **eliminar errores hu
 
 ---
 
-## 🚧 Pendientes
+## 🚧 Pendientes conocidos
 
-- Corregir bug del logo en informe HTML (HTML escapado)
-- Evaluar extracciones adicionales del monolito
-- Previsualización antes del guardado
+- Generalización de formatos para operadoras de otros países (v1.1)
+- Resolución de friction points del wizard (F2, F3, F5, F6, F7, F8, F9)
+- Mejoras al informe HTML (más interpretativo y forenses defensible)
 - Exportación a IBM i2 / Gephi
-- Asistente GUI (versión 2.0 planificada)
 - Manual técnico en PDF
 - Empaquetado ejecutable (PyInstaller)
 
