@@ -11,6 +11,7 @@ Identificados durante pruebas de usabilidad. En orden de prioridad:
 - [ ] **F6** — Opción de remap no documentada en el wizard
 - [ ] **F5** — Campo `F valor` sin ejemplo visible para el usuario
 - [ ] **F8** — Prompt de cambio de nombre de archivo sin contexto suficiente
+- [ ] **F10** — Inputs inválidos en prompts de confirmación (S/N/A, I/T/Enter) no se rechazan — el sistema cae silenciosamente a comportamiento por defecto sin avisar al usuario. Riesgo: analista cree haber cambiado selección cuando no ocurrió nada.
 
 ---
 
