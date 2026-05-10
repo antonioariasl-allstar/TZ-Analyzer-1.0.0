@@ -41,8 +41,8 @@ El sistema dejará de operar directamente sobre el campo `tipo` tal como llega d
 la bitácora. En su lugar, el pipeline generará dos columnas internas derivadas:
 
 ```
-tipo_normalizado     → categoría semántica del evento
-dirección_normalizada → sentido de la comunicación
+tipo_normalizado      → categoría semántica del evento
+direccion_normalizada → sentido de la comunicación
 ```
 
 El campo original se conserva sin modificar para trazabilidad.
@@ -72,7 +72,7 @@ ambigüedad en métricas que dependen de dirección.
 > deliberadamente. Mezclarlos ocultaría decisiones de exclusión que deben ser
 > trazables.
 
-### dirección_normalizada
+### direccion_normalizada
 
 | Valor | Descripción |
 |---|---|
@@ -87,9 +87,15 @@ ambigüedad en métricas que dependen de dirección.
 El sistema mantendrá un catálogo interno de valores conocidos con su mapeo
 predefinido. Este catálogo se aplica automáticamente sin intervención del analista.
 
+**Ubicación en código:** `tz_core/normalizacion/tipo_evento.py` — constante
+Python `CATALOGO_TIPO_EVENTO`. No se usa archivo JSON externo. El catálogo base
+es parte del código versionado; las clasificaciones por caso van en `mapeo_manual`.
+
+**Lookup:** `valor.strip().lower()` antes de buscar en el catálogo.
+
 ### 4.1 Valores reconocidos automáticamente
 
-| Valor original (case-insensitive) | tipo_normalizado | dirección_normalizada |
+| Valor original (case-insensitive) | tipo_normalizado | direccion_normalizada |
 |---|---|---|
 | `LLAMADA ENTRANTE` / `Llamada Entrante` | `voz` | `entrante` |
 | `LLAMADA SALIENTE` / `Llamada Saliente` | `voz` | `saliente` |
@@ -98,6 +104,9 @@ predefinido. Este catálogo se aplica automáticamente sin intervención del ana
 | `voice` | `voz` | `desconocida` |
 | `data` / `datos` / `DATOS` / `DATA` | `datos` | `desconocida` |
 | `GPRS` / `LTE` / `APN` | `datos` | `desconocida` |
+| `navegacion` / `NAVEGACION` | `datos` | `desconocida` |
+
+> `navegacion` agregado en sesión 10 mayo 2026 — valor observado en bitácoras reales.
 
 ### 4.2 Valores ambiguos conocidos (siempre requieren confirmación)
 
@@ -115,9 +124,64 @@ país o plantilla. Asumir su significado sería un error forense.
 | `I` | Significado completamente desconocido — no confirmar sin evidencia |
 | Cualquier valor de 1-2 caracteres | Por definición insuficiente para clasificación segura |
 
+### 4.3 Estructura del dict en código
+
+```python
+# tz_core/normalizacion/tipo_evento.py
+
+CATALOGO_TIPO_EVENTO = {
+    "llamada entrante": ("voz", "entrante"),
+    "llamada saliente": ("voz", "saliente"),
+    "mensaje entrante": ("sms", "entrante"),
+    "mensaje saliente": ("sms", "saliente"),
+    "sms entrante":     ("sms", "entrante"),
+    "sms saliente":     ("sms", "saliente"),
+    "voice":            ("voz", "desconocida"),
+    "data":             ("datos", "desconocida"),
+    "datos":            ("datos", "desconocida"),
+    "gprs":             ("datos", "desconocida"),
+    "lte":              ("datos", "desconocida"),
+    "apn":              ("datos", "desconocida"),
+    "navegacion":       ("datos", "desconocida"),
+}
+
+VALORES_AMBIGUOS = {"e", "s", "i"}
+```
+
 ---
 
-## 5. Comportamiento del wizard (activación condicional)
+## 5. Punto de inserción en el pipeline
+
+**Archivo:** `ingestion_pipeline.py`
+
+**Posición:** inmediatamente después del renombrado de columnas según mapeo del
+wizard, antes de cualquier normalización de campos derivados (fechas, MSISDN,
+duración) y antes de cualquier cálculo o salida.
+
+**Regla arquitectural:**
+```
+1. cargar datos
+2. mapear columnas
+3. normalizar semántica del evento  ← aquí
+4. normalizar/validar campos derivados
+5. calcular métricas
+```
+
+**Firma de la función:**
+```python
+normalizar_tipo_evento(df, mapeo_manual=None)
+```
+
+- Recibe: DataFrame con columna `tipo` ya renombrada + dict opcional de
+  clasificaciones manuales del analista
+- Devuelve: mismo DataFrame con columnas `tipo_normalizado` y
+  `direccion_normalizada` agregadas
+- **No modifica** la columna `tipo` original
+- **No filtra** registros — solo etiqueta
+
+---
+
+## 6. Comportamiento del wizard (activación condicional)
 
 El wizard **no interrumpe al analista** cuando todos los valores del campo tipo
 son reconocidos por el catálogo base.
@@ -146,7 +210,7 @@ sistema provee la estructura y el contexto; el humano provee el criterio.
 
 ---
 
-## 6. Aprendizaje local por caso
+## 7. Aprendizaje local por caso
 
 Las clasificaciones manuales del analista se guardan localmente asociadas al
 caso o sesión de trabajo. **No se propagan automáticamente como reglas globales
@@ -164,7 +228,7 @@ operadoras distintas. Asumir equivalencia global sería un error forense.
 
 ---
 
-## 7. Trazabilidad
+## 8. Trazabilidad
 
 Toda clasificación manual del analista debe quedar documentada. El objetivo es
 que cualquier métrica del informe sea reproducible y auditable.
@@ -182,16 +246,19 @@ Normalización del campo tipo de evento:
 
 ```
 [2026-05-10] El analista clasificó manualmente 1 valor del campo tipo.
-Valor: "I" → tipo_normalizado: sms, dirección_normalizada: entrante
+Valor: "I" → tipo_normalizado: sms, direccion_normalizada: entrante
 ```
 
 **Motivación forense:** si el informe presenta "Top contactos por llamadas de
 voz", debe poder demostrarse qué valores del campo tipo fueron considerados voz
 y quién tomó esa decisión.
 
+> Decisión pendiente: trazabilidad embebida en HTML vs archivo separado.
+> Resolver en próxima sesión de diseño (Decisión 6 del plan de implementación).
+
 ---
 
-## 8. Impacto en módulos existentes
+## 9. Impacto en módulos existentes
 
 Este cambio afecta múltiples capas del sistema. Se documenta aquí como referencia
 para la fase de implementación:
@@ -199,7 +266,7 @@ para la fase de implementación:
 | Módulo | Impacto esperado |
 |---|---|
 | `mapping_wizard.py` | Agregar paso de confirmación condicional |
-| `ingestion_pipeline.py` | Generar columnas `tipo_normalizado` y `dirección_normalizada` |
+| `ingestion_pipeline.py` | Llamar `normalizar_tipo_evento()` post-mapeo; generar `tipo_normalizado` y `direccion_normalizada` |
 | `analytics.py` | Usar `tipo_normalizado` en lugar de `tipo` original |
 | `interacciones_builder.py` | Filtrar por `tipo_normalizado` para rankings |
 | `contacts.py` (html) | Usar columnas normalizadas para métricas de contactos |
@@ -207,9 +274,15 @@ para la fase de implementación:
 | `kpi.py` | Calcular KPIs sobre base filtrada por tipo |
 | HTML general | Agregar sección de trazabilidad de normalización |
 
+Nuevo módulo a crear:
+
+| Módulo | Propósito |
+|---|---|
+| `tz_core/normalizacion/tipo_evento.py` | Catálogo base + función `normalizar_tipo_evento()` |
+
 ---
 
-## 9. Alcance de este documento
+## 10. Alcance de este documento
 
 **Incluye:**
 - Diseño del mecanismo de normalización
@@ -217,9 +290,10 @@ para la fase de implementación:
 - Comportamiento del wizard
 - Reglas de aprendizaje y trazabilidad
 - Mapa de impacto en módulos
+- Decisiones de implementación aprobadas (secciones 4.3 y 5)
 
 **No incluye:**
-- Código de implementación
+- Código de implementación final
 - Instrucciones para Copilot
 - Cambios al repo
 
@@ -230,12 +304,28 @@ para la fase de implementación:
 
 ---
 
-## 10. Estado
+## 11. Estado
 
 | Elemento | Estado |
 |---|---|
-| Diseño | ✅ Congelado |
+| Diseño general | ✅ Congelado |
 | Validación GPT | ✅ Aprobado (Mayo 2026) |
+| Decisión 1 — Punto de inserción en pipeline | ✅ Aprobado (10 mayo 2026) |
+| Decisión 2 — Estructura del catálogo base | ✅ Aprobado (10 mayo 2026) |
+| Decisión 3 — Wizard condicional (UI exacto) | ⏸ Pendiente |
+| Decisión 4 — Subdivisión en sub-fases | ⏸ Pendiente |
+| Decisión 5 — Estrategia golden output | ⏸ Pendiente |
+| Decisión 6 — Trazabilidad (HTML vs archivo) | ⏸ Pendiente |
+| Decisión 7 — Plan de tests | ⏸ Pendiente |
 | Implementación | ⏸ Pendiente — no iniciar sin decisión explícita |
 | Tests | ⏸ Pendiente |
 | Golden output | ⏸ Pendiente |
+
+---
+
+## 12. Historial de sesiones
+
+| Fecha | Qué se decidió |
+|---|---|
+| Mayo 2026 (inicial) | Diseño completo congelado y validado por GPT |
+| 10 mayo 2026 | Decisión 1 y 2 aprobadas; `navegacion` agregado al catálogo; estructura del dict definida; punto exacto de inserción en pipeline confirmado |
