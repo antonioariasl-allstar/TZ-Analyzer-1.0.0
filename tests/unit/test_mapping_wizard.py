@@ -154,6 +154,15 @@ def test_normalize_wizard_datetime_fields_formats_outputs():
     assert result.loc[2, "hora"] == "Sin Inf."
 
 
+def test_normalize_wizard_datetime_fields_accepts_mdy_source():
+    df = pd.DataFrame({
+        "fecha": ["05/01/2026", "06/12/2026"],
+        "hora": ["09:00:00", "14:10:00"],
+    })
+    result = normalize_wizard_datetime_fields(df.copy(), dayfirst=False)
+    assert result["fecha"].tolist() == ["01/05/2026", "12/06/2026"]
+
+
 def test_normalize_wizard_datetime_fields_warns_and_coerces_on_failure(monkeypatch):
     df = pd.DataFrame({
         "fecha": ["2025-12-31"],

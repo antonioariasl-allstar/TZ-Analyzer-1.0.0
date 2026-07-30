@@ -2,7 +2,7 @@
 from __future__ import annotations
 import pandas as pd
 import pytest
-from tz_core.bitacora_normalization import normalize_temporal_fields
+from tz_core.bitacora_normalization import parse_date_series, normalize_temporal_fields
 
 
 def test_caso_a_datetime_combinado_crea_tres_campos():
@@ -35,6 +35,18 @@ def test_caso_b_fecha_hora_separadas_construye_datetime_evento():
     assert result["datetime_evento"].iloc[0].hour == 8
 
 
+def test_caso_b_mdy_interpreta_fechas_ctmsel_sin_invertir_dia_mes():
+    df = pd.DataFrame({
+        "fecha": ["05/01/2026", "06/12/2026"],
+        "hora": ["09:00:00", "14:10:00"],
+    })
+    result = normalize_temporal_fields(df, dayfirst=False)
+    assert result["datetime_evento"].dt.strftime("%Y-%m-%d").tolist() == [
+        "2026-05-01",
+        "2026-06-12",
+    ]
+
+
 def test_caso_c_solo_fecha_datetime_evento_a_medianoche():
     df = pd.DataFrame({"fecha": ["2020-03-10"] * 3})
     result = normalize_temporal_fields(df)
@@ -53,3 +65,14 @@ def test_valores_nulos_tolerados():
     df = pd.DataFrame({"fecha": ["2020-01-15 08:30:00", None, "2020-01-16 09:00:00"]})
     result = normalize_temporal_fields(df)
     assert result["datetime_evento"].notna().sum() == 2
+
+
+def test_parse_date_series_no_invierte_iso_con_dayfirst_true():
+    parsed = parse_date_series(
+        pd.Series(["2026-05-01 00:00:00", "2026-07-28 00:00:00"]),
+        dayfirst=True,
+    )
+    assert parsed.dt.strftime("%Y-%m-%d").tolist() == [
+        "2026-05-01",
+        "2026-07-28",
+    ]

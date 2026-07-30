@@ -10,8 +10,7 @@ import os
 import pandas as pd
 from pathlib import Path
 
-from tz_core.bitacora_normalization import sanitize_latlon
-from tz_core.time_utils import to_datetime_silent
+from tz_core.bitacora_normalization import parse_date_series, sanitize_latlon
 from tz_core.html_helpers import fmt_datetime as fmt_dt
 from tz_core.logging_utils import log
 
@@ -121,14 +120,21 @@ def prepare_report_metrics(
         # Preferir combinar fecha+hora si existe 'hora'
         dt = None
         try:
-            if "hora" in df.columns and df["hora"].notna().any():
-                dt = to_datetime_silent(
-                    df["fecha"].astype(str).str.strip() + " " + df["hora"].astype(str).str.strip(),
-                    dayfirst=True, errors="coerce"
+            if "datetime_evento" in df.columns and df["datetime_evento"].notna().any():
+                dt = pd.to_datetime(
+                    df["datetime_evento"],
+                    errors="coerce",
                 ).dropna()
+            elif "hora" in df.columns and df["hora"].notna().any():
+                fechas = parse_date_series(df["fecha"], dayfirst=True).dt.normalize()
+                horas = pd.to_timedelta(
+                    df["hora"].astype(str).str.strip(),
+                    errors="coerce",
+                )
+                dt = (fechas + horas).dropna()
             else:
                 # Solo fecha: tomar 00:00 para el inicio y 23:59 para el fin
-                fechas = to_datetime_silent(df["fecha"], dayfirst=True, errors="coerce").dropna()
+                fechas = parse_date_series(df["fecha"], dayfirst=True).dropna()
                 if not fechas.empty:
                     fmin = fechas.min().normalize()                        # 00:00
                     fmax = (fechas.max().normalize() + pd.Timedelta(hours=23, minutes=59))

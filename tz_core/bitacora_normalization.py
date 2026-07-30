@@ -26,11 +26,38 @@ def normalize_time_strings(series: pd.Series) -> pd.Series:
 
 def normalize_dates(series: pd.Series, *, dayfirst: bool = True) -> pd.Series:
     """Parsea fechas tolerante; devuelve strings dd/mm/yyyy para válidos y NaN para inválidos."""
-    parsed = pd.to_datetime(series, errors="coerce", dayfirst=dayfirst)
+    parsed = parse_date_series(series, dayfirst=dayfirst)
     out = pd.Series(pd.NA, index=series.index, dtype="string")
     mask = parsed.notna()
     out[mask] = parsed[mask].dt.strftime("%d/%m/%Y")
     return out
+
+
+def parse_date_series(series: pd.Series, *, dayfirst: bool = True) -> pd.Series:
+    """Parse dates without reinterpreting ISO text as DD/MM or MM/DD."""
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return pd.to_datetime(series, errors="coerce")
+
+    text = series.astype("string").str.strip()
+    parsed = pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
+    iso_mask = text.str.match(r"^\d{4}-\d{2}-\d{2}(?:[T\s].*)?$", na=False)
+
+    if iso_mask.any():
+        parsed.loc[iso_mask] = pd.to_datetime(
+            text.loc[iso_mask].str.slice(0, 10),
+            format="%Y-%m-%d",
+            errors="coerce",
+        )
+
+    other_mask = ~iso_mask & text.notna()
+    if other_mask.any():
+        parsed.loc[other_mask] = pd.to_datetime(
+            text.loc[other_mask],
+            errors="coerce",
+            dayfirst=dayfirst,
+        )
+
+    return parsed
 
 
 def validate_time_sample(series: pd.Series) -> Tuple[bool, list[str]]:
@@ -116,6 +143,7 @@ def sanitize_latlon(
 __all__ = [
     "normalize_time_strings",
     "normalize_dates",
+    "parse_date_series",
     "validate_time_sample",
     "validate_date_parsable",
     "coalesce_cols",
@@ -243,7 +271,11 @@ def normalize_msisdn(value: object, *, allow_plus: bool = True) -> Optional[str]
     return ("+" + s) if prefix_plus else s
 
 
-def normalize_temporal_fields(df: pd.DataFrame) -> pd.DataFrame:
+def normalize_temporal_fields(
+    df: pd.DataFrame,
+    *,
+    dayfirst: bool = True,
+) -> pd.DataFrame:
     """
     Detecta y normaliza campos temporales en el DataFrame post-wizard.
 
@@ -298,9 +330,11 @@ def normalize_temporal_fields(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- CASO B: fecha y hora como columnas separadas ---
     elif fecha_col and hora_col:
-        _sample = df[fecha_col].dropna().astype(str).str.strip().head(5)
-        _dayfirst = not _sample.str.match(r"^\d{4}-\d{2}-\d{2}$").any()
-        fecha_parsed = pd.to_datetime(df[fecha_col], errors="coerce", dayfirst=_dayfirst)
+        fecha_parsed = pd.to_datetime(
+            df[fecha_col],
+            errors="coerce",
+            dayfirst=dayfirst,
+        )
         if not pd.api.types.is_datetime64_any_dtype(fecha_parsed):
             fecha_parsed = fecha_parsed.astype("datetime64[ns]")
         hora_str = df[hora_col].astype(str).str.strip()
@@ -311,7 +345,11 @@ def normalize_temporal_fields(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- CASO C: solo fecha ---
     elif fecha_col:
-        fecha_parsed = pd.to_datetime(df[fecha_col], errors="coerce", dayfirst=True)
+        fecha_parsed = pd.to_datetime(
+            df[fecha_col],
+            errors="coerce",
+            dayfirst=dayfirst,
+        )
         if not pd.api.types.is_datetime64_any_dtype(fecha_parsed):
             fecha_parsed = fecha_parsed.astype("datetime64[ns]")
         datetime_evento = fecha_parsed.dt.normalize()

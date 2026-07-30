@@ -155,6 +155,46 @@ def test_kmz_estructura_basica_sintetica():
         assert kml_data.count("<Folder") >= 3, "Se esperaban al menos 3 folders (raíz, todas_las_antenas y una fecha)"
 
 
+def test_kml_preserva_fechas_iso_y_no_muta_dataframe():
+    df = pd.DataFrame([
+        {
+            "fecha": "2026-05-01 00:00:00",
+            "hora": "09:00:14",
+            "datetime_evento": pd.Timestamp("2026-05-01 09:00:14"),
+            "lat": 13.67560667,
+            "long": -89.27647667,
+            "antena": "INCATE",
+            "azimut": 122,
+        },
+        {
+            "fecha": "2026-07-28 00:00:00",
+            "hora": "17:16:31",
+            "datetime_evento": pd.Timestamp("2026-07-28 17:16:31"),
+            "lat": 13.663242,
+            "long": -89.248115,
+            "antena": "CTMSEL",
+            "azimut": 330,
+        },
+    ])
+    original = df.copy(deep=True)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        out_kml = os.path.join(tmp_dir, "iso_dates.kml")
+        generar_kml(df, out_kml, config={}, flat=False)
+        kmz_path = os.path.splitext(out_kml)[0] + ".kmz"
+        with zipfile.ZipFile(kmz_path, "r") as archive:
+            kml_name = next(
+                name for name in archive.namelist()
+                if name.lower().endswith(".kml")
+            )
+            kml_data = archive.read(kml_name).decode("utf-8", errors="ignore")
+
+    pd.testing.assert_frame_equal(df, original)
+    assert "2026-05-01" in kml_data
+    assert "2026-07-28" in kml_data
+    assert "2026-01-05" not in kml_data
+
+
 def test_kml_business_logic_validation():
     """
     Tests de validación específica de lógica de negocio KML.
