@@ -119,6 +119,8 @@ def apply_wizard_assignments(
 def normalize_wizard_datetime_fields(
     df: pd.DataFrame,
     warn_writer: Optional[Callable[[str], None]] = None,
+    *,
+    dayfirst: bool = True,
 ) -> pd.DataFrame:
     """Normaliza columnas 'fecha'/'hora' respetando el formato QC tradicional."""
 
@@ -144,7 +146,7 @@ def normalize_wizard_datetime_fields(
                 fecha_dt.loc[mask_other] = pd.to_datetime(
                     fecha_text.loc[mask_other],
                     errors="coerce",
-                    dayfirst=True,
+                    dayfirst=dayfirst,
                 )
 
             df["fecha"] = fecha_dt.dt.strftime("%d/%m/%Y")

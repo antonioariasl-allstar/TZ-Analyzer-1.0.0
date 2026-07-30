@@ -11,10 +11,10 @@ Contiene:
 import numpy as np
 import pandas as pd
 
-from tz_core.bitacora_normalization import sanitize_latlon
+from tz_core.bitacora_normalization import parse_date_series, sanitize_latlon
 from tz_core.dataframe_utils import pick_first_existing_column
 from tz_core.logging_utils import log
-from tz_core.time_utils import normalize_hour_to_hhmmss, to_datetime_silent
+from tz_core.time_utils import normalize_hour_to_hhmmss
 
 
 def resolve_top_antennas_n(config: dict | None, overrides: dict | None, default: int = 3) -> int:
@@ -53,11 +53,12 @@ def build_antennas_table(df: pd.DataFrame, config: dict | None = None) -> str:
         if not df_a.empty:
             # timestamp (fecha + hora si existe)
             if "fecha" in df_a.columns:
-                hora_str = df_a.get("hora", "").astype(str).str[:8]
-                ts = to_datetime_silent(
-                    df_a["fecha"].astype(str).str.strip() + " " + hora_str,
-                    errors="coerce", dayfirst=True
+                fechas = parse_date_series(df_a["fecha"], dayfirst=True).dt.normalize()
+                horas = pd.to_timedelta(
+                    df_a.get("hora", "").astype(str).str[:8],
+                    errors="coerce",
                 )
+                ts = fechas + horas
                 df_a["_ts"] = ts
             else:
                 df_a["_ts"] = pd.NaT

@@ -22,7 +22,8 @@
     "logo_alt": "TZ Analysis"
   },
   "excel": {
-    "ignore_hidden_sheets": true
+    "ignore_hidden_sheets": true,
+    "date_order": "ASK"
   },
   "geografia": {
     "sv_bbox": {

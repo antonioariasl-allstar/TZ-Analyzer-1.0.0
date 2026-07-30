@@ -41,7 +41,11 @@ from tz_core.time_utils import clasificar_rango_sv, RANGOS_SV, normalize_hour_to
 from tz_core.color_utils import hex_to_kml_color
 from tz_core.format_utils import agregar_bloque, armar_descripcion_compacta
 from tz_core.logging_utils import log
-from tz_core.bitacora_normalization import normalize_imei, normalize_msisdn
+from tz_core.bitacora_normalization import (
+    normalize_imei,
+    normalize_msisdn,
+    parse_date_series,
+)
 
 # Separador HTML compacto (usado en descripciones)
 HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
@@ -316,6 +320,9 @@ def generar_kml(
     if df is None:
         log("[ERROR] generar_kml: DataFrame es None, abortando")
         return "", 0
+    # La normalización de presentación del KML no debe modificar el DataFrame
+    # que posteriormente consume el informe HTML.
+    df = df.copy(deep=True)
     if df.empty:
         log("[WARN] generar_kml: DataFrame vacío, generando KML sin puntos")
 
@@ -325,7 +332,10 @@ def generar_kml(
     # === NORMALIZACIÓN DE FECHA/HORA ===
     if "fecha" in df.columns:
         try:
-            df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce", dayfirst=True).dt.strftime("%d/%m/%Y")
+            df["fecha"] = parse_date_series(
+                df["fecha"],
+                dayfirst=True,
+            ).dt.strftime("%d/%m/%Y")
             df["fecha"] = df["fecha"].fillna("Sin Inf.")
         except Exception:
             df["fecha"] = "Sin Inf."

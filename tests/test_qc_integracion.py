@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
-from tz_core.ingestion_pipeline import run_ingestion_pipeline
+from tz_core.ingestion_pipeline import resolve_date_dayfirst, run_ingestion_pipeline
 from tz_core.manual_flow import TimeFilterResult
 
 
@@ -111,3 +111,21 @@ def test_no_bloqueante_no_interrumpe():
                 result = run_ingestion_pipeline(**_base_kwargs(df))
                 mock_input.assert_not_called()
                 assert result is not None
+
+
+def test_resolve_date_dayfirst_pregunta_si_todas_son_ambiguas():
+    df = pd.DataFrame({"fecha": ["05/01/2026", "06/12/2026"]})
+    assert resolve_date_dayfirst(
+        df,
+        config={"excel": {"date_order": "ASK"}},
+        prompt_fn=lambda _prompt: "2",
+    ) is False
+
+
+def test_resolve_date_dayfirst_detecta_mdy_con_dia_mayor_que_12():
+    df = pd.DataFrame({"fecha": ["05/13/2026"]})
+    assert resolve_date_dayfirst(
+        df,
+        config={"excel": {"date_order": "ASK"}},
+        prompt_fn=lambda _prompt: pytest.fail("no debe preguntar"),
+    ) is False

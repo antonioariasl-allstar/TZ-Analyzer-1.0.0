@@ -9,7 +9,11 @@ from typing import Optional, Tuple
 
 import pandas as pd
 
-from tz_core.bitacora_normalization import normalize_msisdn, parse_duration_seconds
+from tz_core.bitacora_normalization import (
+    normalize_msisdn,
+    parse_date_series,
+    parse_duration_seconds,
+)
 from tz_core.logging_utils import log
 from tz_core.analytics import construir_seccion_todos_contactos
 
@@ -86,7 +90,10 @@ def calcular_metricas_contactos(
         d["_sec"] = 0.0
 
     if fecha_col and fecha_col in d.columns:
-        d["_fecha"] = pd.to_datetime(d[fecha_col], errors="coerce").dt.normalize()
+        d["_fecha"] = parse_date_series(
+            d[fecha_col],
+            dayfirst=True,
+        ).dt.normalize()
     else:
         d["_fecha"] = pd.NaT
 
