@@ -117,7 +117,13 @@ def construir_seccion_interacciones(
             return False
 
     if df is None or df.empty:
-        return ""
+        return (
+            '<section id="interacciones-recientes">'
+            "<h2>Filtrar interacciones por fecha</h2>"
+            '<p class="nota">No se registraron eventos en esta bitácora. '
+            "Filtro por fecha no generado.</p>"
+            "</section>"
+        )
 
     dt = _to_datetime_series(df)
     df_local = df.copy()
@@ -126,11 +132,23 @@ def construir_seccion_interacciones(
     df_local["_fecha"] = df_local["_dt"].dt.date
     df_local = df_local[df_local["_fecha"].notna()]
     if df_local.empty:
-        return ""
+        return (
+            '<section id="interacciones-recientes">'
+            "<h2>Filtrar interacciones por fecha</h2>"
+            '<p class="nota">La información de fecha no pudo ser procesada en esta bitácora. '
+            "Filtro por fecha no generado.</p>"
+            "</section>"
+        )
 
     fechas_ord = sorted(df_local["_fecha"].dropna().unique().tolist(), reverse=True)
     if not fechas_ord:
-        return ""
+        return (
+            '<section id="interacciones-recientes">'
+            "<h2>Filtrar interacciones por fecha</h2>"
+            '<p class="nota">Fecha no disponible en esta bitácora. '
+            "Filtro por fecha no generado.</p>"
+            "</section>"
+        )
     fechas_sel = fechas_ord  # ya no se limita por `dias`
 
     if col_contacto not in df_local.columns:
