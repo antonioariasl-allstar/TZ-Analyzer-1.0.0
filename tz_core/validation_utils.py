@@ -289,7 +289,7 @@ def _normalize_hora_col(df: pd.DataFrame, col: str) -> Tuple[pd.Series, int]:
             s = pd.to_datetime(raw.astype(float), unit="D", origin="1899-12-30", utc=False)
         else:
             # Intento 2: to_datetime tolerante (strings mixtos / datetime)
-            s = pd.to_datetime(raw, errors="coerce", dayfirst=True)
+            s = pd.to_datetime(raw, errors="coerce")
 
         invalid = int(s.isna().sum())
 

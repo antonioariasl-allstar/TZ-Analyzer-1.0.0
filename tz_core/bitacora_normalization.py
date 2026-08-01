@@ -330,11 +330,7 @@ def normalize_temporal_fields(
 
     # --- CASO B: fecha y hora como columnas separadas ---
     elif fecha_col and hora_col:
-        fecha_parsed = pd.to_datetime(
-            df[fecha_col],
-            errors="coerce",
-            dayfirst=dayfirst,
-        )
+        fecha_parsed = parse_date_series(df[fecha_col], dayfirst=dayfirst)
         if not pd.api.types.is_datetime64_any_dtype(fecha_parsed):
             fecha_parsed = fecha_parsed.astype("datetime64[ns]")
         hora_str = df[hora_col].astype(str).str.strip()
