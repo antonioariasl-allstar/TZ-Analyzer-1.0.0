@@ -16,6 +16,8 @@ import pandas as pd
 import numpy as np
 import warnings
 
+from tz_core.bitacora_normalization import parse_date_series
+
 # Definición de rangos horarios para clasificación "SV" (usado en carpetas de KML)
 # Formato: clave -> (nombre_carpeta, hora_inicio, hora_fin)
 RANGOS_SV = {
@@ -268,25 +270,49 @@ _en_rango_minutos = en_rango_minutos
 
 
 def to_datetime_series(df: Any) -> pd.Series:
-    """Construye una Serie datetime combinando columnas estándar (fecha/hora)."""
+    """Construye la serie temporal canónica sin reinterpretar fechas ISO.
+
+    Precedencia:
+    1. ``datetime_evento``, creado durante la ingesta y considerado autoritativo.
+    2. Combinación de ``fecha`` y ``hora`` para completar filas sin timestamp.
+    3. Alias históricos de columnas datetime.
+    4. ``fecha`` sola a medianoche.
+
+    ``dayfirst`` solo se aplica a textos regionales. Los valores ISO
+    ``YYYY-MM-DD`` se procesan mediante :func:`parse_date_series`, evitando que
+    ``2026-05-01`` se convierta accidentalmente en 5 de enero.
+    """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df debe ser un pandas DataFrame")
+
+    event_dt = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
+    if "datetime_evento" in df.columns:
+        event_dt = pd.to_datetime(df["datetime_evento"], errors="coerce")
+
     if "fecha" in df.columns and "hora" in df.columns:
         try:
-            return to_datetime_silent(
-                df["fecha"].astype(str).str.strip() + " " + df["hora"].astype(str).str.strip(),
-                dayfirst=True,
-                errors="coerce",
-            )
+            fechas = parse_date_series(df["fecha"], dayfirst=True).dt.normalize()
+            horas_norm = df["hora"].map(normalize_hour_to_hhmmss)
+            horas = pd.to_timedelta(horas_norm, errors="coerce")
+            combined = fechas + horas
+            result = event_dt.combine_first(combined)
+            if result.notna().any():
+                return result
         except Exception:
-            pass
+            if event_dt.notna().any():
+                return event_dt
+
+    if event_dt.notna().any():
+        return event_dt
+
     for column in ["datetime", "fecha_hora", "timestamp", "fec_hor", "fechaHora"]:
         if column in df.columns:
             series = to_datetime_silent(df[column], dayfirst=True, errors="coerce")
             if series.notna().any():
                 return series
+
     if "fecha" in df.columns:
-        return to_datetime_silent(df["fecha"], dayfirst=True, errors="coerce")
+        return parse_date_series(df["fecha"], dayfirst=True)
     return pd.Series(pd.NaT, index=df.index)
 
 

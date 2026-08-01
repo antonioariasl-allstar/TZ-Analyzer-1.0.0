@@ -5,11 +5,13 @@ Valida el correcto funcionamiento de utilities temporales.
 """
 
 import pytest
+import pandas as pd
 from datetime import time as _time
 
 from tz_core.time_utils import (
     hhmmss_to_time_or_none, en_rango_tiempo, en_rango_minutos, 
-    clasificar_rango_sv, RANGOS_SV, normalize_hour_to_hhmmss
+    clasificar_rango_sv, RANGOS_SV, normalize_hour_to_hhmmss,
+    to_datetime_series,
 )
 
 
@@ -209,3 +211,39 @@ class TestCompatibilidad:
         assert _hhmmss_to_time_or_none("14:30:15") == hhmmss_to_time_or_none("14:30:15")
         assert _en_rango(_time(14, 30), _time(12, 0), _time(18, 0)) == en_rango_tiempo(_time(14, 30), _time(12, 0), _time(18, 0))
         assert _clasificar_rango_sv("14:30:00") == clasificar_rango_sv("14:30:00")
+
+
+class TestToDatetimeSeries:
+    """Regresiones para fechas ISO usadas por el selector diario del HTML."""
+
+    def test_prefiere_datetime_evento_sin_invertir_fecha_iso(self):
+        """El timestamp canónico tiene precedencia sobre representaciones derivadas."""
+        df = pd.DataFrame({
+            "fecha": ["2026-05-01 00:00:00", "2026-07-28 00:00:00"],
+            "hora": ["09:00:14", "17:16:31"],
+            "datetime_evento": pd.to_datetime([
+                "2026-05-01 09:00:14",
+                "2026-07-28 17:16:31",
+            ]),
+        })
+
+        result = to_datetime_series(df)
+
+        assert result.tolist() == [
+            pd.Timestamp("2026-05-01 09:00:14"),
+            pd.Timestamp("2026-07-28 17:16:31"),
+        ]
+
+    def test_combina_fecha_iso_y_hora_sin_datetime_evento(self):
+        """El fallback fecha+hora conserva YYYY-MM-DD y agrega la hora."""
+        df = pd.DataFrame({
+            "fecha": ["2026-05-01 00:00:00", "2026-07-28 00:00:00"],
+            "hora": ["09:00:14", "17:16:31"],
+        })
+
+        result = to_datetime_series(df)
+
+        assert result.tolist() == [
+            pd.Timestamp("2026-05-01 09:00:14"),
+            pd.Timestamp("2026-07-28 17:16:31"),
+        ]

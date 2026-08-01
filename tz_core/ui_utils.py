@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from tz_core.bitacora_normalization import normalize_imei, normalize_msisdn
+from tz_core.bitacora_normalization import normalize_imei, normalize_msisdn, parse_date_series
 from tz_core.types import (
     CaseIdentity,
     CaseNameSuggestion,
@@ -514,7 +514,7 @@ def suggest_case_name(
     alias_part = alias_val or "sin_alias"
 
     if "fecha" in columns:
-        fechas_parsed = pd.to_datetime(df["fecha"], errors="coerce", dayfirst=True)
+        fechas_parsed = parse_date_series(df["fecha"], dayfirst=True)
         fechas_valid = fechas_parsed.dropna()
         if not fechas_valid.empty:
             fmin = fechas_valid.min().strftime("%d-%m-%Y")
