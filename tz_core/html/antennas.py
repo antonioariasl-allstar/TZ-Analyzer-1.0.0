@@ -43,7 +43,7 @@ def resolve_top_antennas_n(config: dict | None, overrides: dict | None, default:
 
 def build_antennas_table(df: pd.DataFrame, config: dict | None = None) -> str:
     """Construye tabla HTML de todas las antenas con coords, conteo y azimuts frecuentes."""
-    top_tab_html = "<p class='small'>No se encontraron antenas.</p>"
+    top_tab_html = "<p class='nota'>Campo de antena no disponible en esta bitácora.</p>"
     if "antena" in df.columns:
         df_a = df.copy()
         df_a["antena"] = df_a.get("antena", "").astype(str).str.strip()
@@ -119,7 +119,8 @@ def build_antennas_table(df: pd.DataFrame, config: dict | None = None) -> str:
                 + "".join(rows) +
                 "</tbody></table>"
             )
-
+        else:
+            top_tab_html = "<p class='nota'>No se registraron antenas con coordenadas válidas en el período analizado.</p>"
     return top_tab_html
 
 
@@ -136,7 +137,13 @@ def build_top_antennas_section(
     """
     try:
         if df is None or df.empty:
-            return ""
+            return (
+                '<section id="resumen-antenas">'
+                "<h2>Antenas más activadas</h2>"
+                '<p class="nota">No se registraron eventos en esta bitácora. '
+                "Análisis de antenas no generado.</p>"
+                "</section>"
+            )
 
         # Bounding box: config -> fallback SV
         bbox = None
@@ -158,7 +165,13 @@ def build_top_antennas_section(
         col_az = pick_first_existing_column(df, ["azimut", "azimuth", "azi", "angulo"])
 
         if not col_ant:
-            return ""
+            return (
+                '<section id="resumen-antenas">'
+                "<h2>Antenas más activadas</h2>"
+                '<p class="nota">Campo de antena no mapeado en esta bitácora. '
+                "Análisis de antenas no generado.</p>"
+                "</section>"
+            )
 
         def _valid_latlon(lt, lg):
             """Valida si coordenadas lat/lon son válidas y dentro del bbox configurado."""
@@ -181,7 +194,13 @@ def build_top_antennas_section(
             dfv = dfv[dfv.apply(lambda r: _valid_latlon(r[col_lat], r[col_lon]), axis=1)]
 
         if dfv.empty:
-            return ""
+            return (
+                '<section id="resumen-antenas">'
+                "<h2>Antenas más activadas</h2>"
+                '<p class="nota">No se registraron antenas válidas para el período analizado. '
+                "Análisis de antenas no generado.</p>"
+                "</section>"
+            )
 
         top = (
             dfv.groupby(col_ant)
