@@ -290,7 +290,13 @@ def build_antennas_by_hour_section(
 
     try:
         if df is None or df.empty:
-            return ""
+            return (
+                '<section id="antenas-rangos">'
+                "<h2>Antenas por rango horario</h2>"
+                '<p class="nota">No se registraron eventos en esta bitácora. '
+                "Análisis por rango horario no generado.</p>"
+                "</section>"
+            )
 
         col_ant = pick_first_existing_column(df, ["antena", "antenanombre", "antena_nombre"])
         col_lat = pick_first_existing_column(df, ["lat", "latitud"])
@@ -321,7 +327,13 @@ def build_antennas_by_hour_section(
         col_az = pick_first_existing_column(df, ["azimut", "azimuth", "azi", "angulo"])
 
         if not col_ant:
-            return ""
+            return (
+                '<section id="antenas-rangos">'
+                "<h2>Antenas por rango horario</h2>"
+                '<p class="nota">Campo de antena no mapeado en esta bitácora. '
+                "Análisis por rango horario no generado.</p>"
+                "</section>"
+            )
 
         def _to_hour_series():
             """Extrae hora como entero de columna de hora usando normalización o pandas."""
@@ -359,7 +371,13 @@ def build_antennas_by_hour_section(
 
         hours = _to_hour_series()
         if hours is None:
-            return ""
+            return (
+                '<section id="antenas-rangos">'
+                "<h2>Antenas por rango horario</h2>"
+                '<p class="nota">Información de hora no disponible en esta bitácora. '
+                "Análisis por rango horario no generado.</p>"
+                "</section>"
+            )
 
         try:
             invalid_ratio = float(hours.isna().mean()) if len(hours) else 0.0
