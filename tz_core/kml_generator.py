@@ -332,14 +332,17 @@ def generar_kml(
     # === NORMALIZACIÓN DE FECHA/HORA ===
     if "fecha" in df.columns:
         try:
-            df["fecha"] = parse_date_series(
-                df["fecha"],
-                dayfirst=True,
-            ).dt.strftime("%d/%m/%Y")
+            _dt_series = parse_date_series(df["fecha"], dayfirst=True)
+            df["_dt_kml_fecha"] = _dt_series
+        except Exception:
+            df["_dt_kml_fecha"] = pd.NaT
+        try:
+            df["fecha"] = df["_dt_kml_fecha"].dt.strftime("%d/%m/%Y")
             df["fecha"] = df["fecha"].fillna("Sin Inf.")
         except Exception:
             df["fecha"] = "Sin Inf."
     else:
+        df["_dt_kml_fecha"] = pd.NaT
         df["fecha"] = "Sin Inf."
 
     # Detectar mejor columna de hora y normalizar a HH:MM:SS tolerando separadores variados
@@ -375,9 +378,25 @@ def generar_kml(
     except Exception:
         df["hora"] = "Sin Inf."
 
-    # Ordenar por fecha y hora
+    # Columnas auxiliares para ordenamiento cronológico robusto
+    df["_fila_original"] = range(len(df))
     try:
-        df = df.sort_values(by=["fecha", "hora"])
+        df["_hora_kml_sort"] = pd.to_timedelta(
+            df["hora"].replace("Sin Inf.", pd.NA),
+            errors="coerce"
+        )
+        df["_hora_ausente"] = df["_hora_kml_sort"].isna()
+    except Exception:
+        df["_hora_kml_sort"] = pd.NaT
+        df["_hora_ausente"] = True
+
+    # Ordenar cronológicamente: fecha → hora ausente → hora → fila original
+    try:
+        df = df.sort_values(
+            by=["_dt_kml_fecha", "_hora_ausente", "_hora_kml_sort", "_fila_original"],
+            kind="stable",
+            na_position="last"
+        )
     except Exception:
         pass
 
