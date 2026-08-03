@@ -332,6 +332,29 @@ def generar_kml(
     kml = Kml()
     descartadas = 0
 
+    # ScreenOverlay permanente (Nivel 1 de advertencia — spec sección 2.8)
+    _assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+    _png_path   = os.path.join(_assets_dir, "kmz_aviso_orientativo.png")
+    if os.path.exists(_png_path):
+        try:
+            _png_href = kml.addfile(_png_path)
+            _overlay  = kml.newscreenoverlay(name="Representación orientativa")
+            _overlay.icon.href = _png_href
+            _overlay.overlayxy = sk.OverlayXY(
+                x=0, y=1,
+                xunits=sk.Units.fraction, yunits=sk.Units.fraction
+            )
+            _overlay.screenxy = sk.ScreenXY(
+                x=0.01, y=0.96,
+                xunits=sk.Units.fraction, yunits=sk.Units.fraction
+            )
+            _overlay.size = sk.Size(
+                x=360, y=60,
+                xunits=sk.Units.pixels, yunits=sk.Units.pixels
+            )
+        except Exception:
+            pass
+
     # === NORMALIZACIÓN DE FECHA/HORA ===
     if "fecha" in df.columns:
         try:

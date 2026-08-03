@@ -261,11 +261,10 @@ def test_kml_business_logic_validation():
         kml_content_3 = extract_kml_from_kmz(kmz_path_3)
         
         # VALIDACIÓN CRÍTICA: compactación EXACTA hasta segunda coma
-        name_match = re.search(r'<name>(.*?)</name>', kml_content_3)
-        if name_match:
-            actual_name = name_match.group(1).strip()
-            expected_exact = 'Aaaa Bbbb, Cccc Dddd'
-            assert actual_name == expected_exact, f"Caso 3: Compactación debe ser EXACTA. Expected: '{expected_exact}' | Actual: '{actual_name}'"
+        # Busca el nombre exacto en el KML — no asume que es el primer <name>
+        expected_exact = 'Aaaa Bbbb, Cccc Dddd'
+        assert f'<name>{expected_exact}</name>' in kml_content_3, \
+            f"Caso 3: Compactación debe ser EXACTA. Nombre '{expected_exact}' no encontrado en el KML."
         
         # Test 4: límite de palabras
         df_case4 = pd.DataFrame([{
