@@ -500,6 +500,20 @@ def generar_kml(
     # Contador global para deduplicación
     pair_counter_all = Counter((it["antena"], it["azimut_i"]) for it in items)
 
+    # Pre-calcular numeración y padding antes de construir carpetas
+    total_activaciones = len(items)
+    fechas_validas_set = {
+        it["fecha"] for it in items
+        if isinstance(it.get("fecha"), str) and it["fecha"] != "Sin Inf."
+    }
+    total_dias = len(fechas_validas_set)
+    padding_dias = max(3, len(str(total_dias)))
+    padding_act  = max(4, len(str(total_activaciones)))
+    if total_activaciones > 300:
+        log(f"[WARNING] KMZ: {total_activaciones} activaciones — puede afectar rendimiento en Google Earth.")
+        print(f"\n[AVISO KMZ] {total_activaciones} activaciones detectadas. "
+              f"El KMZ puede tardar en cargar en Google Earth.")
+
     # === MODO FLAT (sin carpetas) ===
     if flat:
         for it in items:
@@ -538,24 +552,31 @@ def generar_kml(
 
     # Carpeta principal: todas_las_antenas
     f_todas = raiz.newfolder(name="todas_las_antenas")
+    f_todas.open = 0
     folders_por_fecha = {}
 
-    def obtener_carpeta_fecha(fecha_dt):
-        """Helper para obtener/crear carpeta por fecha"""
-        if fecha_dt == "Sin Inf." or not fecha_dt:
-            return None
-        if isinstance(fecha_dt, str):
-            try:
-                fecha_dt = datetime.fromisoformat(fecha_dt)
-            except Exception:
-                try:
-                    fecha_dt = datetime.strptime(fecha_dt, "%d/%m/%Y")
-                except:
-                    fecha_dt = datetime.strptime(fecha_dt, "%Y-%m-%d")
-        fecha_str = f"{fecha_dt.timetuple().tm_yday:03d}-{fecha_dt.strftime('%Y-%m-%d')}"
-        if fecha_str not in folders_por_fecha:
-            folders_por_fecha[fecha_str] = f_todas.newfolder(name=fecha_str)
-        return folders_por_fecha[fecha_str]
+    # Parámetros de radio y apertura para descripciones y LEA PRIMERO
+    _radio_kml    = float((config or {}).get("kml", {}).get("azimuth_km", 1.0))
+    _radio_origen = (config or {}).get("kml", {}).get("radio_origen", "predeterminado")
+    _cone_half_kml = int(
+        (config or {}).get("kml", {}).get("cone", {}).get("half_degrees")
+        or (config or {}).get("style", {}).get("cone_half_degrees", 60)
+    )
+
+    # Crear carpetas de fecha con numeración secuencial
+    fechas_validas_dt = sorted([
+        datetime.strptime(f, "%d/%m/%Y")
+        for f in fechas_validas_set
+    ])
+    for num_dia_idx, fch in enumerate(fechas_validas_dt, start=1):
+        num_dia = str(num_dia_idx).zfill(padding_dias)
+        nombre_dia = f"{num_dia} — {fch.strftime('%Y-%m-%d')}"
+        carpeta_dia = f_todas.newfolder(name=nombre_dia)
+        carpeta_dia.open = 0
+        folders_por_fecha[fch.strftime("%d/%m/%Y")] = carpeta_dia
+
+    # Carpeta para registros sin fecha (lazy init)
+    folder_sin_fecha = None
 
     # Carpeta opcional: por_rango_horario
     incluir_rango = False
@@ -566,12 +587,15 @@ def generar_kml(
     
     if incluir_rango:
         f_rangos = raiz.newfolder(name="por_rango_horario")
+        f_rangos.open = 0
         rango_folders = {
-            "manana": f_rangos.newfolder(name=RANGOS_SV["manana"][0]),
-            "tarde": f_rangos.newfolder(name=RANGOS_SV["tarde"][0]),
-            "noche": f_rangos.newfolder(name=RANGOS_SV["noche"][0]),
+            "manana":    f_rangos.newfolder(name=RANGOS_SV["manana"][0]),
+            "tarde":     f_rangos.newfolder(name=RANGOS_SV["tarde"][0]),
+            "noche":     f_rangos.newfolder(name=RANGOS_SV["noche"][0]),
             "madrugada": f_rangos.newfolder(name=RANGOS_SV["madrugada"][0]),
         }
+        for folder in rango_folders.values():
+            folder.open = 0
     else:
         rango_folders = {}
 
@@ -590,28 +614,68 @@ def generar_kml(
                           else f"top_{_topN_ant}_por_rango_horario")
 
     f_top_global = raiz.newfolder(name=_name_top_global)
+    f_top_global.open = 0
     f_top_por_rango = raiz.newfolder(name=_name_top_por_rango)
+    f_top_por_rango.open = 0
     top_rango_folders = {
-        "manana": f_top_por_rango.newfolder(name=RANGOS_SV["manana"][0]),
-        "tarde": f_top_por_rango.newfolder(name=RANGOS_SV["tarde"][0]),
-        "noche": f_top_por_rango.newfolder(name=RANGOS_SV["noche"][0]),
+        "manana":    f_top_por_rango.newfolder(name=RANGOS_SV["manana"][0]),
+        "tarde":     f_top_por_rango.newfolder(name=RANGOS_SV["tarde"][0]),
+        "noche":     f_top_por_rango.newfolder(name=RANGOS_SV["noche"][0]),
         "madrugada": f_top_por_rango.newfolder(name=RANGOS_SV["madrugada"][0]),
     }
+    for folder in top_rango_folders.values():
+        folder.open = 0
 
     # === LLENAR CARPETAS ===
-    
-    # 1) Crear carpetas por fecha en orden cronológico
-    fechas_unicas = sorted({
-        datetime.strptime(it["fecha"], "%Y-%m-%d") if "-" in it["fecha"]
-        else datetime.strptime(it["fecha"], "%d/%m/%Y")
-        for it in items
-        if isinstance(it["fecha"], str) and it["fecha"] != "Sin Inf."
-    })
-    for fch in fechas_unicas:
-        obtener_carpeta_fecha(fch)
 
-    # 2) Poblar "todas_las_antenas" (un punto por activación, sin dedup)
+    # Poblar "todas_las_antenas": una subcarpeta por activación
+    contador_act = 0
     for it in items:
+        contador_act += 1
+        num_act         = str(contador_act).zfill(padding_act)
+        hora_display    = str(it.get("hora", "SinInf"))[:8]
+        antena_truncada = str(it.get("antena", "Antena"))[:30]
+        nombre_carpeta_act = f"{num_act} — {hora_display} — {antena_truncada}"
+
+        _carpeta_fecha = folders_por_fecha.get(it["fecha"])
+        if _carpeta_fecha is None:
+            if folder_sin_fecha is None:
+                folder_sin_fecha = f_todas.newfolder(name="Sin fecha determinada")
+                folder_sin_fecha.open = 0
+            _carpeta_fecha = folder_sin_fecha
+
+        _carpeta_act = _carpeta_fecha.newfolder(name=nombre_carpeta_act)
+        _carpeta_act.open = 0
+
+        _az_val = it.get("azimut_f")
+        _az_desc_valido = False
+        _az_desc = None
+        try:
+            _az_desc = float(_az_val)
+            _az_desc_valido = not math.isnan(_az_desc)
+        except (TypeError, ValueError):
+            pass
+        _az_line = (
+            f"<b>Azimut:</b> {int(round(_az_desc)) % 360}°<br>"
+            if _az_desc_valido else ""
+        )
+        _apertura_line = (
+            f"<b>Apertura:</b> {_cone_half_kml * 2}°<br>"
+            if _az_desc_valido else ""
+        )
+        _carpeta_act.description = (
+            f"<b>Activación global:</b> {num_act}<br>"
+            f"<b>Fecha y hora:</b> {it.get('fecha', 'Sin Inf.')} {hora_display}<br>"
+            f"<b>Antena:</b> {it.get('antena', '')}<br>"
+            f"{_az_line}"
+            f"<b>Radio gráfico:</b> {_radio_kml} km<br>"
+            f"{_apertura_line}"
+            f"<b>Origen del radio:</b> {_radio_origen}<br>"
+            f"<hr>"
+            f"<i>Representación orientativa. No delimita la cobertura real "
+            f"ni determina la ubicación exacta del terminal.</i>"
+        )
+
         n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
         desc_comp = armar_descripcion_compacta(
             it, n_all,
@@ -619,13 +683,11 @@ def generar_kml(
             config=config,
             hr_compact=HR_COMPACT
         )
-        _carpeta = obtener_carpeta_fecha(it["fecha"])
-        if _carpeta is not None:
-            _crear_feature_kml(
-                _carpeta,
-                it["antena"], it["lon"], it["lat"],
-                desc_comp, it["azimut_f"], config
-            )
+        _crear_feature_kml(
+            _carpeta_act,
+            it["antena"], it["lon"], it["lat"],
+            desc_comp, it["azimut_f"], config
+        )
 
     # 3) Preparar contadores para deduplicación
     pair_global = Counter((it["antena"], it["azimut_i"]) for it in items)
