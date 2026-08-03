@@ -256,6 +256,16 @@ def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100) ->
         return []
 
 
+def _fallback_todos_contactos(mensaje: str) -> str:
+    """Retorna bloque HTML declarativo para sección Todos los contactos cuando no hay datos."""
+    return (
+        '<section id="todos-contactos">'
+        '<h2>Todos los contactos</h2>'
+        f'<p style="font-size:13px; color:#444; margin-bottom:8px;">{mensaje}</p>'
+        '</section>'
+    )
+
+
 def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optional[Dict[str, str]] = None) -> str:
     """
     Construye sección HTML 'Todos los contactos' con tabla estadística.
@@ -272,7 +282,9 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
     """
     try:
         if df is None or df.empty:
-            return ""
+            return _fallback_todos_contactos(
+                "No se registraron interacciones en el período analizado."
+            )
 
         cols_cfg = columnas_config or {}
         candidatos = [
@@ -288,14 +300,19 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
         ]
         c_col = next((c for c in candidatos if c and c in df.columns), None)
         if not c_col:
-            return ""
+            return _fallback_todos_contactos(
+                "No se identificó una columna de contacto en la bitácora. "
+                "Verificar el mapeo de columnas."
+            )
 
         # Normalizar contacto con helper MSISDN para agrupar bien
         s = df[c_col].map(lambda v: normalize_msisdn(v) or str(v).strip())
 
         d = df.loc[s != ""].copy()
         if d.empty:
-            return ""
+            return _fallback_todos_contactos(
+                "No se encontraron valores de contacto procesables en el período analizado."
+            )
         d["_c_norm"] = s[s != ""]
 
         # Segundos (_sec)
@@ -338,8 +355,11 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
             )
         out.append("</tbody></table></div></section>")
         return "\n".join(out)
-    except Exception:
-        return ""
+    except Exception as exc:
+        print(f"[WARN] construir_seccion_todos_contactos: {exc}")
+        return _fallback_todos_contactos(
+            "No fue posible generar esta sección con los datos disponibles."
+        )
 
 
 # ========================================
