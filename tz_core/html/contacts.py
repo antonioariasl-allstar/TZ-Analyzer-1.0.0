@@ -282,6 +282,16 @@ def build_top_contacts_sections(
                             "<thead><tr><th class='right'>#</th><th>Contacto</th><th>Duráción total</th></tr></thead>"
                             "<tbody>" + "\n".join(rows) + "</tbody></table>"
                         )
+        else:
+            top_contactos_cnt_html = (
+                "<p class='small'>No se encontraron valores de contacto "
+                "procesables en el período analizado.</p>"
+            )
+            if d_col:
+                top_contactos_dur_html = (
+                    "<p class='small'>No se encontraron valores de contacto "
+                    "procesables en el período analizado.</p>"
+                )
 
     # Análisis de perfiles de comunicación
     analisis_html = ""
