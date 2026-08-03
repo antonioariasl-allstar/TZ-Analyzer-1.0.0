@@ -36,7 +36,7 @@ from simplekml import Kml
 import simplekml as sk
 
 # Imports internos del framework tz_core
-from tz_core.geo_utils import calcular_punto_final
+from tz_core.geo_utils import calcular_punto_final, generar_coordenadas_circulo
 from tz_core.time_utils import clasificar_rango_sv, RANGOS_SV, normalize_hour_to_hhmmss
 from tz_core.color_utils import hex_to_kml_color
 from tz_core.format_utils import agregar_bloque, armar_descripcion_compacta
@@ -147,18 +147,16 @@ def _crear_feature_kml(
     except Exception:
         pass  # Si falla sanitización, usar valores originales
 
-    # === VALIDACIÓN DE AZIMUT ===
+    # === DETERMINAR SI HAY AZIMUT VÁLIDO ===
+    az_valido = False
+    az = None
     try:
-        az = float(azimut_float)
+        _az_c = float(azimut_float)
+        if not math.isnan(_az_c):
+            az = _az_c % 360.0
+            az_valido = True
     except Exception:
-        return  # No dibujar si azimut no es numérico
-    
-    if isinstance(az, float) and math.isnan(az):
-        return
-    
-    # Normalizar a rango [0, 360)
-    az = az % 360.0
-    az_int = int(round(az)) % 360
+        pass
 
     # === INICIALIZAR ESTILOS REUTILIZABLES ===
     if _REUSABLE_STYLES is None:
@@ -200,10 +198,18 @@ def _crear_feature_kml(
         s_cone.polystyle.fill = 1
         s_cone.polystyle.outline = 1
 
+        s_circle = sk.Style()
+        s_circle.polystyle.color = hex_to_kml_color(theme_hex, 30)
+        s_circle.polystyle.fill = 1
+        s_circle.polystyle.outline = 1
+        s_circle.linestyle.color = hex_to_kml_color(theme_hex, 200)
+        s_circle.linestyle.width = 1.5
+
         _REUSABLE_STYLES = {
-            "pin": s_pin,
-            "line": s_line,
-            "cone": s_cone,
+            "pin":    s_pin,
+            "line":   s_line,
+            "cone":   s_cone,
+            "circle": s_circle,
         }
 
     # === CREAR PUNTO ===
@@ -212,69 +218,64 @@ def _crear_feature_kml(
         p.description = f'<div style="line-height:1.10; font-size:14px">{descripcion}</div>'
     p.style = _REUSABLE_STYLES["pin"]
 
-    # === CREAR LÍNEA Y CONO DE AZIMUT ===
+    # === SIEMPRE: círculo de referencia ===
     try:
-        az = float(azimut_float) if azimut_float is not None else float("nan")
+        _radio = float((config or {}).get("kml", {}).get("azimuth_km", 1.0))
+        coords_circulo = generar_coordenadas_circulo(lat, lon, _radio)
+        circulo = container.newpolygon(name="Radio de referencia")
+        circulo.outerboundaryis = coords_circulo
+        circulo.style = _REUSABLE_STYLES["circle"]
     except Exception:
-        az = float("nan")
+        pass
 
-    if not (isinstance(az, float) and math.isnan(az)):
-        # Parámetros de azimut desde config
+    # === SOLO SI AZIMUT VÁLIDO: línea y cono ===
+    if az_valido:
         try:
-            az_dist_km = config.get("kml", {}).get("azimuth_km", 1.5)
-            # Priorizar kml.cone.half_degrees, luego style.cone_half_degrees
-            cone_half = config.get("kml", {}).get("cone", {}).get("half_degrees")
-            if cone_half is None:
-                cone_half = config.get("style", {}).get("cone_half_degrees", 35)
+            az_dist_km = float((config or {}).get("kml", {}).get("azimuth_km", 1.0))
+            cone_half = (
+                (config or {}).get("kml", {}).get("cone", {}).get("half_degrees")
+                or (config or {}).get("style", {}).get("cone_half_degrees", 60)
+            )
+            cone_half = int(cone_half)
         except Exception:
-            az_dist_km = 1.5
-            cone_half = 35
+            az_dist_km = 1.0
+            cone_half = 60
 
-        # Calcular punto final de la línea
-        latf, lonf = calcular_punto_final(lat, lon, az, float(az_dist_km))
-
-        # Crear LÍNEA
+        latf, lonf = calcular_punto_final(lat, lon, az, az_dist_km)
         linea = container.newlinestring(
             name=f"Azimut {int(round(az))}°",
             coords=[(lon, lat), (lonf, latf)]
         )
         linea.style = _REUSABLE_STYLES["line"]
 
-        # Crear CONO (polígono)
         coords_cono = []
         paso = 5
-        for ang in range(-int(cone_half), int(cone_half) + 1, paso):
-            lat_p, lon_p = calcular_punto_final(lat, lon, az + ang, float(az_dist_km))
+        for ang in range(-cone_half, cone_half + 1, paso):
+            lat_p, lon_p = calcular_punto_final(lat, lon, az + ang, az_dist_km)
             coords_cono.append((lon_p, lat_p))
         coords_cono.append((lon, lat))
-        
         pol = container.newpolygon(name=f"Cono Azimut {int(round(az))}°")
         pol.outerboundaryis = coords_cono
         pol.style = _REUSABLE_STYLES["cone"]
-        
+
         # === AZIMUTS SECUNDARIOS (opcional) ===
         if azimuts_extra:
             for az_s in azimuts_extra:
                 try:
                     az_s = float(az_s)
-                except:
+                except Exception:
                     continue
-
-                # Línea secundaria
-                latf2, lonf2 = calcular_punto_final(lat, lon, az_s, float(az_dist_km))
+                latf2, lonf2 = calcular_punto_final(lat, lon, az_s, az_dist_km)
                 linea2 = container.newlinestring(
                     name=f"Azimut {int(round(az_s))}° (sec.)",
                     coords=[(lon, lat), (lonf2, latf2)]
                 )
                 linea2.style = _REUSABLE_STYLES["line"]
-
-                # Cono secundario
                 coords_cono2 = []
-                for ang in range(-int(cone_half), int(cone_half) + 1, paso):
-                    lat_p2, lon_p2 = calcular_punto_final(lat, lon, az_s + ang, float(az_dist_km))
+                for ang in range(-cone_half, cone_half + 1, paso):
+                    lat_p2, lon_p2 = calcular_punto_final(lat, lon, az_s + ang, az_dist_km)
                     coords_cono2.append((lon_p2, lat_p2))
                 coords_cono2.append((lon, lat))
-
                 pol2 = container.newpolygon(name=f"Cono Azimut {int(round(az_s))}° (sec.)")
                 pol2.outerboundaryis = coords_cono2
                 pol2.style = _REUSABLE_STYLES["cone"]
@@ -323,6 +324,8 @@ def generar_kml(
     # La normalización de presentación del KML no debe modificar el DataFrame
     # que posteriormente consume el informe HTML.
     df = df.copy(deep=True)
+    global _REUSABLE_STYLES
+    _REUSABLE_STYLES = None  # reset para que cada bitácora use su propio color
     if df.empty:
         log("[WARN] generar_kml: DataFrame vacío, generando KML sin puntos")
 
