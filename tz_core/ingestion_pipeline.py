@@ -157,8 +157,8 @@ def run_ingestion_pipeline(
         output_fn=out,
     )
     df_norm = normalize_temporal_fields(df_norm, dayfirst=dayfirst)
-    df_norm = normalize_contact_fields(df_norm)
     df_norm = normalize_event_fields(df_norm, col_tipo="interaccion")
+    df_norm = normalize_contact_fields(df_norm)
     df_norm = normalize_wizard_datetime_fields(
         df_norm,
         warn_writer=lambda msg: out(msg),
