@@ -204,3 +204,102 @@ def test_padding_dinamico(total_dias, total_act, esperado_dia, esperado_act):
     pad_act  = max(4, len(str(total_act)))
     assert str(total_dias).zfill(pad_dias) == esperado_dia
     assert str(total_act).zfill(pad_act)   == esperado_act
+
+
+# ── TEXTOS APROBADOS Y FRASES ELIMINADAS ───────────────────────────────────
+
+def test_lea_primero_texto_circulo_aprobado(tmp_path):
+    """LEA PRIMERO: texto aprobado del círculo presente en el KMZ."""
+    df = pd.DataFrame({
+        "fecha":  ["10/01/2026"],
+        "hora":   ["09:00:00"],
+        "lat":    [13.7],
+        "long":   [-89.2],
+        "antena": ["TEST-ANTENA"],
+        "azimut": [90],
+    })
+    kml_content = _generar_y_leer_kml(df, tmp_path)
+    assert "lectura espacial del mapa" in kml_content, \
+        "Texto aprobado del círculo ausente en LEA PRIMERO"
+
+
+def test_lea_primero_texto_sector_aprobado(tmp_path):
+    """LEA PRIMERO: texto aprobado del sector presente en el KMZ."""
+    df = pd.DataFrame({
+        "fecha":  ["10/01/2026"],
+        "hora":   ["09:00:00"],
+        "lat":    [13.7],
+        "long":   [-89.2],
+        "antena": ["TEST-ANTENA"],
+        "azimut": [90],
+    })
+    kml_content = _generar_y_leer_kml(df, tmp_path)
+    assert "del sector conforme" in kml_content, \
+        "Texto aprobado del sector ausente en LEA PRIMERO"
+
+
+def test_frases_eliminadas_ausentes_en_kml(tmp_path):
+    """Las tres frases eliminadas no deben aparecer en ninguna parte del KML.
+
+    Usa DataFrame con azimut válido Y sin azimut para cubrir ambos bloques de texto.
+    """
+    df = pd.DataFrame({
+        "fecha":  ["10/01/2026", "11/01/2026"],
+        "hora":   ["09:00:00",   "10:00:00"],
+        "lat":    [13.7,         13.8],
+        "long":   [-89.2,        -89.3],
+        "antena": ["ANT-A",      "ANT-B"],
+        "azimut": [90,           float("nan")],
+    })
+    kml_content = _generar_y_leer_kml(df, tmp_path)
+    assert "ADVERTENCIA" not in kml_content, \
+        "Encabezado ADVERTENCIA presente en el KML"
+    assert "cobertura real" not in kml_content, \
+        "Frase 'cobertura real' presente en el KML"
+    assert "del terminal" not in kml_content, \
+        "Frase 'del terminal' presente en el KML"
+
+
+def test_activacion_descripcion_texto_aprobado(tmp_path):
+    """Descripción de activación individual: texto aprobado presente en el KMZ."""
+    df = pd.DataFrame({
+        "fecha":  ["10/01/2026"],
+        "hora":   ["09:00:00"],
+        "lat":    [13.7],
+        "long":   [-89.2],
+        "antena": ["TEST-ANTENA"],
+        "azimut": [90],
+    })
+    kml_content = _generar_y_leer_kml(df, tmp_path)
+    assert "el radio configurado y el azimut" in kml_content, \
+        "Texto aprobado de descripción de activación ausente"
+
+
+def test_guia_del_mapeo_nombre_carpeta(tmp_path):
+    """La carpeta de guía usa el nombre aprobado 'GUÍA DEL MAPEO'."""
+    df = pd.DataFrame({
+        "fecha":  ["10/01/2026"],
+        "hora":   ["09:00:00"],
+        "lat":    [13.7],
+        "long":   [-89.2],
+        "antena": ["TEST-ANTENA"],
+        "azimut": [90],
+    })
+    kml_content = _generar_y_leer_kml(df, tmp_path)
+    assert "DEL MAPEO" in kml_content, \
+        "Nombre de carpeta 'GUÍA DEL MAPEO' ausente en el KMZ"
+
+
+def test_lea_primero_origen_legible(tmp_path):
+    """La configuración de radio muestra texto legible, no el valor interno."""
+    df = pd.DataFrame({
+        "fecha":  ["10/01/2026"],
+        "hora":   ["09:00:00"],
+        "lat":    [13.7],
+        "long":   [-89.2],
+        "antena": ["TEST-ANTENA"],
+        "azimut": [90],
+    })
+    kml_content = _generar_y_leer_kml(df, tmp_path)
+    assert "valor predeterminado del sistema" in kml_content, \
+        "Traducción de 'predeterminado' a texto legible ausente en el KMZ"

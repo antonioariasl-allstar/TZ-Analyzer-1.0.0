@@ -580,22 +580,25 @@ def generar_kml(
         (config or {}).get("kml", {}).get("cone", {}).get("half_degrees")
         or (config or {}).get("style", {}).get("cone_half_degrees", 60)
     )
-    f_lea = raiz.newfolder(name="\u26a0 LEA PRIMERO")
+    _origen_legible = {
+        "predeterminado": "valor predeterminado del sistema",
+        "manual":         "valor definido por el usuario",
+        "operadora":      "valor proporcionado por la operadora",
+    }.get(str(_origen_lea).strip().lower(), str(_origen_lea).strip() or "no especificado")
+    f_lea = raiz.newfolder(name="\u24d8 GU\u00cdA DEL MAPEO")
     f_lea.open = 0
     f_lea.description = (
-        f"<b>Par\u00e1metros del an\u00e1lisis</b><br><br>"
+        f"<b>Par\u00e1metros del an\u00e1lisis</b><br>"
+        f"TZ Analyzer genera los siguientes elementos gr\u00e1ficos:<br><br>"
         f"<b>Radio gr\u00e1fico:</b> {_radio_lea} km<br>"
         f"<b>Apertura del sector:</b> {_half_lea * 2}\u00b0 (\u00b1{_half_lea}\u00b0)<br>"
-        f"<b>Origen del radio:</b> {_origen_lea}<br><br>"
+        f"<b>Configuraci\u00f3n del radio:</b> {_origen_legible}<br><br>"
         f"<b>\u00bfQu\u00e9 significa el c\u00edrculo?</b><br>"
-        f"Zona de referencia orientativa. No representa la cobertura "
-        f"real de la antena.<br><br>"
+        f"Representa una distancia gr\u00e1fica de referencia alrededor de la antena "
+        f"registrada y facilita la lectura espacial del mapa<br><br>"
         f"<b>\u00bfQu\u00e9 significa el sector?</b><br>"
-        f"Direcci\u00f3n aproximada seg\u00fan el azimut registrado. Solo aparece "
-        f"cuando el dato de azimut est\u00e1 disponible en la bit\u00e1cora.<br><br>"
-        f"<b>ADVERTENCIA</b><br>"
-        f"Esta representaci\u00f3n es orientativa. El radio gr\u00e1fico no delimita "
-        f"la cobertura real ni determina la ubicaci\u00f3n exacta del terminal."
+        f"Representa gr\u00e1ficamente la orientaci\u00f3n del sector conforme al azimut "
+        f"registrado en la bit\u00e1cora y se muestra \u00fanicamente cuando dicho dato est\u00e1 disponible"
     )
 
     # Carpeta principal: todas_las_antenas
@@ -720,8 +723,8 @@ def generar_kml(
             f"{_apertura_line}"
             f"<b>Origen del radio:</b> {_radio_origen}<br>"
             f"<hr>"
-            f"<i>Representación orientativa. No delimita la cobertura real "
-            f"ni determina la ubicación exacta del terminal.</i>"
+            f"<i>Representación gráfica construida a partir de la antena registrada, "
+            f"el radio configurado y el azimut disponible en la bitácora</i>"
         )
 
         n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
