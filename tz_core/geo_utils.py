@@ -72,6 +72,35 @@ def calcular_punto_final(lat: float, lon: float, azimut: float, distancia_km: fl
     return math.degrees(lat_final), math.degrees(lon_final)
 
 
+def generar_coordenadas_circulo(
+    lat: float,
+    lon: float,
+    radio_km: float,
+    paso_grados: int = 5
+) -> list:
+    """Genera coordenadas de un polígono circular para KML.
+
+    Llama a calcular_punto_final() en intervalos de paso_grados alrededor
+    de 360° y cierra el polígono repitiendo el primer punto al final.
+
+    Args:
+        lat: Latitud del centro en grados decimales
+        lon: Longitud del centro en grados decimales
+        radio_km: Radio del círculo en kilómetros
+        paso_grados: Resolución angular (default 5° → 72 vértices + cierre)
+
+    Returns:
+        list: Lista de tuplas (lon, lat) en formato simplekml.
+              Con paso_grados=5: 73 elementos (72 vértices + 1 de cierre).
+    """
+    coords = []
+    for angulo in range(0, 360, paso_grados):
+        lat_p, lon_p = calcular_punto_final(lat, lon, float(angulo), radio_km)
+        coords.append((lon_p, lat_p))
+    coords.append(coords[0])  # cerrar el polígono
+    return coords
+
+
 def generar_cono(kml, lat: float, lon: float, azimut: float, distancia_km: float, 
                 angulo_lateral: int, color: str):
     """Genera un polígono tipo 'cono' direccional en KML.
