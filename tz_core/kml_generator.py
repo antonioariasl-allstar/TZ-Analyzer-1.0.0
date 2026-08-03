@@ -550,6 +550,31 @@ def generar_kml(
     nombre_raiz = os.path.splitext(os.path.basename(archivo_salida_kml))[0]
     raiz = kml.newfolder(name=nombre_raiz)
 
+    # Carpeta LEA PRIMERO — primera en el panel lateral
+    _radio_lea    = float((config or {}).get("kml", {}).get("azimuth_km", 1.0))
+    _origen_lea   = (config or {}).get("kml", {}).get("radio_origen", "predeterminado")
+    _half_lea     = int(
+        (config or {}).get("kml", {}).get("cone", {}).get("half_degrees")
+        or (config or {}).get("style", {}).get("cone_half_degrees", 60)
+    )
+    f_lea = raiz.newfolder(name="\u26a0 LEA PRIMERO")
+    f_lea.open = 0
+    f_lea.description = (
+        f"<b>Par\u00e1metros del an\u00e1lisis</b><br><br>"
+        f"<b>Radio gr\u00e1fico:</b> {_radio_lea} km<br>"
+        f"<b>Apertura del sector:</b> {_half_lea * 2}\u00b0 (\u00b1{_half_lea}\u00b0)<br>"
+        f"<b>Origen del radio:</b> {_origen_lea}<br><br>"
+        f"<b>\u00bfQu\u00e9 significa el c\u00edrculo?</b><br>"
+        f"Zona de referencia orientativa. No representa la cobertura "
+        f"real de la antena.<br><br>"
+        f"<b>\u00bfQu\u00e9 significa el sector?</b><br>"
+        f"Direcci\u00f3n aproximada seg\u00fan el azimut registrado. Solo aparece "
+        f"cuando el dato de azimut est\u00e1 disponible en la bit\u00e1cora.<br><br>"
+        f"<b>ADVERTENCIA</b><br>"
+        f"Esta representaci\u00f3n es orientativa. El radio gr\u00e1fico no delimita "
+        f"la cobertura real ni determina la ubicaci\u00f3n exacta del terminal."
+    )
+
     # Carpeta principal: todas_las_antenas
     f_todas = raiz.newfolder(name="todas_las_antenas")
     f_todas.open = 0
