@@ -8,6 +8,7 @@
 **Commit base:** `ddb11ff`
 **Revisión GPT ronda 1:** Bloqueantes 1–5 incorporados. D1 cerrado. D2 cerrado.
 **Revisión GPT ronda 2:** Correcciones C1 (sort), C2 (azimut NaN), C3 (ScreenOverlay) incorporadas. Tests fortalecidos.
+**Estado de implementación:** IMPLEMENTADA — implementación y tests completos (agosto 2026).
 
 ---
 
@@ -847,7 +848,8 @@ def test_padding_dinamico(total_dias, total_act, esperado_dia, esperado_act):
 ```powershell
 py -m py_compile tz_core\kml_generator.py
 pytest -x -q
-# 342 passing (baseline) + tests nuevos
+# Baseline al redactar esta especificación: 342 passing.
+# Estado posterior verificado en agosto de 2026: 427 passed, 2 skipped.
 # → generar KMZ con bitácora real TEL_61758498
 # → revisión visual en Google Earth
 ```

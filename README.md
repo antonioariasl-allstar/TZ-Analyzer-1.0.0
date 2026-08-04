@@ -6,9 +6,11 @@ Su propósito es apoyar investigaciones técnicas bajo el marco legal, priorizan
 
 ---
 
-## ⚠️ Estado actual del proyecto (Mayo 2026)
+## ⚠️ Estado actual del proyecto (Agosto 2026)
 
 **✅ Sistema completamente funcional.** TZ Analyzer genera correctamente informes HTML, archivos KMZ para Google Earth y hashes de integridad.
+
+**✅ Cerrado en v1.1:** P0-B (clasificación de contactos), patrón Versión B (omisión silenciosa en secciones HTML) y módulo KMZ (implementación completa y revisión visual aprobada).
 
 ### Consolidación completada (v1.0.0-consolidada)
 
@@ -17,7 +19,7 @@ El proyecto pasó por un proceso de consolidación y modularización que transfo
 La generación HTML fue descompuesta en submódulos dedicados dentro de `tz_core/html/`: assembler, kpi, contacts, antennas, metadata y header.
 
 **Resultado:**
-- **332 tests** pasando (unitarios + integración + E2E), 2 skipped
+- **427 tests** pasando (unitarios + integración + E2E), 2 skipped
 - **0 regresiones** durante todo el proceso
 - Monolito reducido un **65%** (de 2,344 a ~825 líneas)
 - Metodología atómica: analizar → planificar → ejecutar → test → commit
@@ -36,7 +38,7 @@ La confiabilidad del sistema está validada para **bitácoras del formato salvad
 
 - **Generación de KML/KMZ** para visualización en Google Earth:
   - Carpeta global con todas las antenas.
-  - Subcarpetas por fecha (día del año + fecha ISO) y rango horario (madrugada, mañana, tarde, noche).
+  - Subcarpetas cronológicas por fecha con numeración secuencial (`001 — YYYY-MM-DD`) y tratamiento separado para registros sin fecha; dentro de ellas, activaciones numeradas (`0001 — HH:MM:SS — antena`). Carpeta `⚠ LEA PRIMERO` con parámetros y advertencias. ScreenOverlay permanente de representación orientativa. Rango horario (madrugada, mañana, tarde, noche).
   - Deduplicación de puntos por (antena, lat, lon) con resumen de azimuts.
   - Líneas de azimut y conos de orientación configurables.
   - Top N de antenas y contactos más activados.
@@ -53,7 +55,7 @@ La confiabilidad del sistema está validada para **bitácoras del formato salvad
   - Rangos horarios personalizables.
   - Branding (logo, marca de agua, pie legal).
 
-- **Suite de pruebas**: 332 tests (unitarios, integración, E2E con golden files) que validan estructura KMZ, generación HTML e integridad del pipeline completo.
+- **Suite de pruebas**: 427 tests (unitarios, integración, E2E con golden files) que validan estructura KMZ, generación HTML e integridad del pipeline completo.
 
 ---
 
@@ -126,11 +128,12 @@ TZ-Analyzer/
 │   └── commands/
 │       └── info_backup.py
 │
-├── tests/                                   # Suite de pruebas (332 tests)
+├── tests/                                   # Suite de pruebas (427 tests)
 │   ├── integration/                         # Tests E2E y de integración
 │   │   ├── test_e2e_regresion.py            # Regresión E2E con golden files
 │   │   ├── test_hour_ranges_flow.py         # Flujo de rangos horarios
-│   │   └── test_manual_flow_option1.py      # Flujo manual opción 1
+│   │   ├── test_manual_flow_option1.py      # Flujo manual opción 1
+│   │   └── test_p0b_pipeline.py             # Pipeline P0-B clasificación de contactos
 │   ├── unit/                                # Tests unitarios por módulo (20+ archivos)
 │   ├── helpers/                             # Helpers de testing
 │   ├── golden/                              # Golden files para validación
@@ -218,7 +221,7 @@ python script_principal_bitacoras_refactory.py
 # Activar PYTHONPATH antes de correr pytest
 $env:PYTHONPATH = (Get-Location).Path
 
-# Suite completa (332 tests)
+# Suite completa (427 tests)
 python -m pytest
 
 # Solo tests unitarios
@@ -264,8 +267,9 @@ TZ Analyzer busca **reducir el tiempo de procesamiento** y **eliminar errores hu
 
 ## 🚧 Pendientes conocidos
 
-- Generalización de formatos para operadoras de otros países (v1.1)
-- Resolución de friction points del wizard (F2, F3, F5, F6, F7, F8, F9)
+- Generalización de formatos para operadoras de otros países (v1.2+)
+- Pendientes funcionales menores del wizard: F2 y F3
+- Ajustes cosméticos no bloqueantes: F5-UX y F8
 - Mejoras al informe HTML (más interpretativo y forenses defensible)
 - Exportación a IBM i2 / Gephi
 - Manual técnico en PDF

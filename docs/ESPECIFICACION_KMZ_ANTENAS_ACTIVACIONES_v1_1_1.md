@@ -2,7 +2,7 @@
 
 **TZ Analyzer — Especificación de diseño**
 **Módulo: KMZ — Estructura de antenas y activaciones**
-**Estado: CERRADA — lista para implementación**
+**Estado: IMPLEMENTADA — implementación y tests completos**
 **Fecha: Agosto 2026**
 **Autores: Tony (Omar Arias) + Claude + GPT**
 
@@ -247,8 +247,8 @@ o KMZ compacto (sin subcarpetas por activación).
 | Carpetas cerradas por defecto (`<open>0</open>`) | ✅ Cerrado |
 | Umbral de advertencia (300 activaciones) | ✅ Cerrado |
 | Advertencias (3 niveles) | ✅ Cerrado |
-| Implementación | ⏸ Pendiente |
-| Tests | ⏸ Pendiente |
+| Implementación | ✅ Cerrado — implementación y tests completos (agosto 2026) |
+| Tests | ✅ Cerrado — implementación y tests completos (agosto 2026) |
 
 ---
 
@@ -257,3 +257,4 @@ o KMZ compacto (sin subcarpetas por activación).
 | Fecha | Qué se decidió |
 |---|---|
 | Agosto 2026 | Diseño completo cerrado — Claude + GPT + Tony |
+| Agosto 2026 | Implementación y tests cerrados; revisión visual aprobada |
