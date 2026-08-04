@@ -268,18 +268,22 @@ def _fallback_todos_contactos(mensaje: str) -> str:
 
 def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optional[Dict[str, str]] = None) -> str:
     """
-    Construye sección HTML 'Todos los contactos' con tabla estadística.
-    
-    Genera tabla con columnas: # | Contacto | Conteo llamadas | Minutos acumulados
-    Incluye normalización de números telefónicos y agregación por contacto.
-    
+    Construye sección HTML 'Todos los contactos' separada en tres bloques P0-B.
+
+    Bloque A: contactos telefónicos plausibles (agrupados por contacto_limpio).
+    Bloque B: registros indeterminados (agrupados por valor original + motivo).
+    Bloque C: registros técnicos en <details> (agrupados por valor + tipo + motivo).
+
     Args:
         df: DataFrame con datos de contactos/llamadas
         columnas_config: Mapeo opcional de nombres de columnas
-        
+
     Returns:
-        String con HTML de la sección completa o string vacío si hay errores
+        String con HTML de la sección completa con tres bloques P0-B,
+        o fallback declarativo si los datos no están disponibles.
     """
+    import html as _html
+
     try:
         if df is None or df.empty:
             return _fallback_todos_contactos(
@@ -305,17 +309,17 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
                 "Verificar el mapeo de columnas."
             )
 
-        # Normalizar contacto con helper MSISDN para agrupar bien
-        s = df[c_col].map(lambda v: normalize_msisdn(v) or str(v).strip())
-
-        d = df.loc[s != ""].copy()
-        if d.empty:
+        # Verificar presencia de columnas P0-B antes de cualquier cálculo
+        _p0b_cols = ["contacto_categoria", "contacto_limpio", "contacto_motivo", "tipo_evento_normalizado"]
+        if any(col not in df.columns for col in _p0b_cols):
             return _fallback_todos_contactos(
-                "No se encontraron valores de contacto procesables en el período analizado."
+                "No fue posible separar los contactos por categoría porque la clasificación "
+                "P0-B no está disponible en los datos procesados."
             )
-        d["_c_norm"] = s[s != ""]
 
-        # Segundos (_sec)
+        d = df.copy()
+
+        # Calcular _sec sobre la copia completa antes de filtrar por categoría
         if "_sec" in d.columns:
             sec = pd.to_numeric(d["_sec"], errors="coerce").fillna(0)
         elif "duracion" in d.columns:
@@ -325,35 +329,172 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
             sec = 0
         d["_sec"] = pd.to_numeric(sec, errors="coerce").fillna(0).astype(int)
 
-        g = d.groupby("_c_norm", dropna=False)
-        tb = (
-            pd.DataFrame({
-                "contacto": g.size().index,
-                "conteo": g.size().values,
-                "minutos": (g["_sec"].sum() / 60.0).round().astype(int).values
-            })
-            .sort_values(["conteo", "minutos"], ascending=False)
-            .reset_index(drop=True)
-        )
+        _MOTIVO_DISPLAY = {
+            "vacio_o_nulo":                   "Valor vacío o nulo",
+            "tipo_datos":                     "Registro de sesión de datos",
+            "ipv4":                           "Dirección IPv4",
+            "formato_alfanumerico":           "Formato alfanumérico — no telefónico",
+            "solo_ceros":                     "Valor compuesto solo por ceros",
+            "sin_contacto_limpio":            "Sin valor normalizado disponible",
+            "limpio_no_numerico":             "Valor normalizado no numérico",
+            "longitud_insuficiente":          "Longitud insuficiente para clasificar",
+            "sin_clasificacion":              "Sin clasificación — tipo de evento no reconocido",
+            "voz_longitud_corta":             "Voz — longitud corta, plausibilidad reducida",
+            "sms_longitud_ambigua":           "SMS — longitud ambigua",
+            "desconocido_longitud_plausible": "Tipo desconocido — longitud plausible",
+            "desconocido_longitud_corta":     "Tipo desconocido — longitud corta",
+            "voz_longitud_valida":            "Voz — longitud válida",
+            "sms_longitud_valida":            "SMS — longitud válida",
+            "sin_columna_contacto":           "Columna de contacto no disponible",
+            "sin_clasificacion_error":        "Error interno en clasificación",
+        }
+
+        def _safe(v):
+            if v is None:
+                return "—"
+            s = str(v).strip()
+            return "—" if s.lower() in ("none", "nan", "") else s
 
         out = []
         out.append('<section id="todos-contactos">')
         out.append('<h2>Todos los contactos</h2>')
-        out.append('<div style="font-size:13px; color:#444; margin-bottom:8px;">Esta lista muestra todos los contactos detectados para el usuario del número analizado durante el período seleccionado. Cada registro corresponde a un contacto con el que se ha registrado alguna interacción, sin importar la frecuencia o tipo de comunicación.</div>')
-        out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
-        out.append('<thead><tr>'
-                   '<th>#</th><th>Contacto</th><th>Conteo llamadas</th><th>Minutos acumulados</th>'
-                   '</tr></thead><tbody>')
-        for i, row in tb.iterrows():
+        out.append(
+            '<div style="font-size:13px; color:#444; margin-bottom:8px;">'
+            'Esta sección separa los contactos telefónicos plausibles de los registros '
+            'indeterminados y técnicos. Los registros técnicos no participan en el análisis '
+            'de contactos, pero se conservan para trazabilidad.'
+            '</div>'
+        )
+
+        # --- BLOQUE A: Contactos telefónicos plausibles ---
+        da = d[d["contacto_categoria"] == "telefonico_plausible"].copy()
+        out.append('<h3>Contactos telefónicos plausibles</h3>')
+        if da.empty:
             out.append(
-                "<tr>"
-                f"<td class='mono' style='text-align:center'>{i+1}</td>"
-                f"<td class='mono' style='text-align:center'>{row['contacto']}</td>"
-                f"<td class='mono' style='text-align:center'>{int(row['conteo']):,}</td>"
-                f"<td class='mono' style='text-align:center'>{int(row['minutos']):,}</td>"
-                "</tr>"
+                '<p style="font-size:13px; color:#444;">'
+                'No se encontraron contactos telefónicos plausibles en el período analizado.'
+                '</p>'
             )
-        out.append("</tbody></table></div></section>")
+        else:
+            ga = da.groupby("contacto_limpio", dropna=False)
+            tba = (
+                pd.DataFrame({
+                    "contacto_norm": ga.size().index,
+                    "conteo": ga.size().values,
+                    "minutos": (ga["_sec"].sum() / 60.0).round().astype(int).values,
+                })
+                .sort_values(["conteo", "minutos"], ascending=False)
+                .reset_index(drop=True)
+            )
+            out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
+            out.append(
+                '<thead><tr>'
+                '<th>#</th><th>Contacto normalizado</th><th>Conteo de interacciones</th><th>Minutos acumulados</th>'
+                '</tr></thead><tbody>'
+            )
+            for i, row in tba.iterrows():
+                out.append(
+                    "<tr>"
+                    f"<td class='mono' style='text-align:center'>{i + 1}</td>"
+                    f"<td class='mono' style='text-align:center'>{_html.escape(_safe(row['contacto_norm']))}</td>"
+                    f"<td class='mono' style='text-align:center'>{int(row['conteo']):,}</td>"
+                    f"<td class='mono' style='text-align:center'>{int(row['minutos']):,}</td>"
+                    "</tr>"
+                )
+            out.append("</tbody></table></div>")
+
+        # --- BLOQUE B: Registros indeterminados ---
+        db = d[d["contacto_categoria"] == "indeterminado"].copy()
+        out.append('<h3>Registros indeterminados</h3>')
+        if db.empty:
+            out.append(
+                '<p style="font-size:13px; color:#444;">'
+                'No se encontraron registros indeterminados en el período analizado.'
+                '</p>'
+            )
+        else:
+            gb = db.groupby([c_col, "contacto_limpio", "contacto_motivo"], dropna=False)
+            tbb = (
+                pd.DataFrame({
+                    "valor_original": [k[0] for k in gb.size().index],
+                    "valor_norm": [k[1] for k in gb.size().index],
+                    "motivo": [k[2] for k in gb.size().index],
+                    "conteo": gb.size().values,
+                })
+                .sort_values("conteo", ascending=False)
+                .reset_index(drop=True)
+            )
+            out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
+            out.append(
+                '<thead><tr>'
+                '<th>#</th><th>Valor original</th><th>Valor normalizado</th><th>Conteo</th><th>Motivo</th>'
+                '</tr></thead><tbody>'
+            )
+            for i, row in tbb.iterrows():
+                out.append(
+                    "<tr>"
+                    f"<td class='mono' style='text-align:center'>{i + 1}</td>"
+                    f"<td class='mono' style='text-align:center'>{_html.escape(_safe(row['valor_original']))}</td>"
+                    f"<td class='mono' style='text-align:center'>{_html.escape(_safe(row['valor_norm']))}</td>"
+                    f"<td class='mono' style='text-align:center'>{int(row['conteo']):,}</td>"
+                    f"<td class='mono' style='text-align:center'>{_html.escape(_MOTIVO_DISPLAY.get(_safe(row['motivo']), _safe(row['motivo'])))}</td>"
+                    "</tr>"
+                )
+            out.append("</tbody></table></div>")
+
+        # --- BLOQUE C: Registros técnicos (colapsable) ---
+        dc = d[d["contacto_categoria"] == "tecnico_no_personal"].copy()
+        total_tec = len(dc)
+        out.append(
+            f'<details><summary>'
+            f'<strong>Registros técnicos excluidos del análisis de contactos'
+            f' ({total_tec:,} registros)</strong>'
+            f'</summary>'
+        )
+        if dc.empty:
+            out.append(
+                '<p style="font-size:13px; color:#444;">'
+                'No se encontraron registros técnicos en el período analizado.'
+                '</p>'
+            )
+        else:
+            gc = dc.groupby(
+                [c_col, "contacto_limpio", "tipo_evento_normalizado", "contacto_motivo"],
+                dropna=False,
+            )
+            tbc = (
+                pd.DataFrame({
+                    "valor_original": [k[0] for k in gc.size().index],
+                    "valor_norm": [k[1] for k in gc.size().index],
+                    "tipo_evento": [k[2] for k in gc.size().index],
+                    "motivo": [k[3] for k in gc.size().index],
+                    "conteo": gc.size().values,
+                })
+                .sort_values("conteo", ascending=False)
+                .reset_index(drop=True)
+            )
+            out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
+            out.append(
+                '<thead><tr>'
+                '<th>#</th><th>Valor original</th><th>Valor normalizado</th>'
+                '<th>Tipo de evento</th><th>Conteo</th><th>Motivo</th>'
+                '</tr></thead><tbody>'
+            )
+            for i, row in tbc.iterrows():
+                out.append(
+                    "<tr>"
+                    f"<td class='mono' style='text-align:center'>{i + 1}</td>"
+                    f"<td class='mono' style='text-align:center'>{_html.escape(_safe(row['valor_original']))}</td>"
+                    f"<td class='mono' style='text-align:center'>{_html.escape(_safe(row['valor_norm']))}</td>"
+                    f"<td class='mono' style='text-align:center'>{_html.escape(_safe(row['tipo_evento']))}</td>"
+                    f"<td class='mono' style='text-align:center'>{int(row['conteo']):,}</td>"
+                    f"<td class='mono' style='text-align:center'>{_html.escape(_MOTIVO_DISPLAY.get(_safe(row['motivo']), _safe(row['motivo'])))}</td>"
+                    "</tr>"
+                )
+            out.append("</tbody></table></div>")
+        out.append("</details>")
+
+        out.append("</section>")
         return "\n".join(out)
     except Exception as exc:
         print(f"[WARN] construir_seccion_todos_contactos: {exc}")
