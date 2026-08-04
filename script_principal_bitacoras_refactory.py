@@ -62,6 +62,8 @@ Architecture: TZ-Analyzer v1.0.0
 # === SECCIÓN 0 · IMPORTS & CONFIG ===
 
 # Estándar
+import builtins
+import glob
 import json
 import logging
 import os
@@ -352,6 +354,113 @@ def _modo_manual():
     return modo_manual(CONFIG)
 
 
+def _prepare_noninteractive_run_context(
+    globals_dict,
+    ruta_entrada,
+    hoja,
+    carpeta_salida,
+    override_tops,
+    color_mock_fn,
+):
+    """Reemplaza temporalmente funciones interactivas para ejecución programática.
+
+    Devuelve un dict con:
+    - restore: callable para restaurar globals e input
+    - out_root: ruta de salida elegida
+    - snapshot: callable para tomar snapshot de archivos en carpeta
+    """
+    g = globals_dict
+    _orig = {}
+
+    def _keep(name, fallback=None):
+        if name in g:
+            _orig[name] = g[name]
+            return g[name]
+        _orig[name] = fallback
+        return fallback
+
+    _keep("_menu_principal")
+    _keep("seleccionar_archivo")
+    _keep("seleccionar_carpeta")
+    _keep("_input_str")
+    _keep("_seleccionar_hoja_visible")
+    _keep("solicitar_overrides_topn")
+    _keep("_solicitar_color_tema")
+
+    def _menu_principal_mock():
+        return "1"
+
+    def _sel_arch_mock():
+        return ruta_entrada
+
+    def _sel_carp_mock():
+        return carpeta_salida or os.getcwd()
+
+    def _input_str_mock(*_args, **_kwargs):
+        return ""
+
+    if hoja is not None:
+
+        def _hoja_mock(_archivo):
+            return hoja
+
+        g["_seleccionar_hoja_visible"] = _hoja_mock
+
+    def _ovr_mock(_cfg):
+        return override_tops
+
+    def _color_mock(cfg):
+        return color_mock_fn(cfg)
+
+    g["_menu_principal"] = _menu_principal_mock
+    g["seleccionar_archivo"] = _sel_arch_mock
+    g["seleccionar_carpeta"] = _sel_carp_mock
+    g["_input_str"] = _input_str_mock
+    g["solicitar_overrides_topn"] = _ovr_mock
+    g["_solicitar_color_tema"] = _color_mock
+
+    orig_input = getattr(builtins, "input", None)
+
+    def _input_mock(*_args, **_kwargs):
+        return ""
+
+    try:
+        builtins.input = _input_mock
+    except Exception:
+        pass
+
+    def _snapshot(folder):
+        try:
+            return set(
+                glob.glob(
+                    os.path.join(folder, "**/*"),
+                    recursive=True,
+                )
+            )
+        except Exception:
+            return set()
+
+    def _restore():
+        try:
+            for name, fn in _orig.items():
+                if fn is not None:
+                    g[name] = fn
+        except Exception:
+            pass
+
+        try:
+            if orig_input is not None:
+                builtins.input = orig_input
+        except Exception:
+            pass
+
+    return {
+        "restore": _restore,
+        "out_root": _sel_carp_mock(),
+        "snapshot": _snapshot,
+    }
+
+
 def run_tz_analysis(
     ruta_entrada: str,
     hoja,                          # int o str o None
@@ -395,33 +504,17 @@ def run_tz_analysis(
     }
 
     # --- Monkey-patch de funciones interactivas para evitar prompts ---
-    try:
-        from tests.helpers.monkeypatch_flow import apply_run_monkeypatch
-
-        mp_ctx = apply_run_monkeypatch(
-            globals_dict=globals(),
-            ruta_entrada=ruta_entrada,
-            hoja=hoja,
-            carpeta_salida=carpeta_salida,
-            override_tops=override_tops,
-            color_mock_fn=color_mock,
-        )
-        restore = mp_ctx.get("restore")
-        out_root = mp_ctx.get("out_root")
-        _snapshot = mp_ctx.get("snapshot")
-    except Exception:
-        def _snapshot(folder):
-            """Toma snapshot de archivos en folder de forma recursiva, retorna set de paths."""
-            try:
-                return set(glob.glob(os.path.join(folder, "**/*"), recursive=True))
-            except Exception:
-                return set()
-
-        def restore():
-            """Función placeholder para restauración (no implementada)."""
-            pass
-
-        out_root = carpeta_salida or os.getcwd()
+    mp_ctx = _prepare_noninteractive_run_context(
+        globals_dict=globals(),
+        ruta_entrada=ruta_entrada,
+        hoja=hoja,
+        carpeta_salida=carpeta_salida,
+        override_tops=override_tops,
+        color_mock_fn=color_mock,
+    )
+    restore = mp_ctx.get("restore")
+    out_root = mp_ctx.get("out_root")
+    _snapshot = mp_ctx.get("snapshot")
 
     # --- Capturar stdout/stderr como log en memoria ---
     buf = io.StringIO()
