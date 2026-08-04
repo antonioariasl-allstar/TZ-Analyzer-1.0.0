@@ -1317,7 +1317,7 @@ class MappingWizard:
         for line in build_mapping_intro_lines(
             title="NO ESENCIALES",
             columns_menu=self.cols_menu,
-            instructions="  Podés: elegir número, escribir 'F <valor fijo>' o Enter=omitir.",
+            instructions="  Podés: elegir número, escribir 'F <valor fijo> (ej: F Claro)' o Enter=omitir.",
             show_columns=True,
         ):
             self._write(line)

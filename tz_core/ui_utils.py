@@ -377,7 +377,7 @@ def prompt_output_routing(
 
     _CHARS_PROHIBIDOS = r'\/:*?"<>|'
     while True:
-        resp = (input_fn(f"Nombre base del KML (Enter = {base_name}): ") or "").strip()
+        resp = (input_fn(f"Nombre base de los archivos (Enter = {base_name}): ") or "").strip()
         if not resp:
             resp = ""
             break
