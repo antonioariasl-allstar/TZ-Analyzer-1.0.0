@@ -72,9 +72,7 @@ def test_nota_con_ambos_tipos_excluidos():
         contactos_limpios=["70001234", "70005678", None, None, "700", "701"],
     )
     cnt_html, _, _ = build_top_contacts_sections(df)
-    assert "registros técnicos" in cnt_html
-    assert "registros indeterminados" in cnt_html
-    assert "ambos" in cnt_html
+    assert "El ranking considera únicamente números con formato telefónico" in cnt_html
 
 
 def test_nota_solo_tecnicos_usa_estos():
@@ -83,9 +81,8 @@ def test_nota_solo_tecnicos_usa_estos():
         contactos_limpios=["70001234", None, None],
     )
     cnt_html, _, _ = build_top_contacts_sections(df)
-    assert "registros técnicos" in cnt_html
+    assert "El ranking considera" in cnt_html
     assert "registros indeterminados" not in cnt_html
-    assert "estos" in cnt_html
 
 
 def test_nota_solo_indeterminados_usa_estos():
@@ -94,12 +91,11 @@ def test_nota_solo_indeterminados_usa_estos():
         contactos_limpios=["70001234", "700", "701"],
     )
     cnt_html, _, _ = build_top_contacts_sections(df)
-    assert "registros indeterminados" in cnt_html
+    assert "El ranking considera" in cnt_html
     assert "registros técnicos" not in cnt_html
-    assert "estos" in cnt_html
 
 
-def test_nota_ausente_cuando_todos_son_plausibles():
+def test_nota_siempre_visible_en_p0b():
     df = _df_p0b(
         categorias=["telefonico_plausible", "telefonico_plausible"],
         contactos_limpios=["70001234", "70005678"],
@@ -107,28 +103,27 @@ def test_nota_ausente_cuando_todos_son_plausibles():
     cnt_html, _, _ = build_top_contacts_sections(df)
     assert "registros técnicos" not in cnt_html
     assert "registros indeterminados" not in cnt_html
-    assert "El ranking considera" not in cnt_html
+    assert "El ranking considera únicamente números con formato telefónico" in cnt_html
 
 
 # ── FALLBACK CUANDO NO HAY PLAUSIBLES ──────────────────────────────────────
 
-def test_fallback_sin_plausibles_menciona_telefónicos_plausibles():
+def test_fallback_sin_telefonicos_menciona_formato_telefonico():
     df = _df_p0b(
         categorias=["tecnico_no_personal", "tecnico_no_personal", "indeterminado"],
         contactos_limpios=[None, None, "700"],
     )
     cnt_html, _, _ = build_top_contacts_sections(df)
-    assert "telefónicos plausibles" in cnt_html
+    assert "formato telefónico" in cnt_html
 
 
-def test_fallback_sin_plausibles_incluye_nota_de_excluidos():
+def test_fallback_sin_telefonicos_incluye_nota_metodologica():
     df = _df_p0b(
         categorias=["tecnico_no_personal", "indeterminado"],
         contactos_limpios=[None, "700"],
     )
     cnt_html, _, _ = build_top_contacts_sections(df)
-    assert "registros técnicos" in cnt_html
-    assert "registros indeterminados" in cnt_html
+    assert "El ranking considera" in cnt_html
 
 
 # ── RAMA LEGACY ────────────────────────────────────────────────────────────

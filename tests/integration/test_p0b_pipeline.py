@@ -69,9 +69,9 @@ def test_p0b_seccion_todos_contactos_end_to_end():
 
     # Estructura principal
     assert 'id="todos-contactos"' in html
-    assert "Contactos telefónicos plausibles" in html
-    assert "Registros indeterminados" in html
-    assert "Registros técnicos excluidos del análisis de contactos" in html
+    assert "Números con formato telefónico" in html
+    assert "Números o códigos de longitud menor" in html
+    assert "Registros técnicos y de datos" in html
     assert "<details>" in html
 
     # Valores esperados en el HTML

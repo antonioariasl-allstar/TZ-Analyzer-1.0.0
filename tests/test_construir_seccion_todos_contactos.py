@@ -18,15 +18,15 @@ def _df_completo():
 
 def test_genera_los_tres_bloques():
     result = construir_seccion_todos_contactos(_df_completo())
-    assert "Contactos telefónicos plausibles" in result
-    assert "Registros indeterminados" in result
-    assert "Registros técnicos excluidos" in result
+    assert "Números con formato telefónico" in result
+    assert "Números o códigos de longitud menor" in result
+    assert "Registros técnicos y de datos" in result
 
 
 def test_tecnicos_dentro_de_details():
     result = construir_seccion_todos_contactos(_df_completo())
     idx_details = result.index("<details>")
-    idx_titulo = result.index("Registros técnicos excluidos")
+    idx_titulo = result.index("Registros técnicos y de datos")
     assert idx_details < idx_titulo
 
 
