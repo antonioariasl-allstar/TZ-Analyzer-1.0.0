@@ -357,6 +357,76 @@ def normalize_temporal_fields(
     return df
 
 
+def _classify_contact_category(raw, limpio, tipo_norm: str) -> tuple:
+    """Clasifica el contacto en (categoria, motivo) usando cascada raw+limpio+tipo.
+
+    Categorías: telefonico_plausible | indeterminado | tecnico_no_personal
+    """
+    _EMPTY = ("tecnico_no_personal", "vacio_o_nulo")
+
+    # 1. Vacío / nulo
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return _EMPTY
+    raw_str = str(raw).strip()
+    if not raw_str:
+        return _EMPTY
+
+    # 2. DATOS → siempre técnico independientemente del formato
+    if tipo_norm == "DATOS":
+        return ("tecnico_no_personal", "tipo_datos")
+
+    # 3. IPv4 en valor original
+    if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", raw_str):
+        return ("tecnico_no_personal", "ipv4")
+
+    # 4. Detectar notación científica válida antes de verificar alfanumérico
+    _raw_nospace = raw_str.replace(" ", "")
+    is_scientific = bool(re.match(r"^[+\-]?\d+\.?\d*[eE][+\-]?\d+$", _raw_nospace))
+
+    # 5. Alfanumérico o formato incompatible (excluyendo notación científica)
+    raw_phone_stripped = re.sub(r"[\s\+\-\(\)]", "", raw_str)
+    if not is_scientific and not raw_phone_stripped.isdigit():
+        return ("tecnico_no_personal", "formato_alfanumerico")
+
+    # 6. Solo ceros
+    if raw_phone_stripped and all(c == "0" for c in raw_phone_stripped):
+        return ("tecnico_no_personal", "solo_ceros")
+
+    # 7. Usar contacto_limpio como base analítica
+    if limpio is None or (isinstance(limpio, float) and pd.isna(limpio)):
+        return ("tecnico_no_personal", "sin_contacto_limpio")
+    limpio_str = str(limpio).strip()
+    if not limpio_str:
+        return ("tecnico_no_personal", "sin_contacto_limpio")
+    limpio_digits = limpio_str.lstrip("+")
+    if not limpio_digits.isdigit():
+        return ("tecnico_no_personal", "limpio_no_numerico")
+
+    # 8. Longitud 0–1 → técnico (no indeterminado)
+    n = len(limpio_digits)
+    if n <= 1:
+        return ("tecnico_no_personal", "longitud_insuficiente")
+
+    # 9. Matriz por tipo normalizado y longitud
+    if tipo_norm == "VOZ":
+        return (
+            ("telefonico_plausible", "voz_longitud_valida") if n >= 5
+            else ("indeterminado", "voz_longitud_corta")
+        )
+    if tipo_norm == "SMS":
+        return (
+            ("telefonico_plausible", "sms_longitud_valida") if n >= 8
+            else ("indeterminado", "sms_longitud_ambigua")
+        )
+    if tipo_norm == "DESCONOCIDO":
+        return (
+            ("indeterminado", "desconocido_longitud_plausible") if n >= 5
+            else ("indeterminado", "desconocido_longitud_corta")
+        )
+
+    return ("tecnico_no_personal", "sin_clasificacion")
+
+
 def normalize_contact_fields(df: pd.DataFrame) -> pd.DataFrame:
     """QC-4: Normalización estructural conservadora de campos telefónicos.
 
@@ -398,9 +468,18 @@ def normalize_contact_fields(df: pd.DataFrame) -> pd.DataFrame:
                 lambda v: normalize_msisdn(v) if not (isinstance(v, float) and pd.isna(v)) else None
             )
             df["contacto_valido"] = df["contacto_limpio"].apply(_is_valid)
+            _tipo_col = df["tipo_evento_normalizado"] if "tipo_evento_normalizado" in df.columns else pd.Series(["DESCONOCIDO"] * len(df), index=df.index)
+            _clasificaciones = [
+                _classify_contact_category(r, l, t)
+                for r, l, t in zip(df["contacto"], df["contacto_limpio"], _tipo_col)
+            ]
+            df["contacto_categoria"] = [c[0] for c in _clasificaciones]
+            df["contacto_motivo"]    = [c[1] for c in _clasificaciones]
         else:
             df["contacto_limpio"] = None
             df["contacto_valido"] = False
+            df["contacto_categoria"] = "tecnico_no_personal"
+            df["contacto_motivo"]    = "sin_columna_contacto"
 
     except Exception as e:
         import warnings
@@ -411,6 +490,10 @@ def normalize_contact_fields(df: pd.DataFrame) -> pd.DataFrame:
             df["contacto_limpio"] = None
         if "contacto_valido" not in df.columns:
             df["contacto_valido"] = False
+        if "contacto_categoria" not in df.columns:
+            df["contacto_categoria"] = "tecnico_no_personal"
+        if "contacto_motivo" not in df.columns:
+            df["contacto_motivo"] = "sin_clasificacion_error"
 
     return df
 
