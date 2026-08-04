@@ -11,7 +11,7 @@ Nota arquitectónica: Este módulo mezcla dos responsabilidades:
 """
 import re
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import pandas as pd
 
@@ -65,8 +65,68 @@ def generate_metadata_section(nombre_bitacora: str | None, hoja: str | None, ran
   </section>"""
 
 
+def _calculate_imei_check_digit(base14: str) -> Optional[str]:
+    """Calcula el dígito verificador Luhn para una base de 14 dígitos de IMEI.
+
+    Prueba los dígitos finales 0-9 sobre ``base14`` usando luhn_check() y
+    retorna, como texto, el primero que produce un IMEI de 15 dígitos válido.
+    Retorna None si la entrada no tiene exactamente 14 dígitos o si ningún
+    dígito produce un resultado válido.
+    """
+    if not (isinstance(base14, str) and len(base14) == 14 and base14.isdigit()):
+        return None
+    for digit in "0123456789":
+        if luhn_check(base14 + digit):
+            return digit
+    return None
+
+
+def _format_imei_entry(value: str) -> str:
+    """Formatea un IMEI único normalizado para su presentación en Metadatos.
+
+    Conserva siempre el valor reportado por la fuente (nunca se denomina
+    "IMEI real" ni se oculta). Cuando el último dígito reportado tiene
+    evidencia razonable de ser un dígito de reserva sin calcular (15 dígitos
+    terminados en 0, o 14 dígitos sin dígito verificador), se muestra junto al
+    valor reportado el IMEI reconstruido mediante Luhn, manteniendo
+    trazabilidad entre ambos.
+    """
+    length = len(value)
+
+    if length == 15:
+        if is_valid_imei(value):
+            return value
+        if value.endswith("0"):
+            check_digit = _calculate_imei_check_digit(value[:14])
+            if check_digit is not None:
+                reconstructed = value[:14] + check_digit
+                return (
+                    f"IMEI reportado: {value}<br>"
+                    f"IMEI reconstruido (Luhn): {reconstructed}"
+                )
+        return f"{value} — inconsistencia de validación Luhn"
+
+    if length == 14:
+        check_digit = _calculate_imei_check_digit(value)
+        if check_digit is not None:
+            reconstructed = value + check_digit
+            return (
+                f"IMEI reportado: {value}<br>"
+                f"IMEI reconstruido (Luhn): {reconstructed}"
+            )
+        return f"{value} — inconsistencia de validación Luhn"
+
+    if length == 16:
+        return f"{value} — posible IMEISV"
+
+    return f"{value} — longitud no estándar"
+
+
 def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -> str:
     """Construye la tabla de identificación (número, IMEI, alias, usuario, abonado, IMSI).
+
+    Número telefónico, IMEI e IMSI se construyen como filas independientes: ninguna
+    depende de las otras, y ninguna desaparece por tener un único valor reportado.
 
     La lógica se extrajo desde generar_informe_html() para mantener una sola fuente de verdad.
     """
@@ -80,27 +140,9 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
     imei_cols = ["imei","imei1","imei_1"]
     imsi_cols = ["imsi","imsi1","imsi_1","imsi_origen"]
 
-    tel_val = normalize_msisdn(first_nonempty_in(df, tel_cols)) or first_nonempty_in(df, tel_cols)
     alias_val = first_nonempty_in(df, alias_cols)
     user_val = first_nonempty_in(df, user_cols)
     abon_val = first_nonempty_in(df, abon_cols)
-    imei_raw = first_nonempty_in(df, imei_cols)
-    imsi_raw = first_nonempty_in(df, imsi_cols)
-
-    def _coerce_float_str(value):
-        """Convierte valor a float y retorna string formateado o el valor original si falla."""
-        if value is None:
-            return None
-        try:
-            f_val = float(str(value))
-            if f_val.is_integer():
-                return str(int(f_val))
-            return str(value)
-        except Exception:
-            return str(value)
-
-    imei_val = normalize_imei(imei_raw) or (_coerce_float_str(imei_raw) if imei_raw is not None else None)
-    imsi_val = _coerce_float_str(imsi_raw) if imsi_raw is not None else None
 
     def _ask_if_missing(label_visible: str, current_value, col_name: str):
         """Pregunta al usuario si falta un dato y retorna el valor ingresado o actual."""
@@ -126,12 +168,9 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
     user_val = _ask_if_missing("nombre_usuario", user_val, "usuario")
     abon_val = _ask_if_missing("abonado", abon_val, "abonado")
 
-    tel_n = nunique_in(df, tel_cols)
     ali_n = nunique_in(df, alias_cols)
     usr_n = nunique_in(df, user_cols)
     abo_n = nunique_in(df, abon_cols)
-    ime_n = nunique_in(df, imei_cols)
-    imsi_n = nunique_in(df, imsi_cols)
 
     def _fmt_uni(val, count):
         """Formatea valor único para display: retorna 'múltiples' si count>1, valor si existe, None sino."""
@@ -141,32 +180,70 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
             return val
         return None
 
-    tel_disp = _fmt_uni(tel_val, tel_n)
     alias_disp = _fmt_uni(alias_val, ali_n)
     user_disp = _fmt_uni(user_val, usr_n)
     abon_disp = _fmt_uni(abon_val, abo_n)
-    imei_disp = _fmt_uni(imei_val, ime_n)
-    imsi_disp = _fmt_uni(imsi_val, imsi_n)
 
-    tel_list, tel_more = unique_values_in(df, tel_cols, max_items=8)
-    tel_list = [normalize_msisdn(x) for x in tel_list if normalize_msisdn(x)]
-    tel_n = len(set(tel_list)) if tel_list else tel_n
-    tel_disp = _fmt_uni(tel_val, tel_n)
-    tel_more = max(0, tel_n - len(tel_list))
     ali_list, ali_more = unique_values_in(df, alias_cols, max_items=8)
     usr_list, usr_more = unique_values_in(df, user_cols, max_items=8)
     abo_list, abo_more = unique_values_in(df, abon_cols, max_items=8)
-    imei_list, imei_more = unique_values_in(df, imei_cols, max_items=20)
-    imsi_list, imsi_more = unique_values_in(df, imsi_cols, max_items=20)
 
-    imei_list = [normalize_imei(fmt_imei_item(x)) for x in imei_list]
-    imei_list = [x for x in imei_list if x and is_valid_imei(x)]
-    if not imei_list:
-        imei_disp = None
-        imei_more = 0
+    def _dedup_preserve_order(values):
+        """Deduplica una lista de valores preservando el orden de primera aparición."""
+        seen = set()
+        out = []
+        for v in values:
+            if v not in seen:
+                seen.add(v)
+                out.append(v)
+        return out
 
-    cleaned_imsis = []
-    for item in imsi_list:
+    def _row_single_or_list(label: str, values: List[str], extra: int, fallback: Optional[str]) -> str:
+        """Construye una fila con un valor único, una lista de valores, o un fallback si no hay ninguno.
+
+        No depende de otras columnas y nunca desaparece por tener un solo valor
+        reportado, a diferencia de pasar directamente por row_html() con n<=1.
+        """
+        n = len(values)
+        if n == 0:
+            if fallback is None:
+                return row_html(label, None, 0, [], 0, mono=True)
+            return row_html(label, fallback, 1, [], 0, mono=True)
+        if n == 1:
+            return row_html(label, values[0], 1, [], 0, mono=True)
+        return row_html(label, None, n, values, extra, mono=True)
+
+    # --- Número telefónico: fila independiente, sin fusionar IMSI en su texto ---
+    tel_raw, tel_extra = unique_values_in(df, tel_cols, max_items=8)
+    tel_values = _dedup_preserve_order(
+        [normalize_msisdn(x) for x in tel_raw if normalize_msisdn(x)]
+    )
+    tel_row = _row_single_or_list("Número telefónico", tel_values, tel_extra, fallback=None)
+
+    # --- IMEI: fila independiente. El valor reportado por la fuente se conserva
+    #     siempre; el tratamiento por longitud/Luhn se delega a _format_imei_entry. ---
+    imei_raw, imei_extra = unique_values_in(df, imei_cols, max_items=20)
+    imei_candidates = []
+    for x in imei_raw:
+        v = normalize_imei(fmt_imei_item(x))
+        if not v:
+            # normalize_imei ya descarta vacíos/NaN/None/nan/sufijo .0 y placeholders
+            # no numéricos (p.ej. "S/I", "N/A"): quedan como None y se excluyen aquí.
+            continue
+        if set(v) == {"0"}:
+            # Placeholder de "sin valor" (todo ceros), no un IMEI reportado real.
+            continue
+        imei_candidates.append(v)
+    imei_candidates = _dedup_preserve_order(imei_candidates)
+
+    imei_values = [_format_imei_entry(v) for v in imei_candidates]
+    imei_row = _row_single_or_list("IMEI", imei_values, imei_extra, fallback="IMEI no disponible")
+
+    # --- IMSI: fila independiente; mismo criterio de limpieza ya usado antes en
+    #     este módulo (14-16 dígitos), sin aplicar Luhn (no aplica a IMSI). ---
+    imsi_raw, imsi_extra = unique_values_in(df, imsi_cols, max_items=20)
+    imsi_candidates = []
+    for item in imsi_raw:
         try:
             s = str(item).strip()
             try:
@@ -177,34 +254,16 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
                 pass
             s = re.sub(r"\D", "", s)
             if 14 <= len(s) <= 16:
-                cleaned_imsis.append(s)
+                imsi_candidates.append(s)
         except Exception:
             continue
-    imsi_list = cleaned_imsis
-    if not imsi_list:
-        imsi_disp = None
-        imsi_more = 0
+    imsi_candidates = _dedup_preserve_order(imsi_candidates)
+    imsi_row = _row_single_or_list("IMSI", imsi_candidates, imsi_extra, fallback="IMSI no disponible")
 
     ident_rows = ""
-    if tel_list and imsi_list:
-        tel_imsi = []
-        for tel in tel_list:
-            imsis = set()
-            for _, row in df.iterrows():
-                row_tel = normalize_msisdn(row.get("tel", "")) or str(row.get("tel", "")).strip()
-                if row_tel == str(tel):
-                    imsi_value = row.get("imsi", "")
-                    if imsi_value:
-                        imsis.add(str(imsi_value).strip())
-            if imsis:
-                tel_imsi.append(f"{tel} — IMSI: {', '.join(imsis)}")
-            else:
-                tel_imsi.append(str(tel))
-        ident_rows += row_html("Número telefónico", None, len(tel_imsi), tel_imsi, 0, mono=True)
-    else:
-        ident_rows += row_html("Número telefónico", tel_disp, tel_n, tel_list, tel_more, mono=True)
-
-    ident_rows += row_html("IMEI", imei_disp, ime_n, imei_list, imei_more, mono=True)
+    ident_rows += tel_row
+    ident_rows += imei_row
+    ident_rows += imsi_row
     ident_rows += row_html("Alias", alias_disp, ali_n, ali_list, ali_more, mono=False)
     ident_rows += row_html("Usuario", user_disp, usr_n, usr_list, usr_more, mono=False)
     ident_rows += row_html("Abonado", abon_disp, abo_n, abo_list, abo_more, mono=False)
