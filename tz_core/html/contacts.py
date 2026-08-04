@@ -197,10 +197,136 @@ def build_top_contacts_sections(
 
     _topC = _resolve_top_limit()
 
+    # ── Detección de columnas P0-B producidas por normalize_contact_fields ────
+    _has_p0b = (
+        "contacto_categoria" in df.columns
+        and "contacto_limpio" in df.columns
+    )
+
     g_cnt = pd.Series(dtype=float)
     g_dur = pd.Series(dtype=float)
 
-    if c_col:
+    if c_col and _has_p0b:
+        # ── RAMA P0-B: Top N solo con contactos telefónicos plausibles ────────
+        d = df.copy()
+        if d_col:
+            d["_sec"] = d[d_col].map(_to_seconds_any)
+        else:
+            d["_sec"] = 0.0
+
+        n_tec = int((d["contacto_categoria"] == "tecnico_no_personal").sum())
+        n_ind = int((d["contacto_categoria"] == "indeterminado").sum())
+        d_plaus = d[d["contacto_categoria"] == "telefonico_plausible"].copy()
+
+        # Nota de exclusiones: una sola vez, antes de la tabla de frecuencia
+        _partes_nota: list = []
+        if n_tec > 0:
+            _partes_nota.append(f"{n_tec:,} registros técnicos")
+        if n_ind > 0:
+            _partes_nota.append(f"{n_ind:,} registros indeterminados")
+        if _partes_nota:
+            _pronombre = "ambos" if len(_partes_nota) == 2 else "estos"
+            _nota_exclusion = (
+                "<p style='font-size:13px; color:#444; background:#f8f9fa; "
+                "border-left:3px solid #ccc; padding:6px 10px; margin-bottom:8px;'>"
+                "El ranking considera únicamente contactos telefónicos plausibles. "
+                f"Se excluyeron {' y '.join(_partes_nota)}; "
+                f"{_pronombre} se conservan en la sección Todos los contactos."
+                "</p>"
+            )
+        else:
+            _nota_exclusion = ""
+
+        if d_plaus.empty:
+            _msg_fallback = (
+                "<p class='small'>No se registraron contactos telefónicos plausibles "
+                "en el período analizado.</p>"
+            )
+            top_contactos_cnt_html = _nota_exclusion + _msg_fallback
+            if d_col:
+                top_contactos_dur_html = _nota_exclusion + _msg_fallback
+        else:
+            d_plaus["_c_norm"] = (
+                d_plaus["contacto_limpio"].fillna("—").astype(str)
+            )
+
+            g_cnt = (
+                d_plaus.groupby("_c_norm", dropna=False)
+                .size()
+                .sort_values(ascending=False)
+            )
+            if int(_topC) > 0:
+                g_cnt = g_cnt.head(int(_topC))
+            total_cnt = int(len(d_plaus))
+            rows = []
+            for i, (k, n) in enumerate(g_cnt.items(), start=1):
+                pct = (float(n) / total_cnt * 100.0) if total_cnt else 0.0
+                rows.append(
+                    f"<tr>"
+                    f"<td class='right mono'>{i}</td>"
+                    f"<td class='mono'>{k}</td>"
+                    f"<td class='mono'>{int(n):,} <span class='small'>({pct:.1f}%)</span></td>"
+                    f"</tr>"
+                )
+                rows.append(
+                    f"<tr class='barrow'><td colspan='3'>"
+                    f"<div class='bar'><div class='fill' style='width:{pct:.1f}%;'></div></div>"
+                    f"</td></tr>"
+                )
+            if rows:
+                top_contactos_cnt_html = _nota_exclusion + (
+                    "<table class='tbl'>"
+                    "<thead><tr><th class='right'>#</th><th>Contacto</th><th>Interacciones</th></tr></thead>"
+                    "<tbody>" + "".join(rows) + "</tbody></table>"
+                )
+            else:
+                top_contactos_cnt_html = _nota_exclusion + (
+                    "<p class='small'>No se registraron contactos telefónicos plausibles "
+                    "procesables en el período analizado.</p>"
+                )
+
+            g_dur = pd.Series(dtype=float)
+            if d_col:
+                g_dur = (
+                    d_plaus.groupby("_c_norm", dropna=False)["_sec"]
+                    .sum()
+                    .sort_values(ascending=False)
+                )
+                if int(_topC) > 0:
+                    g_dur = g_dur.head(int(_topC))
+
+                total_sec = float(
+                    pd.to_numeric(d_plaus["_sec"], errors="coerce").fillna(0).sum()
+                )
+
+                if total_sec <= 0:
+                    top_contactos_dur_html = note_zero_dur
+                    log("HTML: se omitió 'Por minutos acumulados' porque la suma total de 'duracion' es 0.")
+                else:
+                    rows = []
+                    for i, (k, tot) in enumerate(g_dur.items(), start=1):
+                        pct = (float(tot) / total_sec * 100.0) if total_sec > 0 else 0.0
+                        rows.append(
+                            f"<tr>"
+                            f"<td class='right mono'>{i}</td>"
+                            f"<td class='mono'>{k}</td>"
+                            f"<td class='mono'>{_fmt_hms(tot)} <span class='small'>({pct:.1f}%)</span></td>"
+                            f"</tr>"
+                        )
+                        rows.append(
+                            f"<tr class='barrow'><td colspan='3'>"
+                            f"<div class='bar'><div class='fill' style='width:{pct:.1f}%;'></div></div>"
+                            f"</td></tr>"
+                        )
+                    if rows:
+                        top_contactos_dur_html = (
+                            "<table class='tbl'>"
+                            "<thead><tr><th class='right'>#</th><th>Contacto</th><th>Duráción total</th></tr></thead>"
+                            "<tbody>" + "\n".join(rows) + "</tbody></table>"
+                        )
+
+    elif c_col:
+        # ── RAMA LEGACY: sin columnas P0-B, comportamiento original ──────────
         d = df.copy()
         d["_contacto_raw"] = d[c_col].astype(str).str.strip()
         d["_contacto"] = d["_contacto_raw"].map(lambda v: normalize_msisdn(v) or v)
