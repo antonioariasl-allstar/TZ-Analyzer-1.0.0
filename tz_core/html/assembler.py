@@ -214,14 +214,22 @@ def generar_informe_html(
     _metricas = {}
 
     # --- Análisis interpretivo de contactos ---
+    # SUB-A: si P0-B activo, perfiles solo sobre plausibles
+    if "contacto_categoria" in df.columns:
+        _df_perfiles = df[
+            df["contacto_categoria"] == "telefonico_plausible"
+        ].copy()
+    else:
+        _df_perfiles = df
+
     analisis_html = ""
     try:
-        _metricas = calcular_metricas_contactos(df)
+        _metricas = calcular_metricas_contactos(_df_perfiles)
         if _metricas:
             _total_duracion = sum(v["total_duracion_seg"] for v in _metricas.values())
             _interpretacion = interpretar_contactos(
                 _metricas,
-                total_interacciones=len(df),
+                total_interacciones=len(_df_perfiles),
                 total_duracion=_total_duracion,
             )
             _orden = sorted(
@@ -244,7 +252,7 @@ def generar_informe_html(
                 analisis_html = (
                     '<div style="background:#f8f9fa;border-left:4px solid var(--accent);'
                     'padding:12px 16px;margin:16px 0;border-radius:4px;font-size:0.9em;">'
-                    '<strong>An\u00e1lisis de perfiles de comunicaci\u00f3n:</strong><br>'
+                    '<strong>Análisis de perfiles de comunicación:</strong><br>'
                     + "".join(_tarjetas)
                     + '</div>'
                 )
