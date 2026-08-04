@@ -78,32 +78,41 @@ def _construir_resumen_ejecutivo(
             f"Durante el período analizado, el dispositivo registró "
             f"<strong>{total}</strong> interacciones."
         )
-        if orden and metricas:
-            _ct_num = orden[0]
-            _ct_frec = metricas[_ct_num]["total_interacciones"]
-            _oraciones.append(
-                f"El contacto con mayor frecuencia fue <strong>{_ct_num}</strong>, "
-                f"con {_ct_frec} registros."
-            )
-        if "hora" in df.columns and df["hora"].notna().any():
-            _horas = (
-                pd.to_numeric(
-                    df["hora"].astype(str).str.extract(r"(\d{1,2}):\d{2}")[0],
-                    errors="coerce",
-                ).dropna()
-            )
-            if not _horas.empty:
-                _h = int(_horas.value_counts().idxmax())
-                _h2 = (_h + 1) % 24
+        try:
+            if orden and metricas:
+                _ct_num = orden[0]
+                _ct_frec = metricas[_ct_num]["total_interacciones"]
                 _oraciones.append(
-                    f"La actividad se concentró principalmente en la franja "
-                    f"<strong>{_h:02d}:00\u2013{_h2:02d}:00</strong> horas."
+                    f"El contacto con mayor frecuencia fue <strong>{_ct_num}</strong>, "
+                    f"con {_ct_frec} registros."
                 )
-        if top_antena and str(top_antena).strip() not in ("", "nan", "N/A"):
-            _oraciones.append(
-                f"A nivel geográfico, las conexiones se registraron con mayor "
-                f"recurrencia en <strong>{top_antena}</strong>."
-            )
+        except Exception as exc:
+            _log(f"[WARN] resumen_ejecutivo_contacto: {exc}")
+        try:
+            if "hora" in df.columns and df["hora"].notna().any():
+                _horas = (
+                    pd.to_numeric(
+                        df["hora"].astype(str).str.extract(r"(\d{1,2}):\d{2}")[0],
+                        errors="coerce",
+                    ).dropna()
+                )
+                if not _horas.empty:
+                    _h = int(_horas.value_counts().idxmax())
+                    _h2 = (_h + 1) % 24
+                    _oraciones.append(
+                        f"La actividad se concentró principalmente en la franja "
+                        f"<strong>{_h:02d}:00\u2013{_h2:02d}:00</strong> horas."
+                    )
+        except Exception as exc:
+            _log(f"[WARN] resumen_ejecutivo_hora: {exc}")
+        try:
+            if top_antena and str(top_antena).strip() not in ("", "nan", "N/A"):
+                _oraciones.append(
+                    f"A nivel geográfico, las conexiones se registraron con mayor "
+                    f"recurrencia en <strong>{top_antena}</strong>."
+                )
+        except Exception as exc:
+            _log(f"[WARN] resumen_ejecutivo_antena: {exc}")
         if _oraciones:
             _cuerpo = " ".join(_oraciones)
             return (
