@@ -341,7 +341,8 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
             "sin_clasificacion":              "Sin clasificación — tipo de evento no reconocido",
             "voz_longitud_corta":             "Voz — longitud corta, plausibilidad reducida",
             "sms_longitud_ambigua":           "SMS — longitud ambigua",
-            "desconocido_longitud_plausible": "Tipo desconocido — longitud plausible",
+            "desconocido_longitud_plausible": "Tipo desconocido — longitud sin clasificar",
+            "longitud_excesiva":              "Longitud superior a 15 dígitos",
             "desconocido_longitud_corta":     "Tipo desconocido — longitud corta",
             "voz_longitud_valida":            "Voz — longitud válida",
             "sms_longitud_valida":            "SMS — longitud válida",
@@ -360,19 +361,19 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
         out.append('<h2>Todos los contactos</h2>')
         out.append(
             '<div style="font-size:13px; color:#444; margin-bottom:8px;">'
-            'Esta sección separa los contactos telefónicos plausibles de los registros '
-            'indeterminados y técnicos. Los registros técnicos no participan en el análisis '
+            'Esta sección separa los números con formato telefónico de los registros '
+            'de longitud menor y los técnicos. Los registros técnicos no participan en el análisis '
             'de contactos, pero se conservan para trazabilidad.'
             '</div>'
         )
 
         # --- BLOQUE A: Contactos telefónicos plausibles ---
         da = d[d["contacto_categoria"] == "telefonico_plausible"].copy()
-        out.append('<h3>Contactos telefónicos plausibles</h3>')
+        out.append('<h3>Números con formato telefónico</h3>')
         if da.empty:
             out.append(
                 '<p style="font-size:13px; color:#444;">'
-                'No se encontraron contactos telefónicos plausibles en el período analizado.'
+                'No se registraron números con formato telefónico en el período analizado.'
                 '</p>'
             )
         else:
@@ -405,7 +406,7 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
 
         # --- BLOQUE B: Registros indeterminados ---
         db = d[d["contacto_categoria"] == "indeterminado"].copy()
-        out.append('<h3>Registros indeterminados</h3>')
+        out.append('<h3>Números o códigos de longitud menor</h3>')
         if db.empty:
             out.append(
                 '<p style="font-size:13px; color:#444;">'
@@ -447,7 +448,7 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
         total_tec = len(dc)
         out.append(
             f'<details><summary>'
-            f'<strong>Registros técnicos excluidos del análisis de contactos'
+            f'<strong>Registros técnicos y de datos'
             f' ({total_tec:,} registros)</strong>'
             f'</summary>'
         )

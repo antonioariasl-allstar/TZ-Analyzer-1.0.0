@@ -219,27 +219,18 @@ def build_top_contacts_sections(
         d_plaus = d[d["contacto_categoria"] == "telefonico_plausible"].copy()
 
         # Nota de exclusiones: una sola vez, antes de la tabla de frecuencia
-        _partes_nota: list = []
-        if n_tec > 0:
-            _partes_nota.append(f"{n_tec:,} registros técnicos")
-        if n_ind > 0:
-            _partes_nota.append(f"{n_ind:,} registros indeterminados")
-        if _partes_nota:
-            _pronombre = "ambos" if len(_partes_nota) == 2 else "estos"
-            _nota_exclusion = (
-                "<p style='font-size:13px; color:#444; background:#f8f9fa; "
-                "border-left:3px solid #ccc; padding:6px 10px; margin-bottom:8px;'>"
-                "El ranking considera únicamente contactos telefónicos plausibles. "
-                f"Se excluyeron {' y '.join(_partes_nota)}; "
-                f"{_pronombre} se conservan en la sección Todos los contactos."
-                "</p>"
-            )
-        else:
-            _nota_exclusion = ""
+        _nota_exclusion = (
+            "<p style='font-size:13px; color:#444; background:#f8f9fa; "
+            "border-left:3px solid #ccc; padding:6px 10px; margin-bottom:8px;'>"
+            "El ranking considera únicamente números con formato telefónico de ocho o más dígitos. "
+            "Los registros de datos, valores técnicos y números de menor longitud se conservan "
+            "en apartados separados."
+            "</p>"
+        )
 
         if d_plaus.empty:
             _msg_fallback = (
-                "<p class='small'>No se registraron contactos telefónicos plausibles "
+                "<p class='small'>No se registraron números con formato telefónico "
                 "en el período analizado.</p>"
             )
             top_contactos_cnt_html = _nota_exclusion + _msg_fallback
@@ -281,8 +272,8 @@ def build_top_contacts_sections(
                 )
             else:
                 top_contactos_cnt_html = _nota_exclusion + (
-                    "<p class='small'>No se registraron contactos telefónicos plausibles "
-                    "procesables en el período analizado.</p>"
+                    "<p class='small'>No se registraron números con formato telefónico "
+                    "en el período analizado.</p>"
                 )
 
             g_dur = pd.Series(dtype=float)
