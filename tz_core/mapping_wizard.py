@@ -1056,6 +1056,11 @@ def _detect_shared_datetime(
     looks_like_datetime = sample_str.str.contains(r"[ T]\d{2}:\d{2}", regex=True)
 
     if not (has_time.any() or looks_like_datetime.any()):
+        write_fn(
+            f"\n  [QC] ⚠ Aviso: 'fecha' y 'hora' usan la misma columna ('{col}').\n"
+            f"  La columna no contiene componente de hora visible.\n"
+            f"  Si la asignación es correcta, continuá. Si querés corregirla, usá la opción R en el paso de confirmación.\n"
+        )
         return
 
     write_fn(
@@ -1085,8 +1090,8 @@ def _check_duplicate_column_assignments(
         if len(fields) > 1:
             fields_str = ", ".join(sorted(fields))
             write_fn(
-                f"\n  [QC] \u26a0 Aviso: la columna '{col}' está asignada a más de un campo ({fields_str}).\n"
-                f"  Esto es normal cuando, por ejemplo, la dirección y la antena provienen de la misma columna.\n"
+                f"\n  [QC] ⚠ Aviso: la columna '{col}' está asignada a más de un campo ({fields_str}).\n"
+                f"  Si es intencional, continuá. Si querés corregirlo, usá la opción R en el paso de confirmación.\n"
             )
 
 

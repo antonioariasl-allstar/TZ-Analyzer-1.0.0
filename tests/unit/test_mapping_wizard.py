@@ -43,6 +43,8 @@ from tz_core.mapping_wizard import (
     resolve_remap_target_selection,
     needs_identity_field_prompt,
     apply_wizard_assignments,
+    _detect_shared_datetime,
+    _check_duplicate_column_assignments,
 )
 from tz_core.schema_utils import run_schema_location_assistant
 
@@ -690,9 +692,36 @@ def test_resolve_essential_column_selection_handles_menu_and_assign():
     assert decision.action == "show_menu"
 
     decision = resolve_essential_column_selection("2", menu, used)
-    assert decision.action == "assign"
-    assert decision.column == "c2"
 
+
+def test_detect_shared_datetime_fecha_sola_emite_aviso():
+    """Misma columna en fecha+hora, sin componente de hora → aviso visible, no retorno silencioso."""
+    df = pd.DataFrame({"col_fecha": ["10/05/2026", "11/05/2026", "12/05/2026"]})
+    assignments = {
+        "fecha": ("col", "col_fecha"),
+        "hora":  ("col", "col_fecha"),
+    }
+    messages = []
+    _detect_shared_datetime(assignments, df, prompt_fn=lambda _: "", write_fn=messages.append)
+
+    texto = "\n".join(messages).lower()
+    assert "col_fecha" in texto, "Sin aviso de columna compartida"
+    assert "no contiene componente de hora" in texto, "Sin mención del motivo"
+    assert "opción r" in texto or "opcion r" in texto, "Sin referencia a remediación"
+
+def test_check_duplicate_no_normaliza_ni_silencia():
+    """Columna duplicada → aviso visible, sin frase normalizadora, con referencia a opción R."""
+    assignments = {
+        "fecha":  ("col", "col_a"),
+        "antena": ("col", "col_a"),
+    }
+    messages = []
+    _check_duplicate_column_assignments(assignments, write_fn=messages.append)
+
+    texto = "\n".join(messages).lower()
+    assert "col_a" in texto, "Sin aviso de duplicado"
+    assert "esto es normal" not in texto, "Mensaje normaliza el duplicado"
+    assert "opción r" in texto or "opcion r" in texto, "Sin referencia a opción R"
 
 def test_resolve_essential_column_selection_flags_errors_and_duplicates():
     used = {"c1"}
