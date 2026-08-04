@@ -84,6 +84,40 @@ def solicitar_filtros_tiempo() -> FiltroTiempo:
     }
 
 
+def _parse_dataframe_dates(df: pd.DataFrame) -> Optional[pd.Series]:
+    """Devuelve una serie datetime64 confiable para los filtros de fecha del DataFrame.
+
+    Prioriza 'datetime_evento' (ya normalizada centralmente en el pipeline de
+    ingesta) si existe y contiene al menos un valor válido. En su defecto,
+    parsea 'fecha': los valores en formato ISO (YYYY-MM-DD, con o sin hora)
+    se interpretan año-mes-día; el resto se interpreta con dayfirst=True
+    (DD/MM/YYYY). Si 'fecha' ya es dtype datetime, se respeta tal cual.
+    """
+    if "datetime_evento" in df.columns:
+        evento = pd.to_datetime(df["datetime_evento"], errors="coerce")
+        if evento.notna().any():
+            return evento
+
+    if "fecha" not in df.columns:
+        return None
+
+    serie = df["fecha"]
+
+    if pd.api.types.is_datetime64_any_dtype(serie):
+        return pd.to_datetime(serie, errors="coerce")
+
+    texto = serie.astype(str).str.strip()
+    es_iso = texto.str.match(r"^\d{4}-\d{2}-\d{2}")
+
+    resultado = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
+    if es_iso.any():
+        resultado.loc[es_iso] = pd.to_datetime(texto.loc[es_iso], errors="coerce", dayfirst=False)
+    if (~es_iso).any():
+        resultado.loc[~es_iso] = pd.to_datetime(texto.loc[~es_iso], errors="coerce", dayfirst=True)
+
+    return resultado
+
+
 def aplicar_filtros_tiempo(df: pd.DataFrame, filtros: FiltroTiempo) -> Tuple[pd.DataFrame, str]:
     """Aplica filtros temporales sobre un DataFrame y regresa (df_filtrado, resumen).
 
@@ -97,7 +131,7 @@ def aplicar_filtros_tiempo(df: pd.DataFrame, filtros: FiltroTiempo) -> Tuple[pd.
     tipo = filtros.get("tipo")
     resumen = ""
 
-    fecha = pd.to_datetime(df["fecha"], dayfirst=True, errors="coerce") if "fecha" in df.columns else None
+    fecha = _parse_dataframe_dates(df)
     hora = pd.to_timedelta(df["hora"].astype(str), errors="coerce") if "hora" in df.columns else None
 
     mask = pd.Series([True] * len(df), index=df.index)
