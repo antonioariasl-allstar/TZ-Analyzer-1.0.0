@@ -409,11 +409,15 @@ def _classify_contact_category(raw, limpio, tipo_norm: str) -> tuple:
 
     # 9. Matriz por tipo normalizado y longitud
     if tipo_norm == "VOZ":
+        if n > 15:
+            return ("indeterminado", "longitud_excesiva")
         return (
-            ("telefonico_plausible", "voz_longitud_valida") if n >= 5
+            ("telefonico_plausible", "voz_longitud_valida") if n >= 8
             else ("indeterminado", "voz_longitud_corta")
         )
     if tipo_norm == "SMS":
+        if n > 15:
+            return ("indeterminado", "longitud_excesiva")
         return (
             ("telefonico_plausible", "sms_longitud_valida") if n >= 8
             else ("indeterminado", "sms_longitud_ambigua")

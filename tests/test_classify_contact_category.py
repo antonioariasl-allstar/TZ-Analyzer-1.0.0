@@ -95,8 +95,9 @@ def test_longitud_1_sms_es_tecnico():
 
 # --- Matriz VOZ ---
 
-def test_voz_digitos_5_es_plausible():
-    assert _classify_contact_category("70001", "70001", "VOZ") == ("telefonico_plausible", "voz_longitud_valida")
+def test_voz_digitos_5_es_indeterminado():
+    # VOZ con 5 dígitos ya no supera el umbral mínimo de 8
+    assert _classify_contact_category("70001", "70001", "VOZ") == ("indeterminado", "voz_longitud_corta")
 
 def test_voz_digitos_8_es_plausible():
     assert _classify_contact_category("70001234", "70001234", "VOZ") == ("telefonico_plausible", "voz_longitud_valida")
@@ -109,6 +110,18 @@ def test_voz_digitos_4_es_indeterminado():
 
 def test_voz_digitos_2_es_indeterminado():
     assert _classify_contact_category("70", "70", "VOZ") == ("indeterminado", "voz_longitud_corta")
+
+def test_voz_digitos_6_es_indeterminado():
+    assert _classify_contact_category("700012", "700012", "VOZ") == ("indeterminado", "voz_longitud_corta")
+
+def test_voz_digitos_7_es_indeterminado():
+    assert _classify_contact_category("7000123", "7000123", "VOZ") == ("indeterminado", "voz_longitud_corta")
+
+def test_voz_digitos_16_es_longitud_excesiva():
+    assert _classify_contact_category("1234567890123456", "1234567890123456", "VOZ") == ("indeterminado", "longitud_excesiva")
+
+def test_sms_digitos_16_es_longitud_excesiva():
+    assert _classify_contact_category("1234567890123456", "1234567890123456", "SMS") == ("indeterminado", "longitud_excesiva")
 
 
 # --- Matriz SMS ---
