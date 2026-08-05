@@ -93,7 +93,7 @@
     ],
     "fields": {
       "fecha": {
-        "required": true,
+        "required": false,
         "synonyms": [
           "fecha",
           "fecha_inicial",
@@ -105,7 +105,7 @@
         ]
       },
       "hora": {
-        "required": true,
+        "required": false,
         "synonyms": [
           "hora",
           "hora_inicial",
@@ -148,14 +148,19 @@
           "sobrenombre"
         ]
       },
-      "usuario": {
+      "nombre_usuario": {
         "required": false,
         "synonyms": [
+          "nombre_usuario",
           "usuario",
+          "titular"
+        ]
+      },
+      "abonado": {
+        "required": false,
+        "synonyms": [
           "abonado",
-          "titular",
-          "suscriptor",
-          "nombre_usuario"
+          "suscriptor"
         ]
       },
       "antena": {
@@ -180,11 +185,11 @@
           "y"
         ]
       },
-      "lon": {
+      "long": {
         "required": false,
         "synonyms": [
-          "lon",
           "long",
+          "lon",
           "longitud",
           "lng",
           "x"
@@ -220,7 +225,7 @@
         ]
       },
       "contacto": {
-        "required": true,
+        "required": false,
         "synonyms": [
           "contacto",
           "numero_destino",
@@ -230,7 +235,7 @@
         ]
       },
       "interaccion": {
-        "required": true,
+        "required": false,
         "synonyms": [
           "interaccion",
           "conteo",
@@ -239,13 +244,15 @@
           "eventos"
         ]
       },
-      "duracion_seg": {
+      "duracion": {
         "required": false,
         "synonyms": [
           "duracion",
           "duración",
+          "duracion_seg",
           "call_duration",
           "segundos",
+          "duration_seconds",
           "tiempo_llamada"
         ]
       },
@@ -312,7 +319,7 @@
   "entradas": {
     "priorizar_origen": true,
     "permitir_destino_top_contactos": false,
-    "columnas_esenciales": [
+    "columnas_normalizables": [
       "lat",
       "long",
       "azimut",
@@ -320,6 +327,30 @@
       "hora",
       "tel"
     ]
+  },
+  "requisitos_modulo": {
+    "identificacion": {
+      "uno_de": ["tel", "imei"]
+    },
+    "cronologia": {
+      "minimos": ["fecha"],
+      "recomendables": ["hora"]
+    },
+    "antenas": {
+      "minimos": ["antena"],
+      "recomendables": ["lat", "long", "azimut", "hora"]
+    },
+    "kml": {
+      "minimos_por_fila": ["lat", "long"],
+      "recomendables": ["antena", "azimut"]
+    },
+    "contactos": {
+      "minimos": ["contacto"],
+      "recomendables": ["duracion"]
+    },
+    "tipo_evento": {
+      "minimos": ["interaccion"]
+    }
   },
   "salida": {
     "separar_kml_kmz": false,

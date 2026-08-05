@@ -30,6 +30,7 @@ from tz_core.bitacora_normalization import (
     preguntar_unidad_duracion_qc,
     DuracionEstado,
 )
+from tz_core.capabilities import Capacidad, CapabilitiesReport, detectar_capacidades
 from tz_core.qc_engine import run_qc
 from tz_core.ui_utils import safe_input, UserCancelledError
 
@@ -43,6 +44,88 @@ class IngestionResult:
     errores: List[str]
     duracion_encabezado_original: Optional[str] = None
     duracion_estado: Optional[DuracionEstado] = None
+    capabilities_report: Optional[CapabilitiesReport] = None
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Resumen CLI de capacidades (HITO 2 — símbolos ASCII, compatibles con
+# consola Windows sin codepage UTF-8)
+# ─────────────────────────────────────────────────────────────────────────
+
+_ETIQUETAS_CAPACIDADES_CLI: tuple[tuple[str, str], ...] = (
+    ("identificacion", "Identificación"),
+    ("cronologia", "Cronología"),
+    ("filtros_temporales", "Filtros temporales"),
+    ("antenas", "Antenas"),
+    ("antenas_por_horario", "Antenas por horario"),
+    ("kml", "KML"),
+    ("heatmap", "Heatmap"),
+    ("contactos", "Contactos"),
+    ("tipo_evento", "Tipo de evento"),
+    ("duracion", "Duración"),
+    ("metadatos", "Metadatos"),
+)
+
+_ETIQUETA_ESTADO_CLI = {
+    "disponible": "[OK]",
+    "parcial": "[PARCIAL]",
+    "no_disponible": "[NO DISPONIBLE]",
+    "bloqueada": "[BLOQUEADA]",
+}
+
+_CAMPO_HUMANO_CLI = {
+    "tel": "teléfono",
+    "imei": "IMEI",
+    "fecha": "fecha",
+    "hora": "hora",
+    "antena": "antena",
+    "contacto": "contacto válido",
+    "interaccion": "interacción",
+    "lat": "coordenadas",
+    "long": "coordenadas",
+    "lat_long_validos": "coordenadas válidas",
+    "azimut": "azimut",
+    "duracion": "duración",
+}
+
+
+def _detalle_capacidad_cli(nombre: str, capacidad: Capacidad) -> Optional[str]:
+    """Sufijo informativo opcional para una línea del resumen de capacidades."""
+    if capacidad.estado in ("no_disponible", "bloqueada", "parcial") and capacidad.faltantes:
+        campo = _CAMPO_HUMANO_CLI.get(capacidad.faltantes[0], capacidad.faltantes[0])
+        prefijo = "parcial — falta" if capacidad.estado == "parcial" else "falta"
+        return f"{prefijo} {campo}"
+    if nombre == "duracion" and capacidad.estado == "disponible":
+        partes = capacidad.motivo.split(":")
+        if len(partes) >= 2 and partes[0] == "duracion_segura":
+            return f"unidad confirmada: {partes[1]}"
+    return None
+
+
+def _formatear_linea_capacidad_cli(nombre: str, etiqueta: str, capacidad: Capacidad) -> str:
+    tag = _ETIQUETA_ESTADO_CLI.get(capacidad.estado, "[?]")
+    linea = f"{tag} {etiqueta}"
+    detalle = _detalle_capacidad_cli(nombre, capacidad)
+    if detalle:
+        linea += f" — {detalle}"
+    return linea
+
+
+def imprimir_resumen_capacidades(
+    capabilities_report: CapabilitiesReport,
+    *,
+    output_fn: Callable[[str], None],
+) -> None:
+    """Imprime el resumen de capacidades detectadas usando símbolos ASCII.
+
+    No incluye 'hashes' (no depende de campos analíticos, no aporta al
+    resumen de qué puede analizarse) ni 'orientacion' (no forma parte de la
+    lista mínima solicitada para esta vista).
+    """
+    output_fn("\nCapacidades detectadas:\n")
+    for nombre, etiqueta in _ETIQUETAS_CAPACIDADES_CLI:
+        capacidad = capabilities_report.capacidad(nombre)
+        output_fn(_formatear_linea_capacidad_cli(nombre, etiqueta, capacidad))
 
 
 def resolve_date_dayfirst(
@@ -137,11 +220,14 @@ def run_ingestion_pipeline(
     out = output_fn or (lambda _msg: None)
     cfg = config or {}
 
-    columnas_esenciales = (
-        (cfg.get("entradas") or {}).get("columnas_esenciales") or ["antena", "lat", "long"]
+    # HITO 4: columnas_normalizables (antes columnas_esenciales) indica qué
+    # columnas reciben normalización de formato en validar_datos_fn — no es
+    # un requisito global del motor (ver tz_core.capabilities).
+    columnas_normalizables = (
+        (cfg.get("entradas") or {}).get("columnas_normalizables") or ["antena", "lat", "long"]
     )
-    if "long" in columnas_esenciales and "lon" not in columnas_esenciales:
-        columnas_esenciales = list(dict.fromkeys(list(columnas_esenciales) + ["lon"]))
+    if "long" in columnas_normalizables and "lon" not in columnas_normalizables:
+        columnas_normalizables = list(dict.fromkeys(list(columnas_normalizables) + ["lon"]))
 
     df_norm = normalize_and_validate_schema(
         df=df,
@@ -183,7 +269,7 @@ def run_ingestion_pipeline(
         dayfirst=dayfirst,
     )
 
-    df_norm, errores = validar_datos_fn(df_norm, columnas_esenciales)
+    df_norm, errores = validar_datos_fn(df_norm, columnas_normalizables)
 
     duracion_estado = clasificar_confiabilidad_duracion(
         df_norm,
@@ -197,6 +283,15 @@ def run_ingestion_pipeline(
             unidad_declarada=unidad_respuesta,
         )
 
+    # --- Capacidades analíticas (HITO 2) — se calcula una sola vez, con el
+    # df normalizado y la duracion_estado ya definitiva, y se reutiliza tanto
+    # para el resumen CLI como para la decisión de aborto más abajo. ---
+    capabilities_report = detectar_capacidades(
+        df_norm,
+        duracion_estado=duracion_estado,
+        config=cfg,
+    )
+
     # --- QC Engine ---
     try:
         qc_result = run_qc(df_norm)
@@ -207,13 +302,27 @@ def run_ingestion_pipeline(
         out("")
         for linea in qc_result.resumen:
             out(f"  {linea}")
-        out(f"\nCalidad del archivo: {qc_result.score}/100")
-        if qc_result.bloqueante:
-            out("\n⚠️  ADVERTENCIA: se detectaron problemas críticos en los datos.")
-            respuesta = safe_input("¿Desea continuar de todas formas? (S/N, C=cancelar): ").upper()
-            if respuesta != "S":
-                import sys
-                sys.exit(0)
+        out(f"\nCompletitud del archivo para análisis integral: {qc_result.score}/100")
+
+    imprimir_resumen_capacidades(capabilities_report, output_fn=out)
+
+    if not capabilities_report.procesable:
+        out("\n[BLOQUEADO] El archivo no tiene datos procesables — no se puede continuar.")
+        out(f"  Motivo: {', '.join(capabilities_report.bloqueos_globales)}")
+        import sys
+        sys.exit(0)
+
+    # Salvaguarda para errores técnicos reales no modelados como capacidades
+    # (p.ej. una futura condición de run_qc distinta de la ausencia de campos
+    # analíticos). En la práctica, con capabilities_report.procesable ya
+    # validado arriba, este bloqueante ya no se activa por contacto,
+    # interaccion, fecha, hora, coordenadas o antena ausentes.
+    if qc_result is not None and qc_result.bloqueante:
+        out("\n⚠️  ADVERTENCIA: se detectó un problema técnico que puede comprometer el análisis.")
+        respuesta = safe_input("¿Desea continuar de todas formas? (S/N, C=cancelar): ").upper()
+        if respuesta != "S":
+            import sys
+            sys.exit(0)
 
     time_filters: TimeFilterResult = apply_time_filter_prompt(
         option=time_filter_option,
@@ -229,4 +338,5 @@ def run_ingestion_pipeline(
         errores=list(errores or []),
         duracion_encabezado_original=duracion_encabezado_original,
         duracion_estado=duracion_estado,
+        capabilities_report=capabilities_report,
     )

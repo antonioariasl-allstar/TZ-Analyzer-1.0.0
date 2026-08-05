@@ -176,7 +176,7 @@ Objetivos:
 - Reportar un resumen de errores/warnings y, si corresponde, guardar un .txt.
 
 Contratos públicos (compatibles con el código existente):
-- validar_datos(df, columnas_esenciales) -> (df_validado, errores:list[str])
+- validar_datos(df, columnas_normalizables) -> (df_validado, errores:list[str])
 - guardar_errores(errores, carpeta_salida, nombre_base) -> Optional[str]
 """
 
@@ -370,13 +370,18 @@ def _ensure_lat_name(df: pd.DataFrame) -> None:
 # API pública
 # ==========================
 
-def validar_datos(df: pd.DataFrame, columnas_esenciales: List[str]) -> Tuple[pd.DataFrame, List[str]]:
+def validar_datos(df: pd.DataFrame, columnas_normalizables: List[str]) -> Tuple[pd.DataFrame, List[str]]:
     """
-    Normaliza y valida columnas esenciales en un DataFrame sin lanzar excepciones.
+    Normaliza y valida columnas configuradas en un DataFrame sin lanzar excepciones.
+
+    HITO 4: ``columnas_normalizables`` (antes ``columnas_esenciales``) indica
+    qué columnas recibirán normalización de formato en esta función — no
+    implica que sean un requisito global del motor. La única fuente de
+    verdad para bloqueo global es ``tz_core.capabilities.detectar_capacidades``.
 
     Parámetros:
         df (pd.DataFrame): DataFrame de bitácora a validar/normalizar (se trabaja sobre referencia).
-        columnas_esenciales (List[str]): Nombres canónicos esperados (p. ej. ['tel','lat','lon','fecha','hora','azimut']).
+        columnas_normalizables (List[str]): Nombres canónicos a normalizar (p. ej. ['tel','lat','lon','fecha','hora','azimut']).
 
     Retorna:
         Tuple[pd.DataFrame, List[str]]: (df normalizado, lista de mensajes de error/warn/info).
@@ -398,24 +403,24 @@ def validar_datos(df: pd.DataFrame, columnas_esenciales: List[str]) -> Tuple[pd.
     _to_object(df, ["fecha", "hora", "lat", "lon", "azimut"])
 
     # ===== Fecha =====
-    if "fecha" in columnas_esenciales:
+    if "fecha" in columnas_normalizables:
         fecha_norm, inv_f = _normalize_fecha_col(df, "fecha")
         df["fecha"] = fecha_norm
         if inv_f > 0:
             errores.append(f"[WARN] {inv_f}/{total} valores de 'fecha' no válidos → marcados como '{_SIN_INF}'.")
 
     # ===== Hora =====
-    if "hora" in columnas_esenciales:
+    if "hora" in columnas_normalizables:
         hora_norm, inv_h = _normalize_hora_col(df, "hora")
         df["hora"] = hora_norm
         if inv_h > 0:
             errores.append(f"[WARN] {inv_h}/{total} valores de 'hora' no válidos → marcados como '{_SIN_INF}'.")
 
     # ===== Latitud =====
-    if "lat" in columnas_esenciales:
+    if "lat" in columnas_normalizables:
         if "lat" not in df.columns:
             df["lat"] = _SIN_INF
-            errores.append(f"[CRIT] Columna 'lat' ausente → marcada como '{_SIN_INF}'.")
+            errores.append(f"[INFO] Columna 'lat' ausente → marcada como '{_SIN_INF}'.")
             inv_lat = total
         else:
             lat_f, inv_lat = _to_float_safe(df["lat"])
@@ -424,10 +429,10 @@ def validar_datos(df: pd.DataFrame, columnas_esenciales: List[str]) -> Tuple[pd.
                 errores.append(f"[WARN] {inv_lat}/{total} valores de 'lat' inválidos → '{_SIN_INF}'.")
 
     # ===== Longitud =====
-    if "lon" in columnas_esenciales:
+    if "lon" in columnas_normalizables:
         if "lon" not in df.columns:
             df["lon"] = _SIN_INF
-            errores.append(f"[CRIT] Columna 'lon' ausente → marcada como '{_SIN_INF}'.")
+            errores.append(f"[INFO] Columna 'lon' ausente → marcada como '{_SIN_INF}'.")
             inv_lon = total
         else:
             lon_f, inv_lon = _to_float_safe(df["lon"])
@@ -435,8 +440,8 @@ def validar_datos(df: pd.DataFrame, columnas_esenciales: List[str]) -> Tuple[pd.
             if inv_lon > 0:
                 errores.append(f"[WARN] {inv_lon}/{total} valores de 'lon' inválidos → '{_SIN_INF}'.")
 
-    # ===== Azimut (si está en esenciales, lo tratamos; si no, lo dejamos pasar) =====
-    if "azimut" in columnas_esenciales:
+    # ===== Azimut (si está en columnas_normalizables, lo tratamos; si no, lo dejamos pasar) =====
+    if "azimut" in columnas_normalizables:
         if "azimut" not in df.columns:
             df["azimut"] = _SIN_INF
             errores.append(f"[INFO] Columna 'azimut' ausente → se omite (colocada como '{_SIN_INF}').")
@@ -451,11 +456,11 @@ def validar_datos(df: pd.DataFrame, columnas_esenciales: List[str]) -> Tuple[pd.
             if inv_az > 0:
                 errores.append(f"[WARN] {inv_az}/{total} valores de 'azimut' inválidos → '{_SIN_INF}'.")
 
-    # ===== Otros esenciales presentes pero no tratados arriba → si faltan, marca =====
-    for col in columnas_esenciales:
+    # ===== Otras columnas configuradas pero no tratadas arriba → si faltan, marca =====
+    for col in columnas_normalizables:
         if col not in df.columns:
             df[col] = _SIN_INF
-            errores.append(f"[CRIT] Columna esencial '{col}' ausente → marcada como '{_SIN_INF}'.")
+            errores.append(f"[INFO] Columna '{col}' ausente → marcada como '{_SIN_INF}'.")
 
     return df, errores
 

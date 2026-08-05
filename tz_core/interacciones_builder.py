@@ -11,6 +11,7 @@ Architecture: TZ-Analyzer v1.0.0 — tz_core package
 from __future__ import annotations
 
 import json
+from html import escape as _html_escape
 from math import radians, sin, cos, sqrt, atan2
 from typing import Any, Callable, Dict, Optional
 from string import Template
@@ -25,8 +26,65 @@ from tz_core.bitacora_normalization import (
     clasificar_confiabilidad_duracion,
     DuracionEstado,
     es_valor_significativo,
+    normalize_imei,
 )
+from tz_core.html_helpers import fmt_imei_item
 from tz_core.time_utils import _to_datetime_series, _fmt_hms
+
+
+def _valor_predominante(df: pd.DataFrame, columna: Optional[str]) -> Optional[str]:
+    """Devuelve el valor más frecuente y significativo de ``columna``, o None."""
+    if not columna or columna not in df.columns:
+        return None
+    serie = df[columna]
+    mask = serie.map(es_valor_significativo)
+    if not bool(mask.any()):
+        return None
+    valores = serie.loc[mask].astype(str).str.strip()
+    try:
+        return str(valores.value_counts().idxmax())
+    except Exception:
+        return str(valores.iloc[0])
+
+
+def _construir_sujeto_analizado_html(
+    df: pd.DataFrame,
+    col_tel: Optional[str],
+    col_imei: Optional[str],
+) -> str:
+    """Construye la línea "Número/IMEI analizado" mostrada antes del selector de fecha.
+
+    HITO 4: identifica el teléfono o IMEI de la bitácora analizada sin
+    repetirlo como columna en cada fila. Prioriza tel (modo por defecto del
+    esquema); si además hay IMEI, lo muestra como línea secundaria breve.
+    """
+    tel_val = _valor_predominante(df, col_tel)
+    imei_val = _valor_predominante(df, col_imei)
+    if imei_val:
+        # Reutiliza el mismo saneamiento que metadata.py (build_identification_rows)
+        # para que el IMEI se muestre igual en Metadatos y aquí (sin sufijo ".0").
+        imei_val = normalize_imei(fmt_imei_item(imei_val)) or imei_val
+
+    if tel_val:
+        html = (
+            '<p class="sujeto-analizado">'
+            f"<strong>Número analizado:</strong> {_html_escape(tel_val)}</p>"
+        )
+        if imei_val:
+            html += (
+                '<p class="sujeto-analizado-secundario" style="font-size:0.85em;color:#666;margin-top:-6px;">'
+                f"IMEI: {_html_escape(imei_val)}</p>"
+            )
+        return html
+    if imei_val:
+        return (
+            '<p class="sujeto-analizado">'
+            f"<strong>IMEI analizado:</strong> {_html_escape(imei_val)}</p>"
+        )
+    return (
+        '<p class="sujeto-analizado">'
+        "<strong>Identificador analizado:</strong> no disponible</p>"
+    )
 
 
 def construir_seccion_interacciones(
@@ -85,6 +143,8 @@ def construir_seccion_interacciones(
         ],
     )
     col_azimut = pick_first_existing_column(df, [columnas_config.get("azimut"), "azimut", "azimuth", "azi", "angulo"])
+    col_tel = pick_first_existing_column(df, [columnas_config.get("tel"), "tel"])
+    col_imei = pick_first_existing_column(df, [columnas_config.get("imei"), "imei"])
     col_tipo = pick_first_existing_column(
         df,
         [
@@ -197,6 +257,7 @@ def construir_seccion_interacciones(
     out: list[str] = []
     out.append('<section id="interacciones-recientes">')
     out.append('<h2>Filtrar interacciones por fecha</h2>')
+    out.append(_construir_sujeto_analizado_html(df, col_tel, col_imei))
     out.append(f'<p>Nota: Se muestran <strong>{len(fechas_sel)}</strong> día(s) con actividad.</p>')
 
     if not bool(df_local["_contacto_valido"].any()):
@@ -259,6 +320,11 @@ def construir_seccion_interacciones(
             out.append(f"<h3>Se muestran los registros disponibles del día: {fecha_h}</h3>")
 
         total_dia = int(len(df_d))
+        out.append(
+            '<p class="fecha-registros-seleccionados">'
+            f"<strong>Fecha seleccionada:</strong> {fecha_h} "
+            f"&nbsp;|&nbsp; <strong>Registros mostrados:</strong> {total_dia}</p>"
+        )
         dur_total_dia = (
             _fmt_hms(df_d["_dur_sec"].sum() if "_dur_sec" in df_d.columns else 0)
             if duracion_disponible

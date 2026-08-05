@@ -51,7 +51,7 @@ def test_run_schema_location_assistant_maps_columns_and_creates_antena():
             "location_alternatives": [["lat", "lon"]],
             "subject_default_mode": "tel",
         },
-        "entradas": {"columnas_esenciales": ["lat", "long"]},
+        "entradas": {"columnas_normalizables": ["lat", "long"]},
     }
 
     result = run_schema_location_assistant(
@@ -87,7 +87,7 @@ def test_run_schema_location_assistant_respects_existing_location_columns():
             "location_alternatives": [["lat", "lon"]],
             "subject_default_mode": "tel",
         },
-        "entradas": {"columnas_esenciales": ["lat", "long", "antena"]},
+        "entradas": {"columnas_normalizables": ["lat", "long", "antena"]},
     }
 
     result = run_schema_location_assistant(

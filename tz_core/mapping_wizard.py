@@ -36,6 +36,7 @@ from typing import Dict, List, Optional, Tuple, Set, Any, Callable, Sequence
 
 import pandas as pd
 from tz_core.ui_utils import UserCancelledError
+from tz_core.field_roles import WIZARD_ORDER_PRIMARY, WIZARD_ORDER_SECONDARY
 
 
 @dataclass
@@ -451,7 +452,7 @@ def collect_essential_mapping_assignments(
 
             if decision.action == "duplicate" and decision.column:
                 write_fn(
-                    f"  [QC] Advertencia: la columna '{decision.column}' ya fue asignada a otro esencial. Elegí otra."
+                    f"  [QC] Advertencia: la columna '{decision.column}' ya fue asignada a otro campo. Elegí otra."
                 )
                 prompt_msg = f"→ Elegí columna para **{canonical}**: "
                 continue
@@ -656,13 +657,13 @@ def format_mapping_summary(assignments: Dict[str, Tuple[str, Any]]) -> List[str]
 
 
 def build_pending_warning_lines(pendientes: List[str]) -> List[str]:
-    """Construye los mensajes de advertencia para esenciales omitidos."""
+    """Construye los mensajes de advertencia para campos principales omitidos."""
 
     if not pendientes:
         return []
     joined = ", ".join(pendientes)
     return [
-        "\n[QC] Aviso: omitiste canónicos ESENCIALES: " + joined,
+        "\n[QC] Aviso: omitiste estos campos (afecta las capacidades asociadas, no bloquea el análisis): " + joined,
         "Podés volver a ejecutar para completar esos campos, o continuar bajo tu responsabilidad.",
     ]
 
@@ -1192,15 +1193,27 @@ class MappingWizard:
     
     @staticmethod
     def _default_esenciales() -> List[str]:
-        """Retorna lista default de campos esenciales."""
-        return ["fecha", "hora", "tel", "imei", "interaccion", "contacto", 
-                "lat", "long", "azimut", "antena"]
-    
+        """Retorna el orden de presentación primario (tz_core.field_roles).
+
+        HITO 4: ningún campo de esta lista aparece también en
+        ``_default_no_esenciales`` — la clasificación vive en un único
+        módulo compartido (``field_roles.py``) para evitar contradicciones
+        entre grupos. El orden aquí solo determina prioridad/secuencia de
+        la pregunta en el wizard, no un requisito de aborto: el motor no
+        bloquea por la ausencia de ninguno de estos campos.
+        """
+        return list(WIZARD_ORDER_PRIMARY)
+
     @staticmethod
     def _default_no_esenciales() -> List[str]:
-        """Retorna lista default de campos no esenciales."""
-        return ["alias", "nombre_usuario", "abonado", "celda", "direccion", 
-                "imei", "imsi", "duracion", "contacto", "interaccion"]
+        """Retorna el orden de presentación secundario (tz_core.field_roles).
+
+        alias/nombre_usuario/abonado no están aquí: se preguntan aparte
+        como overrides de identidad (ver ``collect_identity_overrides``),
+        no por este loop — incluirlos en ambos lugares generaba una doble
+        pregunta para el mismo campo.
+        """
+        return list(WIZARD_ORDER_SECONDARY)
     
     @staticmethod
     def _build_labels() -> Dict[str, str]:
@@ -1287,9 +1300,14 @@ class MappingWizard:
         a un helper puro que devuelve asignaciones/pendientes/usos.
         """
         for line in build_mapping_intro_lines(
-            title="ESENCIALES",
+            title="CAMPOS PRINCIPALES",
             columns_menu=self.cols_menu,
-            instructions=None,
+            instructions=(
+                "  Cada campo habilita una capacidad de análisis: fecha/hora → cronología y "
+                "filtros por fecha; tel/imei → identificación; interacción/contacto → "
+                "comunicaciones; lat/long/azimut/antena → geolocalización. "
+                "Enter = omitir (solo desactiva la capacidad asociada, no bloquea el análisis)."
+            ),
             show_header_once=True,
         ):
             self._write(line)
@@ -1320,9 +1338,13 @@ class MappingWizard:
         no esenciales para obtener asignaciones actualizadas.
         """
         for line in build_mapping_intro_lines(
-            title="NO ESENCIALES",
+            title="CAMPOS COMPLEMENTARIOS",
             columns_menu=self.cols_menu,
-            instructions="  Podés: elegir número, escribir 'F <valor fijo> (ej: F Claro)' o Enter=omitir.",
+            instructions=(
+                "  duracion → capacidad de duración; celda/direccion/imsi → metadatos "
+                "complementarios. Podés: elegir número, escribir 'F <valor fijo> (ej: F Claro)' "
+                "o Enter=omitir (solo desactiva la capacidad asociada)."
+            ),
             show_columns=True,
         ):
             self._write(line)

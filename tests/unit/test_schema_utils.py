@@ -1,5 +1,7 @@
 """Tests para los helpers de tz_core.schema_utils."""
 
+from unittest.mock import MagicMock
+
 import pandas as pd
 import unicodedata
 
@@ -10,6 +12,7 @@ from tz_core.schema_utils import (
     ensure_placeholder_columns,
     preview_column_mapping,
     confirm_column_mapping_with_preview,
+    run_schema_location_assistant,
     _en_bbox_sv,
     _es_columna_valida_para,
 )
@@ -53,7 +56,15 @@ class TestHasLocationCoverage:
 
 
 class TestCollectMissingRequiredFields:
-    def test_incluye_campos_por_modo_sujeto(self):
+    def test_hito3_ya_no_hardcodea_fecha_hora_contacto_interaccion(self):
+        """HITO 3: ningún campo analítico es requisito universal en código.
+
+        La función ya no agrega fecha/hora/contacto/interaccion/tel/imei de
+        forma incondicional: solo ofrece lo que la metadata de
+        ``schema.fields`` (config.json) marca con ``required``/
+        ``required_mode``. Sin esa metadata, no debe "inventar" faltantes
+        aunque fecha/hora/interaccion estén ausentes de ``present``.
+        """
         present = ["imei", "contacto"]
         fields_meta = {"alias": {"required": True}}
 
@@ -63,7 +74,34 @@ class TestCollectMissingRequiredFields:
             fields_meta=fields_meta,
         )
 
-        assert set(missing) == {"fecha", "hora", "interaccion", "alias"}
+        assert set(missing) == {"alias"}
+
+    def test_respeta_metadata_de_config_required_y_required_mode(self):
+        """Si config.json declara required/required_mode, sí se ofrecen.
+
+        La fuente de verdad es la metadata declarada (config.json), no un
+        hardcode en el código: por eso 'fecha'/'hora'/'contacto' aparecen
+        aquí (están marcados required=True en fields_meta) y 'tel' aparece
+        por required_mode='tel' coincidente con subject_mode.
+        """
+        present = ["antena"]
+        fields_meta = {
+            "fecha": {"required": True},
+            "hora": {"required": True},
+            "contacto": {"required": True},
+            "interaccion": {"required": True},
+            "tel": {"required_mode": "tel"},
+            "imei": {"required_mode": "imei"},
+        }
+
+        missing = collect_missing_required_fields(
+            present,
+            subject_mode="tel",
+            fields_meta=fields_meta,
+        )
+
+        assert set(missing) == {"fecha", "hora", "contacto", "interaccion", "tel"}
+        assert "imei" not in missing
 
 
 class TestEnBboxSV:
@@ -234,3 +272,139 @@ class TestConfirmColumnMappingWithPreview:
 
         assert result is None
         assert any("Conflicto" in linea for linea in salidas)
+
+
+class TestRunSchemaLocationAssistantAlternativas:
+    """HITO 3 — ubicación no es un bloqueante global: cada alternativa
+    (antena o lat+long) se respeta de forma independiente y ninguna de las
+    dos fuerza a la otra ni aborta la ejecución."""
+
+    def test_respeta_antena_como_alternativa_sin_forzar_coordenadas(self):
+        """Caso 9: con 'antena' ya presente, no debe exigir lat/long."""
+        df = pd.DataFrame({
+            "tel": ["50370001111", "50370002222"],
+            "antena": ["ANT-1", "ANT-2"],
+        })
+        mensajes: list[str] = []
+        config = {
+            "schema": {
+                "fields": {},
+                "location_alternatives": [["lat", "lon"], ["antena"]],
+                "subject_default_mode": "tel",
+            },
+        }
+
+        result = run_schema_location_assistant(
+            df.copy(),
+            original_columns=list(df.columns),
+            config=config,
+            alias_visibles={},
+            input_fn=lambda _msg="": "",
+            output_fn=mensajes.append,
+            config_path=None,
+        )
+
+        assert "antena" in result.columns
+        assert "lat" not in result.columns
+        assert "long" not in result.columns
+        assert not any("[ERROR]" in m for m in mensajes)
+
+    def test_respeta_latlong_como_alternativa_sin_exigir_antena(self):
+        """Caso 10: con lat/long ya presentes, no debe exigir 'antena'."""
+        df = pd.DataFrame({
+            "tel": ["50370001111", "50370002222"],
+            "lat": [13.7, 13.71],
+            "long": [-89.2, -89.21],
+        })
+        mensajes: list[str] = []
+        config = {
+            "schema": {
+                "fields": {},
+                "location_alternatives": [["lat", "lon"], ["antena"]],
+                "subject_default_mode": "tel",
+            },
+        }
+
+        result = run_schema_location_assistant(
+            df.copy(),
+            original_columns=list(df.columns),
+            config=config,
+            alias_visibles={},
+            input_fn=lambda _msg="": "",
+            output_fn=mensajes.append,
+            config_path=None,
+        )
+
+        assert "lat" in result.columns
+        assert "long" in result.columns
+        assert not any("[ERROR]" in m for m in mensajes)
+
+
+class TestPromptIndexEntradasExtranias:
+    """HITO 3 — bug MagicMock/int: una entrada no-string (MagicMock) o una
+    cadena no numérica nunca debe interpretarse silenciosamente como la
+    opción 1. Se prueba a través de ``run_schema_location_assistant``
+    porque ``_prompt_index`` es un closure interno sin acceso directo."""
+
+    def test_magicmock_no_se_interpreta_como_opcion_1(self):
+        """Caso 11: un input_fn que devuelve MagicMock no debe renombrar
+        'fecha' (primera columna del menú) a 'antena'."""
+        df = pd.DataFrame({
+            "fecha": ["25/07/2026", "26/07/2026"],
+            "tel": ["1", "2"],
+        })
+        config = {
+            "schema": {
+                "fields": {},
+                "location_alternatives": [["antena"]],
+                "subject_default_mode": "tel",
+            },
+        }
+        mensajes: list[str] = []
+        magic_input = MagicMock(return_value=MagicMock())
+
+        result = run_schema_location_assistant(
+            df.copy(),
+            original_columns=list(df.columns),
+            config=config,
+            alias_visibles={},
+            input_fn=magic_input,
+            output_fn=mensajes.append,
+            config_path=None,
+        )
+
+        assert "fecha" in result.columns, (
+            "El MagicMock se interpretó como opción 1 y renombró 'fecha' a 'antena'."
+        )
+        assert "tel" in result.columns
+        assert "antena" not in result.columns
+
+    def test_entrada_no_numerica_no_renombra_columnas(self):
+        """Caso 12: una cadena no numérica ('abc') tampoco debe elegir
+        ninguna columna del menú."""
+        df = pd.DataFrame({
+            "fecha": ["25/07/2026", "26/07/2026"],
+            "tel": ["1", "2"],
+        })
+        config = {
+            "schema": {
+                "fields": {},
+                "location_alternatives": [["antena"]],
+                "subject_default_mode": "tel",
+            },
+        }
+        mensajes: list[str] = []
+
+        result = run_schema_location_assistant(
+            df.copy(),
+            original_columns=list(df.columns),
+            config=config,
+            alias_visibles={},
+            input_fn=lambda _msg="": "abc",
+            output_fn=mensajes.append,
+            config_path=None,
+        )
+
+        assert "fecha" in result.columns
+        assert "tel" in result.columns
+        assert "antena" not in result.columns

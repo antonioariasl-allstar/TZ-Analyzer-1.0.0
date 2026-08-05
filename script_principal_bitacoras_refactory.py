@@ -702,7 +702,12 @@ def main():
         if time_filters.summary:
             print(f"[INFO] Filtro aplicado: {time_filters.summary}")
 
-    if not run_health_checks(df, logger=log, output_fn=print):
+    if not run_health_checks(
+        df,
+        logger=log,
+        output_fn=print,
+        capabilities_report=ingestion.capabilities_report,
+    ):
         return
 
     # Salidas (delegado a helper para modularidad)
@@ -801,6 +806,7 @@ def main():
         set_interactions_section=lambda _html: None,
         set_contacts_section=lambda _html: None,
         duracion_estado=ingestion.duracion_estado,
+        capabilities_report=ingestion.capabilities_report,
     )
 if __name__ == "__main__":
     bootstrap_config()

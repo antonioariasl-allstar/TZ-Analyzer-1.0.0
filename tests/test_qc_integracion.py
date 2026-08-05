@@ -1,8 +1,9 @@
-"""Tests de integracion QC-3."""
+"""Tests de integracion QC-3 y QC-HITO2 (capacidades)."""
 from __future__ import annotations
 from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
+from tz_core.capabilities import CapabilitiesReport
 from tz_core.ingestion_pipeline import resolve_date_dayfirst, run_ingestion_pipeline
 from tz_core.manual_flow import TimeFilterResult
 
@@ -165,3 +166,138 @@ def test_resolve_date_dayfirst_detecta_mdy_con_dia_mayor_que_12():
         config={"excel": {"date_order": "ASK"}},
         prompt_fn=lambda _prompt: pytest.fail("no debe preguntar"),
     ) is False
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# HITO 2 — integración CapabilitiesReport / QC
+# ─────────────────────────────────────────────────────────────────────────
+
+def _make_fx02_df(rows: int = 5) -> pd.DataFrame:
+    """Bitácora sin 'contacto' ni 'interaccion' (caso FX-02)."""
+    return pd.DataFrame({
+        "fecha": ["2024-01-01"] * rows,
+        "hora": ["10:00:00"] * rows,
+        "tel": ["60001234"] * rows,
+        "antena": ["ANT-01"] * rows,
+        "lat": [13.7] * rows,
+        "long": [-89.2] * rows,
+    })
+
+
+class _SkippingWizardIO:
+    """Wizard IO que responde "Enter" (vacío) a cualquier prompt.
+
+    Necesario para fixtures que omiten campos "esenciales" (contacto,
+    interaccion): ``run_schema_location_assistant`` (schema_utils.py, fuera
+    de alcance de este hito) pide interactivamente una columna sustituta
+    para cada campo faltante. El ``MagicMock()`` por defecto de
+    ``_base_kwargs`` responde ahí con otro MagicMock, y
+    ``int(MagicMock())`` devuelve 1 en vez de fallar — el asistente lo
+    interpreta como "elegí la primera columna del menú" y renombra una
+    columna real (p.ej. 'fecha') al campo faltante, corrompiendo el
+    DataFrame. Responder con "" reproduce el comportamiento real de un
+    usuario que pulsa Enter para omitir, dejando el campo genuinamente
+    ausente — que es lo que estos tests de capacidades necesitan probar.
+    """
+
+    def prompt(self, _message: str) -> str:
+        return ""
+
+    def write(self, _message: str) -> None:
+        pass
+
+
+def test_capabilities_report_se_agrega_a_ingestion_result(tmp_path):
+    """TAREA 7 caso 12: IngestionResult conserva el CapabilitiesReport calculado."""
+    df = _make_df()
+    with _patch_time_filter(df):
+        result = run_ingestion_pipeline(**_base_kwargs(df, tmp_path))
+
+    assert isinstance(result.capabilities_report, CapabilitiesReport)
+    assert result.capabilities_report.procesable is True
+    assert result.capabilities_report.capacidad("identificacion").disponible is True
+    assert result.capabilities_report.capacidad("antenas").disponible is True
+    assert result.capabilities_report.capacidad("kml").disponible is True
+
+
+def test_fx02_sin_contacto_ni_interaccion_no_aparece_prompt_critico(tmp_path):
+    """TAREA 7 caso 9: FX-02 no debe disparar el prompt '¿Desea continuar?' ni
+    abortar — contacto/interaccion ausentes ya no son bloqueantes."""
+    df = _make_fx02_df()
+    kwargs = _base_kwargs(df, tmp_path)
+    kwargs["wizard_io_factory"] = lambda: _SkippingWizardIO()
+    with _patch_time_filter(df):
+        with patch("builtins.input") as mock_input:
+            result = run_ingestion_pipeline(**kwargs)
+            mock_input.assert_not_called()
+
+    assert result.capabilities_report.procesable is True
+    assert result.capabilities_report.capacidad("contactos").disponible is False
+    assert result.capabilities_report.capacidad("tipo_evento").disponible is False
+    assert result.capabilities_report.capacidad("antenas").disponible is True
+    assert result.capabilities_report.capacidad("kml").disponible is True
+    assert result.capabilities_report.capacidad("cronologia").disponible is True
+
+
+def test_resumen_cli_capacidades_muestra_estados_correctos(tmp_path):
+    """TAREA 7 caso 13: el resumen CLI usa las etiquetas [OK]/[NO DISPONIBLE]
+    esperadas, con el motivo legible para las capacidades no disponibles."""
+    df = _make_fx02_df()
+    mensajes = []
+    kwargs = _base_kwargs(df, tmp_path, output_fn=mensajes.append)
+    kwargs["wizard_io_factory"] = lambda: _SkippingWizardIO()
+    with _patch_time_filter(df):
+        with patch("builtins.input"):
+            run_ingestion_pipeline(**kwargs)
+
+    texto = "\n".join(mensajes)
+    assert "Capacidades detectadas:" in texto
+    assert "[OK] Cronología" in texto
+    assert "[OK] Antenas" in texto
+    assert "[OK] KML" in texto
+    assert "[NO DISPONIBLE] Contactos — falta contacto válido" in texto
+    assert "[NO DISPONIBLE] Tipo de evento — falta interacción" in texto
+
+
+def test_score_usa_etiqueta_completitud_para_analisis_integral(tmp_path):
+    """TAREA 7 caso 14: la etiqueta del score ya no dice 'Calidad del
+    archivo', sino 'Completitud del archivo para análisis integral'."""
+    df = _make_df()
+    mensajes = []
+    with _patch_time_filter(df):
+        run_ingestion_pipeline(**_base_kwargs(df, tmp_path, output_fn=mensajes.append))
+
+    texto = "\n".join(mensajes)
+    assert "Completitud del archivo para análisis integral:" in texto
+    assert "Calidad del archivo" not in texto
+
+
+def test_dataframe_vacio_tras_validacion_aborta_por_capacidades(tmp_path):
+    """TAREA 7 caso 10: si el df queda vacío (0 filas), CapabilitiesReport lo
+    marca procesable=False y el pipeline aborta sin ofrecer continuar."""
+    df = _make_df()
+    kwargs = _base_kwargs(df, tmp_path)
+    kwargs["validar_datos_fn"] = lambda d, _cols: (d.iloc[0:0], [])
+
+    with _patch_time_filter(df):
+        with patch("builtins.input") as mock_input:
+            with pytest.raises(SystemExit):
+                run_ingestion_pipeline(**kwargs)
+            mock_input.assert_not_called()
+
+
+def test_sin_datos_significativos_aborta_por_capacidades(tmp_path):
+    """TAREA 7 caso 11: un DataFrame con filas pero sin ningún valor
+    analíticamente significativo (solo placeholders) también se marca
+    procesable=False y aborta."""
+    df = pd.DataFrame({
+        "fecha": ["-", "N/A"],
+        "contacto": ["", "Sin Inf."],
+    })
+    kwargs = _base_kwargs(df, tmp_path)
+    kwargs["original_columns"] = list(df.columns)
+    kwargs["wizard_io_factory"] = lambda: _SkippingWizardIO()
+
+    with _patch_time_filter(df):
+        with pytest.raises(SystemExit):
+            run_ingestion_pipeline(**kwargs)

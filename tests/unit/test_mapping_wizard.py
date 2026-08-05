@@ -111,6 +111,58 @@ def test_mapping_wizard_uses_custom_io_flow():
     assert any("=== Resumen de mapeo ===" in msg for msg in recorder.outputs)
 
 
+def test_wizard_no_bloquea_confirmacion_sin_contacto_ni_interaccion():
+    """Caso 13 (HITO 3): omitir contacto/interaccion no aborta ni bloquea
+    la confirmación del wizard — son campos "esenciales" solo en el sentido
+    de orden/prioridad de pregunta en la UI, no requisitos globales del
+    motor (ver tz_core.capabilities / tz_core.schema_guard)."""
+    df = pd.DataFrame({"col_a": ["x"], "col_b": ["y"]})
+
+    responses = [
+        "", "S",  # contacto: Enter=omitir, confirma la omisión
+        "", "S",  # interaccion: Enter=omitir, confirma la omisión
+        "", "", "",  # alias / nombre_usuario / abonado: Enter=omitir
+        "",  # duracion recomendable: no mapear ahora
+        "S",  # confirmar mapeo final
+    ]
+    recorder = _FakeIORecorder(responses)
+    io = WizardIO(input_fn=recorder.input, output_fn=recorder.output)
+
+    wizard = MappingWizard(df, esenciales=["contacto", "interaccion"], no_esenciales=[], io=io)
+    mapped_df, asignadas = wizard.run()
+
+    assert asignadas["contacto"] == ("omitido", None)
+    assert asignadas["interaccion"] == ("omitido", None)
+    assert "contacto" not in mapped_df.columns
+    assert "interaccion" not in mapped_df.columns
+
+
+def test_wizard_no_usa_palabra_esenciales_en_grupos_funcionales():
+    """Caso 6 (HITO 4): el wizard ya no presenta grupos como "ESENCIALES" /
+    "NO ESENCIALES" — usa etiquetas de grupo funcional y explica qué
+    capacidad habilita cada uno, sin sugerir bloqueo global."""
+    df = pd.DataFrame({"col_a": ["x"], "col_b": ["y"]})
+
+    responses = [
+        "", "S",  # contacto: Enter=omitir, confirma la omisión
+        "", "S",  # interaccion: Enter=omitir, confirma la omisión
+        "", "", "",  # alias / nombre_usuario / abonado: Enter=omitir
+        "",  # duracion recomendable: no mapear ahora
+        "S",  # confirmar mapeo final
+    ]
+    recorder = _FakeIORecorder(responses)
+    io = WizardIO(input_fn=recorder.input, output_fn=recorder.output)
+
+    wizard = MappingWizard(df, esenciales=["contacto", "interaccion"], no_esenciales=[], io=io)
+    wizard.run()
+
+    assert not any("esencial" in msg.lower() for msg in recorder.outputs), (
+        "El wizard no debe mostrar la palabra 'esencial(es)' al usuario."
+    )
+    assert any("CAMPOS PRINCIPALES" in msg for msg in recorder.outputs)
+    assert any("=== Resumen de mapeo ===" in msg for msg in recorder.outputs)
+
+
 def test_apply_wizard_assignments_handles_numeric_and_fallbacks():
     df = pd.DataFrame({
         "LAT_RAW": ["-34.58", "foo"],
@@ -876,7 +928,7 @@ def test_run_schema_location_assistant_persists_synonyms_and_validates():
             "location_alternatives": [["lat", "lon"]],
             "subject_default_mode": "tel",
         },
-        "entradas": {"columnas_esenciales": ["lat", "long", "antena"]},
+        "entradas": {"columnas_normalizables": ["lat", "long", "antena"]},
         "synonyms_user": {},
     }
 
@@ -917,7 +969,7 @@ def test_run_schema_location_assistant_generates_antena_fallback():
             "location_alternatives": [["lat", "lon"]],
             "subject_default_mode": "tel",
         },
-        "entradas": {"columnas_esenciales": ["lat", "long"]},
+        "entradas": {"columnas_normalizables": ["lat", "long"]},
     }
 
     result = run_schema_location_assistant(

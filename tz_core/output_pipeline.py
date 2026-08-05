@@ -9,11 +9,14 @@ from __future__ import annotations
 import inspect
 import os
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 
 import pandas as pd
 
 from tz_core.bitacora_normalization import clasificar_confiabilidad_duracion, DuracionEstado
+
+if TYPE_CHECKING:
+    from tz_core.capabilities import CapabilitiesReport
 
 
 def _accepts_kwarg(fn: Callable[..., Any], name: str) -> bool:
@@ -70,6 +73,7 @@ def produce_case_outputs(
     set_interactions_section: Callable[[str], None] = lambda _html: None,
     set_contacts_section: Callable[[str], None] = lambda _html: None,
     duracion_estado: Optional[DuracionEstado] = None,
+    capabilities_report: Optional["CapabilitiesReport"] = None,
 ) -> ProduceOutputsResult:
     """Genera secciones HTML, informe y archivos auxiliares para el caso actual.
 
@@ -77,6 +81,11 @@ def produce_case_outputs(
     `clasificar_confiabilidad_duracion`, propagado desde `IngestionResult`.
     Si se omite, se calcula una sola vez aquí y se comparte con todos los
     consumidores (interacciones, contactos, informe HTML) de esta ejecución.
+
+    `capabilities_report` (opcional, HITO 4): resultado ya resuelto de
+    `detectar_capacidades`, propagado desde `IngestionResult`. Si se omite,
+    `generar_html_fn` lo calcula internamente (compatibilidad con llamadores
+    que aún no lo propagan).
     """
 
     cfg = config or {}
@@ -146,6 +155,8 @@ def produce_case_outputs(
         )
         if _accepts_kwarg(generar_html_fn, "duracion_estado"):
             _html_kwargs["duracion_estado"] = duracion_estado
+        if capabilities_report is not None and _accepts_kwarg(generar_html_fn, "capabilities_report"):
+            _html_kwargs["capabilities_report"] = capabilities_report
         informe_html = generar_html_fn(**_html_kwargs)
         output_fn(f"Informe HTML generado en: {informe_html}")
     except Exception as exc:

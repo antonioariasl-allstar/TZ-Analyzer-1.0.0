@@ -6,24 +6,19 @@ import warnings
 import pandas as pd
 
 from tz_core.mapping_wizard import WizardIO, MappingWizard
+from tz_core.field_roles import WIZARD_ORDER_PRIMARY, WIZARD_ORDER_SECONDARY
 
 
 def prepare_manual_mapping(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], List[str]]:
-    """Prepare DataFrame and canonical lists for manual QC mapping."""
+    """Prepare DataFrame and canonical lists for manual QC mapping.
 
-    esenciales_qc = [
-        "fecha",
-        "hora",
-        "tel",
-        "imei",
-        "interaccion",
-        "contacto",
-        "lat",
-        "long",
-        "azimut",
-        "antena",
-    ]
-    no_esenciales_qc = ["celda", "direccion", "imsi", "duracion"]
+    HITO 3/4: reutiliza la misma clasificación de ``tz_core.field_roles`` que
+    usa ``MappingWizard`` por defecto, en vez de mantener una lista literal
+    paralela que podía divergir silenciosamente de la del wizard.
+    """
+
+    esenciales_qc = list(WIZARD_ORDER_PRIMARY)
+    no_esenciales_qc = list(WIZARD_ORDER_SECONDARY)
 
     with warnings.catch_warnings():
         warnings.filterwarnings(

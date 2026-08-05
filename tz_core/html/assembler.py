@@ -42,6 +42,7 @@ from tz_core.bitacora_normalization import (
     DuracionEstado,
     es_valor_significativo,
 )
+from tz_core.capabilities import CapabilitiesReport, detectar_capacidades
 from .header import build_logo_html, generate_html_header, generate_body_header
 from .kpi import prepare_report_metrics, generate_kpi_section
 from .metadata import generate_metadata_section, build_identification_rows, inject_technical_metadata
@@ -133,6 +134,50 @@ def _construir_resumen_ejecutivo(
         return _FALLBACK
 
 
+_CAPACIDADES_EXCLUIDAS_DEL_RESUMEN = frozenset({"metadatos", "hashes"})
+
+
+def _construir_resumen_capacidades_html(capabilities_report) -> str:
+    """Tarjeta compacta de capacidades analíticas (Hito 4).
+
+    Resumen de una línea (disponibles/parciales/no disponibles); el detalle
+    de qué falta y por qué vive únicamente en "Limitaciones del análisis"
+    para no duplicar contenido.
+    """
+    if capabilities_report is None or not getattr(capabilities_report, "procesable", False):
+        return ""
+    try:
+        estados = [
+            cap.estado
+            for nombre, cap in capabilities_report.capacidades.items()
+            if nombre not in _CAPACIDADES_EXCLUIDAS_DEL_RESUMEN
+        ]
+    except Exception:
+        return ""
+    if not estados:
+        return ""
+
+    n_disponibles = estados.count("disponible")
+    n_parciales = estados.count("parcial")
+    n_no_disponibles = estados.count("no_disponible")
+
+    partes = [f"{n_disponibles} disponibles"]
+    if n_parciales:
+        partes.append(f"{n_parciales} parciales")
+    if n_no_disponibles:
+        partes.append(f"{n_no_disponibles} no disponibles")
+    detalle = " · ".join(partes)
+
+    return (
+        '<div id="resumen-capacidades" style="background:#f4f6f8;'
+        'border-left:4px solid var(--accent);padding:8px 16px;margin:8px 0 16px 0;'
+        'border-radius:4px;font-size:0.85em;color:#444;">'
+        f"<strong>Capacidades analíticas:</strong> {detalle}. "
+        'Ver detalle en «Limitaciones del análisis».'
+        "</div>"
+    )
+
+
 def generar_informe_html(
     df: pd.DataFrame,
     archivo_kml: str,
@@ -146,6 +191,7 @@ def generar_informe_html(
     html_seccion_todos_contactos: str | None = None,
     logger=None,
     duracion_estado: Optional[DuracionEstado] = None,
+    capabilities_report: Optional[CapabilitiesReport] = None,
 ) -> str:
     """
     Genera un informe HTML sencillo (portada + KPIs + enlaces) en la misma carpeta del KML.
@@ -167,6 +213,15 @@ def generar_informe_html(
     # reclasifique la unidad de forma independiente.
     if duracion_estado is None:
         duracion_estado = clasificar_confiabilidad_duracion(df)
+
+    # --- Reporte de capacidades (Hito 4) ---
+    # Se calcula una sola vez (si no viene ya propagado desde IngestionResult)
+    # y se comparte con las secciones que lo necesiten (Limitaciones, etc.),
+    # sin usar globales ni df.attrs.
+    if capabilities_report is None:
+        capabilities_report = detectar_capacidades(
+            df, duracion_estado=duracion_estado, config=config
+        )
 
     from datetime import datetime
     
@@ -285,6 +340,7 @@ def generar_informe_html(
     resumen_ejecutivo_html = _construir_resumen_ejecutivo(
         total, _orden, _metricas, df, top_antena, _log
     )
+    resumen_capacidades_html = _construir_resumen_capacidades_html(capabilities_report)
 
     logo_html = build_logo_html(
         config if config is not None else None
@@ -345,6 +401,50 @@ def generar_informe_html(
             "utilizable.</li>"
         )
 
+    # --- Capacidades ausentes/parciales (Hito 4) — complementa lo anterior sin
+    # duplicar contacto/tipo de evento/duración, ya declarados arriba a partir
+    # de una inspección directa del DataFrame. ---
+    if capabilities_report is not None and capabilities_report.procesable:
+        _cap_identificacion = capabilities_report.capacidad("identificacion")
+        if _cap_identificacion.estado == "no_disponible":
+            _items.append(
+                "<li>Identificación no disponible: no se identificó un número telefónico "
+                "o IMEI utilizable.</li>"
+            )
+
+        _cap_cronologia = capabilities_report.capacidad("cronologia")
+        if _cap_cronologia.estado == "no_disponible":
+            _items.append(
+                "<li>Cronología no disponible: no se identificó una fecha utilizable; "
+                "los análisis cronológicos y los filtros temporales no están "
+                "disponibles.</li>"
+            )
+        elif _cap_cronologia.estado == "parcial":
+            _items.append(
+                "<li>Hora no disponible: se omiten los análisis por rango horario.</li>"
+            )
+
+        _cap_antenas = capabilities_report.capacidad("antenas")
+        if _cap_antenas.estado == "no_disponible":
+            _items.append(
+                "<li>Antena nominal no disponible: no se identificó nombre o código de "
+                "antena; el análisis nominal de antenas no está disponible.</li>"
+            )
+
+        _cap_kml = capabilities_report.capacidad("kml")
+        if _cap_kml.estado == "no_disponible":
+            _items.append(
+                "<li>KML/heatmap no disponibles: no se identificaron coordenadas válidas "
+                "suficientes para generar el análisis geoespacial.</li>"
+            )
+
+        _cap_orientacion = capabilities_report.capacidad("orientacion")
+        if _cap_orientacion.estado == "no_disponible":
+            _items.append(
+                "<li>Orientación no disponible: no se identificó azimut; los sectores y "
+                "líneas de orientación no se representan.</li>"
+            )
+
     limitaciones_html = (
         '<section id="limitaciones-analisis">'
         '<h2>Limitaciones del análisis</h2>'
@@ -355,6 +455,7 @@ def generar_informe_html(
     html = f"""{html_header}
 {body_header}
 {resumen_ejecutivo_html}
+{resumen_capacidades_html}
 {metadata_section}
 
 {kpi_section}

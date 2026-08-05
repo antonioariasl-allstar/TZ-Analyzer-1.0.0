@@ -94,16 +94,29 @@ def collect_missing_required_fields(
     fields_meta: Optional[Mapping[str, Any]] = None,
     target_alias: Optional[Mapping[str, str]] = None,
 ) -> list[str]:
-    """Replica la lógica `_need_fields` para campos esenciales no ubicados.
+    """Campos que conviene ofrecerle al usuario porque habilitan una capacidad.
+
+    HITO 3 — política de producto: ningún campo analítico (tel/imei,
+    fecha/hora, contacto, interaccion, ubicación, antena, azimut) es un
+    requisito universal del motor. Los únicos bloqueantes globales son
+    DataFrame vacío, ausencia total de valores significativos o un error
+    técnico (ver ``tz_core.capabilities.detectar_capacidades``).
+
+    Esta función ya NO hardcodea esa lista en el código: se limita a leer
+    la metadata declarada en ``schema.fields`` (``required``/
+    ``required_mode``) de config.json, que es donde vive la decisión de
+    qué campos ofrecer al wizard para completar. El resultado se usa
+    únicamente para presentar candidatos de mapeo — nunca para abortar.
 
     Args:
         present_columns: Columnas disponibles tras normalización inicial.
-        subject_mode: Modo sujeto detectado ("tel" o "imei").
+        subject_mode: Modo sujeto detectado ("tel" o "imei"); solo se usa
+            para resolver qué canónico de ``required_mode`` aplica.
         fields_meta: Metadata tomada de `schema.fields` (con required/required_mode).
         target_alias: Alias finales para mapear canónicos (lon→long, etc.).
 
     Returns:
-        Lista de canónicos faltantes (sin ubicación) en el mismo orden que antes.
+        Lista de canónicos ofrecidos (sin ubicación) en el mismo orden que antes.
     """
 
     present = set(present_columns or [])
@@ -112,15 +125,6 @@ def collect_missing_required_fields(
     fields_meta = fields_meta or {}
 
     req = set()
-    req.add("imei" if subject_mode == "imei" else "tel")
-
-    if "timestamp" in present:
-        req.add("timestamp")
-    else:
-        req.update(["fecha", "hora"])
-
-    req.update(["contacto", "interaccion"])
-
     for key, meta in fields_meta.items():
         if not hasattr(meta, "get"):
             continue
@@ -434,7 +438,7 @@ def run_schema_location_assistant(
     target_alias: Optional[Mapping[str, str]] = None,
     config_path: Optional[str] = "config.json",
 ) -> pd.DataFrame:
-    """Asistente interactivo para garantizar ubicación y campos esenciales."""
+    """Asistente interactivo para completar ubicación y campos recomendables."""
 
     alias_visibles = alias_visibles or {}
     input_cb = input_fn or (lambda message: input(message))  # type: ignore[arg-type]
@@ -474,20 +478,33 @@ def run_schema_location_assistant(
         return df_obj
 
     def _prompt_index(message: str, limit: int, default: Optional[int] = None) -> Optional[int]:
-        """Solicita índice numérico al usuario con validación de rango [1, limit]."""
-        raw = (input_cb(message) or "").strip()
-        if raw == "" and default is not None:
+        """Solicita índice numérico al usuario con validación de rango [1, limit].
+
+        Convierte explícitamente la respuesta a ``str`` antes de operar sobre
+        ella: un ``MagicMock`` (u otro objeto no-string) es truthy y sobrevive
+        a un ``... or ""``, y ``int(MagicMock())`` no lanza — devuelve 1 por
+        default (magic method configurado por unittest.mock). Sin la
+        conversión a ``str`` explícita, esa entrada "extraña" se interpretaba
+        silenciosamente como la opción 1. Solo se convierte si, tras el
+        strip(), la cadena es puramente numérica (``str.isdigit()``).
+        """
+        raw_value = input_cb(message)
+        raw = str(raw_value) if raw_value is not None else ""
+        raw = raw.strip()
+        if raw == "":
             return default
-        try:
-            idx = int(raw)
-        except Exception:
+        if not raw.isdigit():
             return default
+        idx = int(raw)
         if 1 <= idx <= limit:
             return idx
         return default
 
     if not has_location_coverage(present, location_alts, alias_map):
-        output_cb("\n[WIZARD] Falta UBICACIÓN. Elegí alternativa:")
+        output_cb(
+            "\n[WIZARD] Ubicación no detectada (opcional — habilita KML/heatmap/antenas). "
+            "Elegí una alternativa si tenés la columna disponible:"
+        )
         for idx, alt in enumerate(location_alts, 1):
             alt_view = " + ".join([alias_map.get(val, val) for val in alt])
             output_cb(f"  [{idx}] {alt_view}")
@@ -518,8 +535,11 @@ def run_schema_location_assistant(
         target_alias=alias_map,
     )
     if missing:
-        output_cb("\n[WIZARD] Faltan campos esenciales: " + ", ".join(missing))
-        output_cb("Elegí la columna correspondiente (número). Enter = saltar.\nColumnas disponibles:")
+        output_cb(
+            "\n[WIZARD] Campos recomendables no detectados (opcionales — cada uno habilita "
+            "una capacidad del informe si se completa): " + ", ".join(missing)
+        )
+        output_cb("Elegí la columna correspondiente (número). Enter = omitir.\nColumnas disponibles:")
         for idx, column in enumerate(columns_menu, 1):
             output_cb(f"  [{idx}] {column}")
         for canonical in missing:
@@ -553,11 +573,11 @@ def run_schema_location_assistant(
     df = dedupe_columns(df)
 
     def _smoke_schema_postmap(df_check: pd.DataFrame) -> tuple[bool, str]:
-        """Valida que el DataFrame tenga columnas esenciales y coordenadas válidas post-mapeo."""
-        esenciales = (config_dict.get("entradas", {}) or {}).get("columnas_esenciales", []) or []
-        faltan = [col for col in esenciales if col not in df_check.columns]
+        """Valida que el DataFrame tenga las columnas configuradas y coordenadas válidas post-mapeo."""
+        normalizables = (config_dict.get("entradas", {}) or {}).get("columnas_normalizables", []) or []
+        faltan = [col for col in normalizables if col not in df_check.columns]
         if faltan:
-            return False, f"Faltan columnas esenciales tras el mapeo: {', '.join(faltan)}"
+            return False, f"Faltan columnas configuradas para normalización tras el mapeo: {', '.join(faltan)}"
 
         if "lat" in df_check.columns and "long" in df_check.columns:
             try:
@@ -575,7 +595,8 @@ def run_schema_location_assistant(
         if colname in df_obj.columns:
             return df_obj
         output_cb(
-            f"\n[WIZARD] Falta columna esencial de ubicación: '{colname}'. Elegí la columna correspondiente (número). Enter=omitir."
+            f"\n[WIZARD] Columna de ubicación no detectada: '{colname}' (opcional — habilita KML/heatmap/antenas). "
+            "Elegí la columna correspondiente (número). Enter=omitir."
         )
         cols_list = list(df_obj.columns)
         for idx, column in enumerate(cols_list, 1):
@@ -616,13 +637,28 @@ def run_schema_location_assistant(
 
     df = dedupe_columns(df)
 
-    faltan_ub = [col for col in ("lat", "long") if col not in df.columns]
-    if faltan_ub:
+    # HITO 3 — ubicación (lat+long y/o antena) ya no es un bloqueante global:
+    # cada alternativa habilita capacidades distintas y ambas son independientes
+    # (antena sin coordenadas: antenas nominales disponible, KML/heatmap no;
+    # coordenadas sin antena: KML/heatmap disponible, antenas nominales no).
+    tiene_coords = "lat" in df.columns and "long" in df.columns
+    tiene_antena = "antena" in df.columns
+    if not tiene_coords and not tiene_antena:
         output_cb(
-            "\n[ERROR] No se puede continuar: faltan columnas esenciales de ubicación -> " + ", ".join(faltan_ub)
+            "\n[WIZARD] Sin columnas de ubicación (lat/long ni antena): "
+            "KML, heatmap y antenas nominales no estarán disponibles en el informe. "
+            "La ejecución continúa igualmente."
         )
-        output_cb("Revise los encabezados de la hoja o use el wizard para mapearlos correctamente.")
-        raise SystemExit(2)
+    elif not tiene_coords:
+        output_cb(
+            "\n[WIZARD] Sin coordenadas (lat/long): KML y heatmap no estarán disponibles; "
+            "antenas nominales sí, por la columna 'antena' presente."
+        )
+    elif not tiene_antena:
+        output_cb(
+            "\n[WIZARD] Sin columna 'antena': antenas nominales no estará disponible; "
+            "KML y heatmap sí, por las coordenadas presentes."
+        )
 
     if "lat" in df.columns and "long" in df.columns and "antena" not in df.columns:
         def _fmt_coord(value: Any) -> str:

@@ -1,8 +1,11 @@
 """Output generation wrapper to keep monolith thin."""
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, TYPE_CHECKING
 
 from tz_core.bitacora_normalization import DuracionEstado
+
+if TYPE_CHECKING:
+    from tz_core.capabilities import CapabilitiesReport
 
 
 def run_outputs_flow(
@@ -33,6 +36,7 @@ def run_outputs_flow(
     set_interactions_section: Callable[[str], None],
     set_contacts_section: Callable[[str], None],
     duracion_estado: Optional[DuracionEstado] = None,
+    capabilities_report: Optional["CapabilitiesReport"] = None,
 ):
     """Run HTML/KML outputs and log summary; swallow errors to avoid hard fail."""
 
@@ -65,6 +69,7 @@ def run_outputs_flow(
             set_interactions_section=set_interactions_section,
             set_contacts_section=set_contacts_section,
             duracion_estado=duracion_estado,
+            capabilities_report=capabilities_report,
         )
 
         try:
