@@ -7,7 +7,8 @@ Helpers puros (sin I/O ni globals) para texto, hora, fecha y lat/lon.
 from __future__ import annotations
 
 import re
-from typing import Iterable, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -85,6 +86,34 @@ def coalesce_cols(df: pd.DataFrame, *names: Optional[str]) -> Optional[str]:
     return None
 
 
+_VALORES_NO_SIGNIFICATIVOS = {
+    "0", "-", "--", "nan", "none", "null", "n/a", "na",
+    "sin inf", "sin inf.", "sin determinar", "s/i",
+}
+
+
+def es_valor_significativo(valor: Any) -> bool:
+    """Indica si `valor` es un dato analíticamente utilizable (contacto, tipo, etc.).
+
+    Criterio único, consolidado, reutilizado por interacciones_builder, contacts
+    y analytics: placeholders como "SIN DETERMINAR", "N/A", "-" o vacío no
+    cuentan, no agrupan y no pueden aparecer como sujeto de una alerta o KPI.
+    """
+    if valor is None:
+        return False
+    if isinstance(valor, float) and pd.isna(valor):
+        return False
+    try:
+        if pd.isna(valor):
+            return False
+    except (TypeError, ValueError):
+        pass
+    texto = str(valor).strip()
+    if not texto:
+        return False
+    return texto.lower() not in _VALORES_NO_SIGNIFICATIVOS
+
+
 def validate_latlon(
     df: pd.DataFrame,
     *,
@@ -147,6 +176,7 @@ __all__ = [
     "validate_time_sample",
     "validate_date_parsable",
     "coalesce_cols",
+    "es_valor_significativo",
     "validate_latlon",
     "sanitize_latlon",
     "parse_duration_seconds",
@@ -155,6 +185,10 @@ __all__ = [
     "normalize_temporal_fields",
     "normalize_contact_fields",
     "normalize_event_fields",
+    "DuracionEstado",
+    "clasificar_confiabilidad_duracion",
+    "requiere_pregunta_qc_duracion",
+    "preguntar_unidad_duracion_qc",
 ]
 
 
@@ -541,3 +575,224 @@ def normalize_event_fields(
 
     df["evento_valido_analisis"] = df["tipo_evento_normalizado"].isin({"VOZ", "SMS"})
     return df
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# FX-02 — Infraestructura de confiabilidad de duración
+# ─────────────────────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class DuracionEstado:
+    """Resultado de clasificar la confiabilidad de una columna de duración.
+
+    Estados posibles: "segura", "ambigua", "ausente".
+    Unidades canónicas: "milisegundos", "segundos", "minutos", "hhmmss",
+    "desconocida" o None.
+    """
+
+    estado: str
+    unidad: Optional[str]
+    columna: Optional[str]
+    columna_original: Optional[str]
+    motivo: str
+
+    @property
+    def confiable(self) -> bool:
+        return self.estado == "segura"
+
+
+_DURATION_GENERIC_NAMES = ("duracion", "duración", "duration", "dur")
+
+_DURATION_EXPLICIT_SECONDS_NAMES = (
+    "duracion_seg",
+    "duración_seg",
+    "segundos",
+    "duration_seconds",
+    "duracion_segundos",
+    "duración_segundos",
+    "duration_sec",
+    "dur_seg",
+)
+
+_DURATION_CANDIDATE_NAMES = _DURATION_EXPLICIT_SECONDS_NAMES + _DURATION_GENERIC_NAMES
+
+_DURATION_EXPLICIT_SECONDS_SET = set(_DURATION_EXPLICIT_SECONDS_NAMES)
+
+_HHMMSS_PATTERN = re.compile(r"^\d{1,2}:\d{2}(:\d{2})?$")
+
+_DURATION_EMPTY_TOKENS = {"", "nan", "none", "nat", "sin inf", "sin inf."}
+
+
+def _normalize_duration_header_key(value: str) -> str:
+    return str(value).strip().lower().replace(" ", "_")
+
+
+def _find_duration_column(
+    df: pd.DataFrame,
+    columnas_config: Dict[str, Any],
+) -> Optional[str]:
+    """Localiza la columna de duración en `df` sin modificarlo."""
+    configured = columnas_config.get("duracion")
+    if configured and configured in df.columns:
+        return configured
+
+    normalized_map = {_normalize_duration_header_key(c): c for c in df.columns}
+    for candidate in _DURATION_CANDIDATE_NAMES:
+        if candidate in normalized_map:
+            return normalized_map[candidate]
+    return None
+
+
+def clasificar_confiabilidad_duracion(
+    df: pd.DataFrame,
+    *,
+    columnas_config: Optional[Dict[str, Any]] = None,
+    encabezado_original: Optional[str] = None,
+    unidad_declarada: Optional[str] = None,
+) -> DuracionEstado:
+    """Clasifica la confiabilidad de la unidad de duración de `df`.
+
+    Función pura: no modifica `df`, no convierte valores y no llama input().
+    No infiere unidad por magnitud — solo reconoce formatos autodescriptivos
+    (HH:MM:SS / MM:SS), encabezados que declaran explícitamente segundos, o
+    una unidad ya resuelta por selección del usuario (`unidad_declarada`).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame a inspeccionar (solo lectura).
+    columnas_config : dict | None
+        Config opcional con `{"duracion": "<nombre_columna>"}` para forzar
+        la columna a inspeccionar.
+    encabezado_original : str | None
+        Nombre de encabezado original (previo a renombrar a canónico) si el
+        wizard/normalización lo preservó para esta ejecución.
+    unidad_declarada : str | None
+        Resultado ya resuelto de una selección del usuario:
+        "milisegundos", "segundos", "minutos", "desconocida" o None.
+    """
+    columnas_config = columnas_config or {}
+
+    columna = _find_duration_column(df, columnas_config)
+    if columna is None:
+        return DuracionEstado(
+            estado="ausente",
+            unidad=None,
+            columna=None,
+            columna_original=encabezado_original,
+            motivo="sin_columna",
+        )
+
+    header_ref = encabezado_original or columna
+
+    serie = df[columna]
+    texto = serie.astype(str).str.strip()
+    vacio_mask = serie.isna() | texto.str.lower().isin(_DURATION_EMPTY_TOKENS)
+    no_vacios = texto[~vacio_mask]
+
+    if no_vacios.empty:
+        return DuracionEstado(
+            estado="ausente",
+            unidad=None,
+            columna=columna,
+            columna_original=header_ref,
+            motivo="sin_valores",
+        )
+
+    if no_vacios.apply(lambda v: bool(_HHMMSS_PATTERN.match(v))).all():
+        return DuracionEstado(
+            estado="segura",
+            unidad="hhmmss",
+            columna=columna,
+            columna_original=header_ref,
+            motivo="formato_autodescriptivo",
+        )
+
+    if _normalize_duration_header_key(header_ref) in _DURATION_EXPLICIT_SECONDS_SET:
+        return DuracionEstado(
+            estado="segura",
+            unidad="segundos",
+            columna=columna,
+            columna_original=header_ref,
+            motivo="encabezado_declara_segundos",
+        )
+
+    if unidad_declarada == "milisegundos":
+        return DuracionEstado(
+            estado="segura",
+            unidad="milisegundos",
+            columna=columna,
+            columna_original=header_ref,
+            motivo="seleccion_usuario_milisegundos",
+        )
+    if unidad_declarada == "segundos":
+        return DuracionEstado(
+            estado="segura",
+            unidad="segundos",
+            columna=columna,
+            columna_original=header_ref,
+            motivo="seleccion_usuario_segundos",
+        )
+    if unidad_declarada == "minutos":
+        return DuracionEstado(
+            estado="segura",
+            unidad="minutos",
+            columna=columna,
+            columna_original=header_ref,
+            motivo="seleccion_usuario_minutos",
+        )
+    if unidad_declarada == "desconocida":
+        return DuracionEstado(
+            estado="ambigua",
+            unidad="desconocida",
+            columna=columna,
+            columna_original=header_ref,
+            motivo="seleccion_usuario_desconocida",
+        )
+
+    return DuracionEstado(
+        estado="ambigua",
+        unidad="desconocida",
+        columna=columna,
+        columna_original=header_ref,
+        motivo="columna_generica_numerica_sin_unidad",
+    )
+
+
+def requiere_pregunta_qc_duracion(estado: DuracionEstado) -> bool:
+    """Indica si corresponde preguntar la unidad al usuario (PASO 4).
+
+    Solo aplica cuando la columna existe, es numérica genérica sin unidad
+    determinada (no HH:MM:SS/MM:SS, sin encabezado explícito de segundos y
+    sin resolución previa por selección del usuario).
+    """
+    return estado.motivo == "columna_generica_numerica_sin_unidad"
+
+
+def preguntar_unidad_duracion_qc(
+    prompt_fn: Callable[[str], str] = input,
+) -> str:
+    """[QC] Solicita al usuario la unidad de una duración numérica ambigua.
+
+    Devuelve "milisegundos", "segundos", "minutos" o "desconocida". Enter
+    (o cualquier respuesta distinta de "1"/"2"/"3") equivale a "desconocida".
+    No persiste la respuesta — aplica solo a la ejecución actual.
+    """
+    mensaje = (
+        "[QC] La columna de duración contiene valores numéricos,\n"
+        "pero el archivo no indica claramente la unidad de medida.\n\n"
+        "Seleccione la unidad en la que están expresados estos valores:\n\n"
+        "[1] Milisegundos\n"
+        "[2] Segundos\n"
+        "[3] Minutos\n"
+        "[4] Unidad desconocida — no calcular duración\n\n"
+        "Opción (1/2/3/4, Enter=4): "
+    )
+    respuesta = prompt_fn(mensaje).strip()
+    if respuesta == "1":
+        return "milisegundos"
+    if respuesta == "2":
+        return "segundos"
+    if respuesta == "3":
+        return "minutos"
+    return "desconocida"

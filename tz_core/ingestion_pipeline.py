@@ -21,7 +21,15 @@ from tz_core.mapping_wizard import (
     finalize_manual_mapping_dataframe,
     normalize_wizard_datetime_fields,
 )
-from tz_core.bitacora_normalization import normalize_temporal_fields, normalize_contact_fields, normalize_event_fields
+from tz_core.bitacora_normalization import (
+    normalize_temporal_fields,
+    normalize_contact_fields,
+    normalize_event_fields,
+    clasificar_confiabilidad_duracion,
+    requiere_pregunta_qc_duracion,
+    preguntar_unidad_duracion_qc,
+    DuracionEstado,
+)
 from tz_core.qc_engine import run_qc
 from tz_core.ui_utils import safe_input, UserCancelledError
 
@@ -33,6 +41,8 @@ class IngestionResult:
     dataframe: pd.DataFrame
     time_filters: TimeFilterResult
     errores: List[str]
+    duracion_encabezado_original: Optional[str] = None
+    duracion_estado: Optional[DuracionEstado] = None
 
 
 def resolve_date_dayfirst(
@@ -114,6 +124,8 @@ def run_ingestion_pipeline(
     logger: Optional[Callable[[str], None]] = None,
     output_fn: Optional[Callable[[str], None]] = None,
     run_manual_mapping_fn: Optional[Callable[..., Any]] = None,
+    config_path: str = "config.json",
+    preguntar_unidad_duracion_fn: Callable[[], str] = preguntar_unidad_duracion_qc,
 ) -> IngestionResult:
     """Ejecuta normalización de schema, QC manual opcional y filtros de tiempo.
 
@@ -142,13 +154,19 @@ def run_ingestion_pipeline(
         validate_schema_fn=validate_schema_fn,
         logger=log,
         output_fn=out,
+        config_path=config_path,
     )
 
+    duracion_encabezado_original: Optional[str] = None
     if manual_qc_mapping and run_manual_mapping_fn:
         out("\n[QC] Iniciando wizard QC (mapeo manual).")
         wizard_io = wizard_io_factory()
-        df_norm, _mapeo = run_manual_mapping_fn(df_norm, wizard_io=wizard_io)
+        df_norm, mapeo_asignaciones = run_manual_mapping_fn(df_norm, wizard_io=wizard_io)
         df_norm = finalize_manual_mapping_dataframe(df_norm)
+
+        duracion_asignada = mapeo_asignaciones.get("duracion")
+        if duracion_asignada and duracion_asignada[0] == "col":
+            duracion_encabezado_original = duracion_asignada[1]
 
     dayfirst = resolve_date_dayfirst(
         df_norm,
@@ -166,6 +184,18 @@ def run_ingestion_pipeline(
     )
 
     df_norm, errores = validar_datos_fn(df_norm, columnas_esenciales)
+
+    duracion_estado = clasificar_confiabilidad_duracion(
+        df_norm,
+        encabezado_original=duracion_encabezado_original,
+    )
+    if requiere_pregunta_qc_duracion(duracion_estado):
+        unidad_respuesta = preguntar_unidad_duracion_fn()
+        duracion_estado = clasificar_confiabilidad_duracion(
+            df_norm,
+            encabezado_original=duracion_encabezado_original,
+            unidad_declarada=unidad_respuesta,
+        )
 
     # --- QC Engine ---
     try:
@@ -197,4 +227,6 @@ def run_ingestion_pipeline(
         dataframe=time_filters.dataframe,
         time_filters=time_filters,
         errores=list(errores or []),
+        duracion_encabezado_original=duracion_encabezado_original,
+        duracion_estado=duracion_estado,
     )

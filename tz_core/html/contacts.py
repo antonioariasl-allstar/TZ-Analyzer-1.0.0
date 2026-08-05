@@ -13,6 +13,9 @@ from tz_core.bitacora_normalization import (
     normalize_msisdn,
     parse_date_series,
     parse_duration_seconds,
+    clasificar_confiabilidad_duracion,
+    DuracionEstado,
+    es_valor_significativo,
 )
 from tz_core.logging_utils import log
 from tz_core.analytics import construir_seccion_todos_contactos
@@ -43,12 +46,23 @@ def calcular_metricas_contactos(
     destino_col: str | None = None,
     fecha_col: str | None = None,
     duracion_col: str | None = None,
+    *,
+    duracion_estado: Optional[DuracionEstado] = None,
 ) -> dict:
     """
     Calcula métricas enriquecidas por contacto para interpretación forense.
     No modifica df. No genera HTML. Solo retorna datos.
 
     Retorna dict: { numero_normalizado: { métricas } }
+
+    `duracion_estado` (opcional): resultado ya resuelto de
+    `clasificar_confiabilidad_duracion`. Si es None, se calcula internamente
+    sobre `df`. Si la duración no es "segura" (ambigua/ausente), no se
+    fabrica una duración en segundos a partir de enteros de unidad
+    desconocida: `total_duracion_seg`/`promedio_duracion_seg` quedan en 0.0
+    y cada registro expone `duracion_confiable=False` para que los
+    consumidores (p.ej. `interpretar_contactos`) no narren esa duración
+    como un hecho confirmado.
     """
     if df is None or df.empty:
         return {}
@@ -71,21 +85,37 @@ def calcular_metricas_contactos(
         cols.append(fecha_col)
     d = df[cols].copy()
 
+    d = d[d[c_col].map(es_valor_significativo)]
+    if d.empty:
+        return {}
+
     d["_contacto"] = (
         d[c_col].astype(str).str.strip()
         .map(lambda v: normalize_msisdn(v) or v)
     )
-    d = d[(d["_contacto"] != "") & d["_contacto"].notna()]
-    if d.empty:
-        return {}
 
     d["_c_norm"] = d["_contacto"].str.replace(r"\D+", "", regex=True)
     d.loc[d["_c_norm"] == "", "_c_norm"] = d["_contacto"]
 
-    if duracion_col and duracion_col in d.columns:
-        d["_sec"] = d[duracion_col].map(
-            lambda x: float(parse_duration_seconds(x, default=0.0))
-        )
+    if duracion_estado is None:
+        cfg_dur = {"duracion": duracion_col} if duracion_col else None
+        duracion_estado = clasificar_confiabilidad_duracion(df, columnas_config=cfg_dur)
+    duracion_confiable = duracion_estado.estado == "segura"
+
+    if duracion_confiable and duracion_col and duracion_col in d.columns:
+        unidad = duracion_estado.unidad
+        if unidad == "hhmmss":
+            d["_sec"] = d[duracion_col].map(
+                lambda x: float(parse_duration_seconds(x, default=0.0))
+            )
+        else:
+            numeric_dur = pd.to_numeric(d[duracion_col], errors="coerce").fillna(0.0)
+            if unidad == "minutos":
+                d["_sec"] = numeric_dur * 60.0
+            elif unidad == "milisegundos":
+                d["_sec"] = numeric_dur / 1000.0
+            else:
+                d["_sec"] = numeric_dur
     else:
         d["_sec"] = 0.0
 
@@ -115,6 +145,7 @@ def calcular_metricas_contactos(
             "dias_activos":          dias_activos,
             "primer_contacto":       primer_c,
             "ultimo_contacto":       ultimo_c,
+            "duracion_confiable":    duracion_confiable,
         }
 
     return resultado
@@ -124,21 +155,24 @@ def build_top_contacts_sections(
     df: pd.DataFrame,
     config: Optional[dict] = None,
     overrides: Optional[dict] = None,
+    *,
+    duracion_estado: Optional[DuracionEstado] = None,
 ) -> Tuple[str, str, int]:
     """Genera HTML para top contactos por conteo y por duración.
 
     Retorna (html_conteo, html_duracion, top_n_usado).
+
+    `duracion_estado` (opcional): si se omite, se calcula internamente con
+    `clasificar_confiabilidad_duracion(df)`. El ranking por conteo/frecuencia
+    nunca depende de esto. El ranking "Por minutos acumulados" solo se
+    calcula con valores reales cuando el estado es "segura" (respetando la
+    unidad: segundos directo, minutos ×60, hhmmss parseado); si es "ambigua"
+    se omite y se declara que la unidad no pudo confirmarse, sin fabricar
+    segundos a partir de enteros de unidad desconocida.
     """
 
     if df is None:
         df = pd.DataFrame()
-
-    def _to_seconds_any(x) -> float:
-        """Convierte duración en cualquier formato a segundos usando parse_duration_seconds."""
-        try:
-            return float(parse_duration_seconds(x, default=0.0))
-        except Exception:
-            return 0.0
 
     def _fmt_hms(sec: float) -> str:
         """Formatea segundos a formato HH:MM:SS o MM:SS según duración."""
@@ -165,18 +199,55 @@ def build_top_contacts_sections(
     c_col = next((c for c in contact_cols if c in df.columns), None)
     d_col = next((c for c in dur_cols if c in df.columns), None)
 
+    if duracion_estado is None:
+        cfg_dur = {"duracion": d_col} if d_col else None
+        duracion_estado = clasificar_confiabilidad_duracion(df, columnas_config=cfg_dur)
+    duracion_confiable = bool(d_col) and duracion_estado.estado == "segura"
+    duracion_ambigua = bool(d_col) and duracion_estado.estado == "ambigua"
+
+    def _to_seconds_confiable(x) -> float:
+        """Convierte duración a segundos respetando la unidad confirmada por duracion_estado."""
+        if duracion_estado.unidad == "hhmmss":
+            try:
+                return float(parse_duration_seconds(x, default=0.0))
+            except Exception:
+                return 0.0
+        try:
+            val = float(pd.to_numeric(x, errors="coerce"))
+        except Exception:
+            val = 0.0
+        if pd.isna(val):
+            val = 0.0
+        if duracion_estado.unidad == "minutos":
+            return val * 60.0
+        if duracion_estado.unidad == "milisegundos":
+            return val / 1000.0
+        return val
+
     note_no_dur = (
         "<p class='small' style='color:#666;background:#f7f7f7;border:1px solid #eee;padding:.5rem .75rem;border-radius:6px'>"
         "Se omite por no disponer de la columna <code>duracion</code>."
+        "</p>"
+    )
+    note_ambigua_dur = (
+        "<p class='small' style='color:#666;background:#f7f7f7;border:1px solid #eee;padding:.5rem .75rem;border-radius:6px'>"
+        "Duración no calculada: la unidad de los valores reportados no pudo confirmarse."
         "</p>"
     )
     note_zero_dur = "<p class='note muted'>No hay minutos acumulados &gt; 0 en el período; se omite la tabla.</p>"
 
     if not d_col:
         log("HTML: se omitió la subtabla 'Por minutos acumulados' por falta de 'duracion'.")
+    elif duracion_ambigua:
+        log("HTML: se omitió la subtabla 'Por minutos acumulados' — unidad de 'duracion' no confirmada.")
 
     top_contactos_cnt_html = "<p class='small'>No hay columna de contacto.</p>"
-    top_contactos_dur_html = note_no_dur if not d_col else "<p class='small'>No hay columna de contacto.</p>"
+    if not d_col:
+        top_contactos_dur_html = note_no_dur
+    elif duracion_ambigua:
+        top_contactos_dur_html = note_ambigua_dur
+    else:
+        top_contactos_dur_html = "<p class='small'>No hay columna de contacto.</p>"
 
     def _resolve_top_limit() -> int:
         """Resuelve el límite de top contactos desde overrides, config o default 10."""
@@ -209,8 +280,8 @@ def build_top_contacts_sections(
     if c_col and _has_p0b:
         # ── RAMA P0-B: Top N solo con contactos telefónicos plausibles ────────
         d = df.copy()
-        if d_col:
-            d["_sec"] = d[d_col].map(_to_seconds_any)
+        if d_col and duracion_confiable:
+            d["_sec"] = d[d_col].map(_to_seconds_confiable)
         else:
             d["_sec"] = 0.0
 
@@ -277,7 +348,7 @@ def build_top_contacts_sections(
                 )
 
             g_dur = pd.Series(dtype=float)
-            if d_col:
+            if d_col and duracion_confiable:
                 g_dur = (
                     d_plaus.groupby("_c_norm", dropna=False)["_sec"]
                     .sum()
@@ -319,13 +390,14 @@ def build_top_contacts_sections(
     elif c_col:
         # ── RAMA LEGACY: sin columnas P0-B, comportamiento original ──────────
         d = df.copy()
-        d["_contacto_raw"] = d[c_col].astype(str).str.strip()
-        d["_contacto"] = d["_contacto_raw"].map(lambda v: normalize_msisdn(v) or v)
-        d = d[(d["_contacto"] != "") & d["_contacto"].notna()]
+        d = d[d[c_col].map(es_valor_significativo)]
 
         if not d.empty:
-            if d_col:
-                d["_sec"] = d[d_col].map(_to_seconds_any)
+            d["_contacto_raw"] = d[c_col].astype(str).str.strip()
+            d["_contacto"] = d["_contacto_raw"].map(lambda v: normalize_msisdn(v) or v)
+
+            if d_col and duracion_confiable:
+                d["_sec"] = d[d_col].map(_to_seconds_confiable)
             else:
                 d["_sec"] = 0.0
 
@@ -363,7 +435,7 @@ def build_top_contacts_sections(
                 )
 
             g_dur = pd.Series(dtype=float)
-            if d_col:
+            if d_col and duracion_confiable:
                 g_dur = (
                     d.groupby("_c_norm", dropna=False)["_sec"]
                     .sum()
@@ -417,14 +489,29 @@ def interpretar_contactos(
     metricas: dict,
     total_interacciones: int,
     total_duracion: float,
+    *,
+    duracion_estado: Optional[DuracionEstado] = None,
 ) -> dict:
     """
     Interpreta métricas por contacto y retorna categoría, etiquetas y narrativa.
     Autosuficiente: calcula rankings internamente desde metricas.
     No genera HTML. No depende de build_top_contacts_sections.
+
+    La confiabilidad de la duración se resuelve por contacto: si se pasa
+    `duracion_estado` explícito, este fuerza el mismo criterio para todos los
+    números (útil cuando el llamador ya conoce el estado global). Si se omite
+    (compatibilidad con llamadores existentes que no lo calculan), se respeta
+    la marca `duracion_confiable` que ya trae cada registro de `metricas`
+    (ver `calcular_metricas_contactos`), asumiendo True si no está presente.
+    Cuando la duración no es confiable, no se categoriza ni se narra en
+    función de duración/promedio — solo por frecuencia.
     """
     if not metricas or total_interacciones <= 0:
         return {}
+
+    duracion_confiable_forzada = (
+        None if duracion_estado is None else duracion_estado.estado == "segura"
+    )
 
     # --- Rankings internos ---
     por_frec = sorted(metricas.keys(), key=lambda n: (-metricas[n]["total_interacciones"], n))
@@ -443,14 +530,21 @@ def interpretar_contactos(
         prom = m["promedio_duracion_seg"]
         dias = m["dias_activos"]
         ult  = m.get("ultimo_contacto")
+        dur_confiable = (
+            duracion_confiable_forzada
+            if duracion_confiable_forzada is not None
+            else m.get("duracion_confiable", True)
+        )
 
         pct_i = (ti / total_interacciones * 100.0) if total_interacciones > 0 else 0.0
-        pct_d = (td / total_duracion * 100.0) if total_duracion > 0 else 0.0
+        pct_d = (td / total_duracion * 100.0) if (dur_confiable and total_duracion > 0) else 0.0
         rf    = rank_frec[numero]
         rd    = rank_dur[numero]
 
         # --- Categoría ---
-        if pct_i >= 15 and pct_d >= 15 and rf <= 3 and rd <= 3:
+        if not dur_confiable:
+            categoria = "frecuente" if pct_i >= 15 else "breve"
+        elif pct_i >= 15 and pct_d >= 15 and rf <= 3 and rd <= 3:
             categoria = "dominante"
         elif pct_d >= 15 and pct_i < 15 and prom > 300:
             categoria = "conversador"
@@ -461,7 +555,7 @@ def interpretar_contactos(
 
         # --- Etiquetas ---
         etiquetas = []
-        if pct_i >= 30 or pct_d >= 30:
+        if pct_i >= 30 or (dur_confiable and pct_d >= 30):
             etiquetas.append("alta_concentracion")
         if dias >= 5:
             etiquetas.append("relacion_sostenida")
@@ -474,14 +568,20 @@ def interpretar_contactos(
                     etiquetas.append("contacto_reciente")
             except ValueError:
                 pass
-        if prom < 30:
+        if dur_confiable and prom < 30:
             etiquetas.append("llamadas_breves")
-        if prom > 300:
+        if dur_confiable and prom > 300:
             etiquetas.append("llamadas_largas")
 
         # --- Narrativa ---
         lineas = []
-        if categoria == "dominante":
+        if not dur_confiable:
+            lineas.append(f"Participación de {pct_i:.1f}% en frecuencia (posición #{rf}).")
+            lineas.append(
+                "La unidad de duración reportada no pudo confirmarse; no se "
+                "narra en función de duración."
+            )
+        elif categoria == "dominante":
             lineas.append(f"Concentra {pct_i:.1f}% de las interacciones y {pct_d:.1f}% de la duración total.")
             lineas.append(f"Ocupa la posición #{rf} en frecuencia y #{rd} en duración acumulada.")
         elif categoria == "conversador":
@@ -507,7 +607,7 @@ def interpretar_contactos(
     return resultado
 
 
-def _construir_seccion_todos_contactos(df, columnas_config=None):
+def _construir_seccion_todos_contactos(df, columnas_config=None, *, duracion_estado=None):
     """Wrapper de compatibilidad - usa tz_core.analytics.construir_seccion_todos_contactos"""
     from tz_core.analytics import construir_seccion_todos_contactos as contactos_modular
-    return contactos_modular(df, columnas_config)
+    return contactos_modular(df, columnas_config, duracion_estado=duracion_estado)

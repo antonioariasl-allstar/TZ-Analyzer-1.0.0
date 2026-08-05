@@ -362,8 +362,8 @@ FIELD_CONTEXT: Dict[str, Dict[str, str]] = {
         "hint": "Opcional. 15 dígitos",
     },
     "duracion": {
-        "desc": "Duración de la llamada o evento",
-        "hint": "Opcional. En segundos, minutos o HH:MM:SS",
+        "desc": "Duración del evento o sesión registrada",
+        "hint": "Opcional. Puede estar expresada en milisegundos, segundos, minutos o HH:MM:SS.",
     },
 }
 

@@ -16,12 +16,9 @@ import pandas as pd
 
 # 🔧 FIX: Asegurar que el directorio raíz esté en el path
 current_dir = os.path.dirname(__file__)
-project_root = os.path.dirname(current_dir)
+project_root = os.path.dirname(os.path.dirname(current_dir))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-
-# Cambiar directorio de trabajo al proyecto root
-os.chdir(project_root)
 
 try:
     import pytest  # Opcional para decoradores avanzados

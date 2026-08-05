@@ -312,6 +312,7 @@ from tz_core.bitacora_normalization import (
     validate_latlon as _valida_latlon,
     sanitize_latlon,
     parse_duration_seconds,
+    preguntar_unidad_duracion_qc,
 )
 from tz_core.schema_utils import (
     prep_meta_unicos,
@@ -676,6 +677,9 @@ def main():
         logger=log,
         output_fn=print,
         run_manual_mapping_fn=_run_manual_mapping,
+        preguntar_unidad_duracion_fn=lambda: preguntar_unidad_duracion_qc(
+            prompt_fn=_build_wizard_io().prompt
+        ),
     )
 
     df = ingestion.dataframe
@@ -763,7 +767,10 @@ def main():
 
     log("[salidas] Generando KML/KMZ…")
     from tz_core.kml_generator import generar_kml
-    archivo_kml, desc_coords = generar_kml(df, archivo_kml, config=CONFIG, flat=False, override_tops=override_tops)
+    archivo_kml, desc_coords = generar_kml(
+        df, archivo_kml, config=CONFIG, flat=False, override_tops=override_tops,
+        duracion_estado=ingestion.duracion_estado,
+    )
     log(f"[salidas] KML listo: {archivo_kml}")
 
     # === BLOQUE HTML/SECCIONES (delegado) ===
@@ -793,6 +800,7 @@ def main():
         log_file_path=None,
         set_interactions_section=lambda _html: None,
         set_contacts_section=lambda _html: None,
+        duracion_estado=ingestion.duracion_estado,
     )
 if __name__ == "__main__":
     bootstrap_config()

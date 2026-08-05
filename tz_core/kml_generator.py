@@ -45,6 +45,8 @@ from tz_core.bitacora_normalization import (
     normalize_imei,
     normalize_msisdn,
     parse_date_series,
+    clasificar_confiabilidad_duracion,
+    DuracionEstado,
 )
 
 # Separador HTML compacto (usado en descripciones)
@@ -282,11 +284,12 @@ def _crear_feature_kml(
 
 
 def generar_kml(
-    df: pd.DataFrame, 
-    archivo_salida_kml: str, 
+    df: pd.DataFrame,
+    archivo_salida_kml: str,
     config: dict,
     flat: bool = False,
-    override_tops: Optional[dict] = None
+    override_tops: Optional[dict] = None,
+    duracion_estado: Optional[DuracionEstado] = None,
 ) -> Tuple[str, int]:
     """
     Genera archivo KML/KMZ a partir del DataFrame procesado.
@@ -328,6 +331,12 @@ def generar_kml(
     _REUSABLE_STYLES = None  # reset para que cada bitácora use su propio color
     if df.empty:
         log("[WARN] generar_kml: DataFrame vacío, generando KML sin puntos")
+
+    # Estado único de confiabilidad de duración (Hito 2C): se calcula una sola
+    # vez (o se recibe ya resuelto desde el pipeline de ingesta) y se propaga
+    # a todas las burbujas para que KML/KMZ sea coherente con el informe HTML.
+    if duracion_estado is None:
+        duracion_estado = clasificar_confiabilidad_duracion(df)
 
     kml = Kml()
     descartadas = 0
@@ -542,10 +551,11 @@ def generar_kml(
         for it in items:
             n_all = pair_counter_all.get((it["antena"], it["azimut_i"]), 1)
             desc_comp = armar_descripcion_compacta(
-                it, n_all, 
-                suprimir_direccion_si_igual=False, 
-                config=config, 
-                hr_compact=HR_COMPACT
+                it, n_all,
+                suprimir_direccion_si_igual=False,
+                config=config,
+                hr_compact=HR_COMPACT,
+                duracion_estado=duracion_estado,
             )
             _crear_feature_kml(kml, it["antena"], it["lon"], it["lat"], 
                              desc_comp, it["azimut_f"], config)
@@ -732,7 +742,8 @@ def generar_kml(
             it, n_all,
             suprimir_direccion_si_igual=True,
             config=config,
-            hr_compact=HR_COMPACT
+            hr_compact=HR_COMPACT,
+            duracion_estado=duracion_estado,
         )
         _crear_feature_kml(
             _carpeta_act,

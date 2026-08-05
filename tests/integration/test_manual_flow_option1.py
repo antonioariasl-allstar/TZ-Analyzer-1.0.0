@@ -30,6 +30,12 @@ def _fake_wizard_io() -> WizardIO:
 def test_option1_manual_flow_generates_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     app.bootstrap_config()
 
+    # Aísla la escritura de snapshot de config (`_persist_config_snapshot` en
+    # schema_utils.py usa una ruta relativa "config.json" por defecto): sin
+    # esto, correr este flujo real desde la raíz del repo sobrescribiría el
+    # config.json real. CONFIG ya quedó cargado en memoria por bootstrap_config().
+    monkeypatch.chdir(tmp_path)
+
     df = pd.DataFrame(
         [
             {

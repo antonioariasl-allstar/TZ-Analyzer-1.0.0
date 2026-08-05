@@ -2,6 +2,8 @@
 
 from typing import Any, Callable, Optional
 
+from tz_core.bitacora_normalization import DuracionEstado
+
 
 def run_outputs_flow(
     *,
@@ -30,6 +32,7 @@ def run_outputs_flow(
     log_file_path: Optional[str],
     set_interactions_section: Callable[[str], None],
     set_contacts_section: Callable[[str], None],
+    duracion_estado: Optional[DuracionEstado] = None,
 ):
     """Run HTML/KML outputs and log summary; swallow errors to avoid hard fail."""
 
@@ -61,6 +64,7 @@ def run_outputs_flow(
             log_file_path=log_file_path,
             set_interactions_section=set_interactions_section,
             set_contacts_section=set_contacts_section,
+            duracion_estado=duracion_estado,
         )
 
         try:

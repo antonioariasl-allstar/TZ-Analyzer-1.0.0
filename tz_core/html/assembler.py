@@ -38,6 +38,9 @@ from tz_core.bitacora_normalization import (
     sanitize_latlon,
     normalize_msisdn,
     normalize_imei,
+    clasificar_confiabilidad_duracion,
+    DuracionEstado,
+    es_valor_significativo,
 )
 from .header import build_logo_html, generate_html_header, generate_body_header
 from .kpi import prepare_report_metrics, generate_kpi_section
@@ -142,6 +145,7 @@ def generar_informe_html(
     html_seccion_interacciones: str | None = None,
     html_seccion_todos_contactos: str | None = None,
     logger=None,
+    duracion_estado: Optional[DuracionEstado] = None,
 ) -> str:
     """
     Genera un informe HTML sencillo (portada + KPIs + enlaces) en la misma carpeta del KML.
@@ -155,7 +159,15 @@ def generar_informe_html(
     if df.empty:
         _log("[WARN] generar_informe_html: DataFrame vacío, generando reporte mínimo")
         # Continuar para crear archivo con mensaje de ausencia de datos
-    
+
+    # --- Estado único de confiabilidad de duración (Hito 2C) ---
+    # Se calcula una sola vez aquí y se propaga explícitamente a todos los
+    # consumidores reales de duración de esta ejecución (interacciones,
+    # contactos, interpretación de perfiles), para que ningún módulo
+    # reclasifique la unidad de forma independiente.
+    if duracion_estado is None:
+        duracion_estado = clasificar_confiabilidad_duracion(df)
+
     from datetime import datetime
     
     metrics = prepare_report_metrics(
@@ -197,6 +209,7 @@ def generar_informe_html(
         df,
         config if config is not None else None,
         overrides_ctx,
+        duracion_estado=duracion_estado,
     )
 
 
@@ -233,13 +246,14 @@ def generar_informe_html(
 
     analisis_html = ""
     try:
-        _metricas = calcular_metricas_contactos(_df_perfiles)
+        _metricas = calcular_metricas_contactos(_df_perfiles, duracion_estado=duracion_estado)
         if _metricas:
             _total_duracion = sum(v["total_duracion_seg"] for v in _metricas.values())
             _interpretacion = interpretar_contactos(
                 _metricas,
                 total_interacciones=len(_df_perfiles),
                 total_duracion=_total_duracion,
+                duracion_estado=duracion_estado,
             )
             _orden = sorted(
                 _interpretacion,
@@ -293,6 +307,44 @@ def generar_informe_html(
     ]
     if _moji:
         _items.append("<li>Se detectaron posibles caracteres no normalizados en algunos campos.</li>")
+
+    # --- Campos analíticos ausentes (Hito 2C, no depende del resultado interactivo del QC) ---
+    _col_contacto_lim = pick_first_existing_column(
+        df, ["contacto", "tel_contacto", "destino", "b_party", "to", "callee"]
+    )
+    _contacto_disponible = bool(
+        _col_contacto_lim
+        and _col_contacto_lim in df.columns
+        and df[_col_contacto_lim].map(es_valor_significativo).any()
+    )
+    _col_tipo_lim = pick_first_existing_column(
+        df, ["tipo", "interaccion", "tipo_interaccion", "interaction", "tipo_llamada"]
+    )
+    _tipo_evento_disponible = bool(
+        _col_tipo_lim
+        and _col_tipo_lim in df.columns
+        and df[_col_tipo_lim].map(es_valor_significativo).any()
+    )
+    if not _contacto_disponible:
+        _items.append(
+            "<li>Contacto no disponible: la bitácora no contiene valores de contacto utilizables.</li>"
+        )
+    if not _tipo_evento_disponible:
+        _items.append(
+            "<li>Tipo de evento no disponible: la bitácora no contiene un tipo de evento "
+            "o interacción clasificable.</li>"
+        )
+    if duracion_estado.estado == "ambigua":
+        _items.append(
+            "<li>Duración no calculada: unidad de duración no confirmada en los valores "
+            "reportados de esta bitácora.</li>"
+        )
+    elif duracion_estado.estado == "ausente":
+        _items.append(
+            "<li>Duración no disponible: no se identificó una columna de duración "
+            "utilizable.</li>"
+        )
+
     limitaciones_html = (
         '<section id="limitaciones-analisis">'
         '<h2>Limitaciones del análisis</h2>'
@@ -383,7 +435,10 @@ def generar_informe_html(
                 dias_cfg = int(cfg_html.get("interacciones_ultimos_dias", 3))
             except Exception:
                 dias_cfg = 3
-            sec_inter = construir_seccion_interacciones(df, dias_cfg, cfg_cols, config=config, logger=_log)
+            sec_inter = construir_seccion_interacciones(
+                df, dias_cfg, cfg_cols, config=config, logger=_log,
+                duracion_estado=duracion_estado,
+            )
 
         if sec_inter:
             anchor = "<h2>Indicadores</h2>"
@@ -405,7 +460,9 @@ def generar_informe_html(
 
         if not sec_todos:
             cfg_cols = config.get("columnas", {}) if (config is not None) else {}
-            sec_todos = _construir_seccion_todos_contactos(df, cfg_cols)
+            sec_todos = _construir_seccion_todos_contactos(
+                df, cfg_cols, duracion_estado=duracion_estado
+            )
 
         if sec_todos:
             anchor = '<h2 id="interacciones">Contactos con más comunicación</h2>'

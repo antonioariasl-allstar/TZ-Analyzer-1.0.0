@@ -6,11 +6,30 @@ auxiliares como HASHES.txt, permitiendo pruebas unitarias aisladas.
 
 from __future__ import annotations
 
+import inspect
 import os
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
 import pandas as pd
+
+from tz_core.bitacora_normalization import clasificar_confiabilidad_duracion, DuracionEstado
+
+
+def _accepts_kwarg(fn: Callable[..., Any], name: str) -> bool:
+    """Indica si `fn` acepta el parámetro nombrado `name` (o **kwargs genéricos).
+
+    Permite propagar `duracion_estado` a callables reales sin romper stubs/tests
+    existentes que no lo esperan.
+    """
+    try:
+        params = inspect.signature(fn).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(
+        p.name == name or p.kind == inspect.Parameter.VAR_KEYWORD
+        for p in params
+    )
 
 
 @dataclass
@@ -50,10 +69,20 @@ def produce_case_outputs(
     log_file_path: Optional[str] = None,
     set_interactions_section: Callable[[str], None] = lambda _html: None,
     set_contacts_section: Callable[[str], None] = lambda _html: None,
+    duracion_estado: Optional[DuracionEstado] = None,
 ) -> ProduceOutputsResult:
-    """Genera secciones HTML, informe y archivos auxiliares para el caso actual."""
+    """Genera secciones HTML, informe y archivos auxiliares para el caso actual.
+
+    `duracion_estado` (opcional): resultado ya resuelto de
+    `clasificar_confiabilidad_duracion`, propagado desde `IngestionResult`.
+    Si se omite, se calcula una sola vez aquí y se comparte con todos los
+    consumidores (interacciones, contactos, informe HTML) de esta ejecución.
+    """
 
     cfg = config or {}
+
+    if duracion_estado is None:
+        duracion_estado = clasificar_confiabilidad_duracion(df)
 
     try:
         dias_cfg = int(cfg.get("html", {}).get("interacciones_ultimos_dias", 3))
@@ -67,7 +96,10 @@ def produce_case_outputs(
 
     interactions_html = ""
     try:
-        interactions_html = build_interactions_section(df, dias_cfg, columnas_cfg, config=cfg, logger=logger)
+        interactions_html = build_interactions_section(
+            df, dias_cfg, columnas_cfg, config=cfg, logger=logger,
+            duracion_estado=duracion_estado,
+        )
         if logger:
             logger(f"[DEBUG] Interacciones: {len(interactions_html)} chars")
     except Exception as exc:
@@ -82,7 +114,12 @@ def produce_case_outputs(
 
     contacts_html = ""
     try:
-        contacts_html = build_contacts_section(df, columnas_cfg)
+        if _accepts_kwarg(build_contacts_section, "duracion_estado"):
+            contacts_html = build_contacts_section(
+                df, columnas_cfg, duracion_estado=duracion_estado
+            )
+        else:
+            contacts_html = build_contacts_section(df, columnas_cfg)
     except Exception:
         contacts_html = ""
 
@@ -94,7 +131,7 @@ def produce_case_outputs(
     informe_html: Optional[str] = None
     nombre_bitacora = os.path.basename(archivo_entrada) if archivo_entrada else None
     try:
-        informe_html = generar_html_fn(
+        _html_kwargs: Dict[str, Any] = dict(
             df=df,
             archivo_kml=archivo_kml,
             carpeta_salida=carpeta_salida,
@@ -107,6 +144,9 @@ def produce_case_outputs(
             html_seccion_todos_contactos=contacts_html,
             logger=logger,
         )
+        if _accepts_kwarg(generar_html_fn, "duracion_estado"):
+            _html_kwargs["duracion_estado"] = duracion_estado
+        informe_html = generar_html_fn(**_html_kwargs)
         output_fn(f"Informe HTML generado en: {informe_html}")
     except Exception as exc:
         output_fn(f"[ERROR] No se pudo generar el HTML: {exc}")

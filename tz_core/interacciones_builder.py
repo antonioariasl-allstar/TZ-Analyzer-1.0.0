@@ -19,7 +19,13 @@ import numpy as np
 import pandas as pd
 
 from tz_core.dataframe_utils import pick_first_existing_column
-from tz_core.bitacora_normalization import sanitize_latlon, parse_duration_seconds
+from tz_core.bitacora_normalization import (
+    sanitize_latlon,
+    parse_duration_seconds,
+    clasificar_confiabilidad_duracion,
+    DuracionEstado,
+    es_valor_significativo,
+)
 from tz_core.time_utils import _to_datetime_series, _fmt_hms
 
 
@@ -30,6 +36,7 @@ def construir_seccion_interacciones(
     *,
     config: Optional[Dict[str, Any]] = None,
     logger: Optional[Callable[[str], None]] = None,
+    duracion_estado: Optional[DuracionEstado] = None,
 ) -> str:
     """Construye la sección HTML de interacciones recientes (usa lógica original)."""
 
@@ -152,24 +159,68 @@ def construir_seccion_interacciones(
     fechas_sel = fechas_ord  # ya no se limita por `dias`
 
     if col_contacto not in df_local.columns:
-        df_local["_contacto"] = "SIN DETERMINAR"
+        df_local["_contacto_valido"] = False
+        df_local["_contacto"] = "No disponible"
     else:
-        df_local["_contacto"] = df_local[col_contacto].fillna("SIN DETERMINAR").astype(str).str.strip()
-        df_local.loc[df_local["_contacto"] == "", "_contacto"] = "SIN DETERMINAR"
+        raw_contacto = df_local[col_contacto]
+        df_local["_contacto_valido"] = raw_contacto.map(es_valor_significativo)
+        contacto_visible = raw_contacto.astype(str).str.strip()
+        df_local["_contacto"] = contacto_visible.where(df_local["_contacto_valido"], "No disponible")
 
-    if col_duracion and col_duracion in df_local.columns:
-        ser_dur = df_local[col_duracion]
-        if pd.api.types.is_numeric_dtype(ser_dur):
-            df_local["_dur_sec"] = pd.to_numeric(ser_dur, errors="coerce").fillna(0)
-        else:
+    if duracion_estado is None:
+        duracion_estado = clasificar_confiabilidad_duracion(df, columnas_config=columnas_config)
+
+    duracion_disponible = duracion_estado.estado == "segura"
+    dur_col_effective = duracion_estado.columna if duracion_estado.columna else col_duracion
+
+    if duracion_disponible and dur_col_effective and dur_col_effective in df_local.columns:
+        ser_dur = df_local[dur_col_effective]
+        unidad = duracion_estado.unidad
+        if unidad == "hhmmss":
             df_local["_dur_sec"] = ser_dur.map(parse_duration_seconds)
+        else:
+            numeric_dur = pd.to_numeric(ser_dur, errors="coerce").fillna(0.0)
+            if unidad == "minutos":
+                df_local["_dur_sec"] = numeric_dur * 60
+            elif unidad == "milisegundos":
+                df_local["_dur_sec"] = numeric_dur / 1000
+            else:
+                df_local["_dur_sec"] = numeric_dur
     else:
-        df_local["_dur_sec"] = 0
+        df_local["_dur_sec"] = np.nan
+
+    if col_tipo and col_tipo in df_local.columns:
+        hay_tipo_evento = bool(df_local[col_tipo].map(es_valor_significativo).any())
+    else:
+        hay_tipo_evento = False
 
     out: list[str] = []
     out.append('<section id="interacciones-recientes">')
     out.append('<h2>Filtrar interacciones por fecha</h2>')
     out.append(f'<p>Nota: Se muestran <strong>{len(fechas_sel)}</strong> día(s) con actividad.</p>')
+
+    if not bool(df_local["_contacto_valido"].any()):
+        out.append(
+            '<p class="nota-contacto"><em>Nota:</em> No se identificó contacto válido '
+            "en la bitácora.</p>"
+        )
+
+    if not hay_tipo_evento:
+        out.append(
+            '<p class="nota-tipo-evento"><em>Nota:</em> El tipo de evento no está '
+            "disponible en la bitácora.</p>"
+        )
+
+    if duracion_estado.estado == "ambigua":
+        out.append(
+            '<p class="nota-duracion"><em>Nota:</em> Duración no calculada: la unidad '
+            "de los valores reportados no pudo confirmarse.</p>"
+        )
+    elif duracion_estado.estado == "ausente":
+        out.append(
+            '<p class="nota-duracion"><em>Nota:</em> Duración no disponible: no se '
+            "identificó una columna de duración utilizable en la bitácora.</p>"
+        )
 
     fmin = min(fechas_sel)
     fmax = max(fechas_sel)
@@ -202,10 +253,17 @@ def construir_seccion_interacciones(
 
         fecha_h = pd.to_datetime(d).strftime("%d/%m/%Y")
         out.append(f'<div id="content-{pd.to_datetime(d).strftime("%Y-%m-%d")}" class="day-content" style="display:none;">')
-        out.append(f"<h3>Se muestran las interacciones del día: {fecha_h}</h3>")
+        if hay_tipo_evento:
+            out.append(f"<h3>Se muestran las interacciones del día: {fecha_h}</h3>")
+        else:
+            out.append(f"<h3>Se muestran los registros disponibles del día: {fecha_h}</h3>")
 
         total_dia = int(len(df_d))
-        dur_total_dia = _fmt_hms(df_d["_dur_sec"].sum() if "_dur_sec" in df_d.columns else 0)
+        dur_total_dia = (
+            _fmt_hms(df_d["_dur_sec"].sum() if "_dur_sec" in df_d.columns else 0)
+            if duracion_disponible
+            else None
+        )
 
         if total_dia > 0:
             if col_antena and (col_antena in df_d.columns):
@@ -222,11 +280,21 @@ def construir_seccion_interacciones(
             antenas_unicas = 0
             pct_sin_antena = 0.0
 
-        contactos_unicos = int(df_d["_contacto"].nunique()) if "_contacto" in df_d.columns else 0
+        contactos_unicos = (
+            int(df_d.loc[df_d["_contacto_valido"], "_contacto"].nunique())
+            if "_contacto_valido" in df_d.columns
+            else 0
+        )
+        kpi_label_registros = "Interacciones" if hay_tipo_evento else "Registros"
+        dur_kpi_html = (
+            f' &nbsp;|&nbsp; <span><strong>Duración:</strong> {dur_total_dia}</span>'
+            if duracion_disponible
+            else ""
+        )
         out.append(
             f'<p class="kpis-dia">'
-            f'<span><strong>Interacciones:</strong> {total_dia}</span>'
-            f' &nbsp;|&nbsp; <span><strong>Duración:</strong> {dur_total_dia}</span>'
+            f'<span><strong>{kpi_label_registros}:</strong> {total_dia}</span>'
+            f'{dur_kpi_html}'
             f' &nbsp;|&nbsp; <span><strong>Antenas únicas:</strong> {antenas_unicas}</span>'
             f' &nbsp;|&nbsp; <span><strong>Contactos únicos:</strong> {contactos_unicos}</span>'
             f' &nbsp;|&nbsp; <span><strong>Sin antena válida:</strong> {pct_sin_antena:.0f}%</span>'
@@ -244,7 +312,11 @@ def construir_seccion_interacciones(
         include_celda = bool(col_celda) and (col_celda in df_d.columns)
         out.append('<div class="tabla-scroll">')
         out.append('<table class="tabla-compacta">')
-        thead_cols = ["#", "contacto", "hora", "tipo de interacción", "duración", "antena", "lat", "long", "azimut"]
+        thead_cols = [
+            "#", "contacto", "hora",
+            "tipo de interacción" if hay_tipo_evento else "tipo de evento",
+            "duración", "antena", "lat", "long", "azimut",
+        ]
         if include_celda:
             thead_cols.append("celda")
         out.append('<thead><tr>' + ''.join(f'<th>{c}</th>' for c in thead_cols) + '</tr></thead><tbody>')
@@ -298,10 +370,13 @@ def construir_seccion_interacciones(
             return str(ant).strip() if str(ant).strip() else "—"
 
         for idx, (_, r) in enumerate(df_d.iterrows(), start=1):
-            contacto = str(r.get("_contacto", "SIN DETERMINAR"))
+            contacto = str(r.get("_contacto", "No disponible"))
             hora_val = _fmt_hora(r)
-            tipo_val = str(r.get(col_tipo, "")).strip() if col_tipo and (col_tipo in r.index) else "—"
-            dur_hms = _fmt_hms(r.get("_dur_sec", 0))
+            if col_tipo and (col_tipo in r.index) and es_valor_significativo(r.get(col_tipo)):
+                tipo_val = str(r.get(col_tipo)).strip()
+            else:
+                tipo_val = "No disponible"
+            dur_hms = _fmt_hms(r.get("_dur_sec", 0)) if duracion_disponible else "No disponible"
             ant_val = _ant_fmt_link(r.get(col_antena, ""), r.get(col_lat, None), r.get(col_long, None)) if col_antena else "—"
             lat_val = _fmt_coord(r.get(col_lat, None))
             long_val = _fmt_coord(r.get(col_long, None))
@@ -359,11 +434,15 @@ def construir_seccion_interacciones(
 
         try:
             if total_dia > 0:
-                agg = (
-                    df_d.groupby("_contacto")
-                    .agg(interacciones=("_contacto", "size"), dur_total=("_dur_sec", "sum"))
-                    .reset_index()
-                )
+                df_contactos_validos = df_d[df_d["_contacto_valido"]]
+                if not df_contactos_validos.empty:
+                    agg = (
+                        df_contactos_validos.groupby("_contacto")
+                        .agg(interacciones=("_contacto", "size"), dur_total=("_dur_sec", "sum"))
+                        .reset_index()
+                    )
+                else:
+                    agg = pd.DataFrame()
             else:
                 agg = pd.DataFrame()
         except Exception:
@@ -379,16 +458,17 @@ def construir_seccion_interacciones(
                     f"{prop_inter:.0%} del día ({int(top_row_inter['interacciones'])}/{total_dia})."
                 )
 
-        sum_dur = float(df_d["_dur_sec"].sum()) if "_dur_sec" in df_d.columns else 0.0
-        if sum_dur > 0 and not agg.empty:
-            agg_sorted_d = agg.sort_values(["dur_total", "interacciones"], ascending=[False, False])
-            top_row_dur = agg_sorted_d.iloc[0]
-            prop_dur = float(top_row_dur["dur_total"]) / sum_dur if sum_dur else 0.0
-            if prop_dur >= 0.60:
-                alertas.append(
-                    f"Concentración (duración): {_mask_contact(top_row_dur['_contacto'])} acumula "
-                    f"{prop_dur:.0%} del día ({_fmt_hms(top_row_dur['dur_total'])} de {_fmt_hms(sum_dur)})."
-                )
+        if duracion_disponible:
+            sum_dur = float(df_d["_dur_sec"].sum()) if "_dur_sec" in df_d.columns else 0.0
+            if sum_dur > 0 and not agg.empty:
+                agg_sorted_d = agg.sort_values(["dur_total", "interacciones"], ascending=[False, False])
+                top_row_dur = agg_sorted_d.iloc[0]
+                prop_dur = float(top_row_dur["dur_total"]) / sum_dur if sum_dur else 0.0
+                if prop_dur >= 0.60:
+                    alertas.append(
+                        f"Concentración (duración): {_mask_contact(top_row_dur['_contacto'])} acumula "
+                        f"{prop_dur:.0%} del día ({_fmt_hms(top_row_dur['dur_total'])} de {_fmt_hms(sum_dur)})."
+                    )
 
         try:
             if col_antena and (col_lat in df_d.columns) and (col_long in df_d.columns):

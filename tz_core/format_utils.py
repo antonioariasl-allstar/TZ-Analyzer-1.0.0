@@ -25,7 +25,7 @@ import re
 from decimal import Decimal
 from typing import Any, Optional
 
-from tz_core.bitacora_normalization import normalize_imei, parse_duration_seconds
+from tz_core.bitacora_normalization import normalize_imei, parse_duration_seconds, DuracionEstado
 
 # Import de validation_utils para a_float
 try:
@@ -40,25 +40,39 @@ except ImportError:
             return None
 
 
-def _formatear_valor_para_burbuja(col: str, val: Any) -> str:
+def _formatear_valor_para_burbuja(
+    col: str,
+    val: Any,
+    *,
+    duracion_estado: Optional[DuracionEstado] = None,
+) -> str:
     """
     Formatear valores según reglas específicas para burbujas KML/HTML.
-    
+
     Reglas por tipo de columna:
     - lat/long: 6 decimales de precisión
     - azimut/lac: enteros (sin .0) si son numéricos; texto si no
     - celda: entero si es numérica; texto si es alfanumérica (ej: "C102")
     - imei: limpieza de .0 y notación científica
-    - duracion: conversión segundos -> HH:MM:SS; preserva formato existente
+    - duracion: conversión segundos -> HH:MM:SS; preserva formato existente.
+      Si se recibe `duracion_estado` (Hito 2C/2D), la conversión respeta la
+      confiabilidad y unidad confirmadas: "segura" formatea según la unidad
+      (milisegundos/segundos/minutos/hhmmss); "ambigua" nunca muestra un
+      entero crudo como si fuera una duración confirmada; "ausente" omite
+      el valor. Milisegundos se normaliza a segundos (/1000) antes de
+      convertir a HH:MM:SS.
+      Sin `duracion_estado` (compatibilidad), conserva el comportamiento
+      histórico (asume segundos si el valor es numérico).
     - demás: string tal cual
-    
+
     Args:
         col: Nombre de la columna (usado para determinar reglas)
         val: Valor a formatear
-        
+        duracion_estado: resultado opcional de `clasificar_confiabilidad_duracion`
+
     Returns:
         str: Valor formateado según las reglas específicas
-        
+
     Examples:
         >>> _formatear_valor_para_burbuja("lat", 13.123456789)
         '13.123457'
@@ -97,6 +111,29 @@ def _formatear_valor_para_burbuja(col: str, val: Any) -> str:
 
     # duracion -> si es numérica (segundos) => HH:MM:SS; si ya trae "HH:MM[:SS]" se deja
     if col == "duracion":
+        if duracion_estado is not None:
+            if duracion_estado.estado == "ausente":
+                return None
+            if duracion_estado.estado == "ambigua":
+                return "unidad no confirmada"
+            # "segura": respeta la unidad confirmada, nunca asume segundos por defecto
+            unidad = duracion_estado.unidad
+            if unidad == "hhmmss" and ":" in s:
+                return s
+            secs = parse_duration_seconds(val, default=None)
+            if secs is None:
+                return None
+            if unidad == "minutos":
+                secs = secs * 60
+            elif unidad == "milisegundos":
+                secs = secs / 1000
+            f = int(round(secs))
+            h = f // 3600
+            m = (f % 3600) // 60
+            sec = f % 60
+            return f"{h:02d}:{m:02d}:{sec:02d}"
+
+        # Compatibilidad: sin duracion_estado, comportamiento histórico
         if ":" in s:
             return s
         secs = parse_duration_seconds(val, default=None)
@@ -116,20 +153,26 @@ def _formatear_valor_para_burbuja(col: str, val: Any) -> str:
 formatear_valor_para_burbuja = _formatear_valor_para_burbuja
 
 
-def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direccion_si_igual=True, 
-                              config=None, hr_compact='<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>') -> str:
+def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direccion_si_igual=True,
+                              config=None, hr_compact='<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>',
+                              *, duracion_estado: Optional[DuracionEstado] = None) -> str:
     """
     Construye descripción HTML compacta para burbujas KML.
-    
+
     MIGRADA DESDE: script_principal_bitacoras_refactory.py líneas 933-1100
-    
+
     Args:
         campos: Diccionario con datos del registro (antena, fecha, hora, etc.)
         count_azimut: Contador de activaciones para ese azimut (opcional)
         suprimir_direccion_si_igual: Si True, oculta línea "Direccion" cuando es idéntica a "Antena" (normalizado)
         config: Diccionario de configuración (opcional, para etiquetas personalizadas)
         hr_compact: Separador HTML horizontal
-        
+        duracion_estado: resultado opcional de `clasificar_confiabilidad_duracion`
+            (Hito 2C). Si se recibe, la línea "Duración" respeta el mismo
+            contrato que el informe HTML: "segura" formatea según la unidad
+            confirmada, "ambigua" nunca muestra el entero crudo y "ausente"
+            omite la línea.
+
     Returns:
         String HTML formateado para <description> del Placemark
     """
@@ -152,6 +195,8 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
         v = campos.get(col, None)
         if not tiene_valor(v):
             return None
+        if col == "duracion":
+            return _formatear_valor_para_burbuja(col, v, duracion_estado=duracion_estado)
         return _formatear_valor_para_burbuja(col, v)
 
     # Fila 1: Fecha · Hora

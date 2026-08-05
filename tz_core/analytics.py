@@ -33,7 +33,12 @@ FASE: 9B - Analytics (Riesgo Moderado)
 import os
 import pandas as pd
 
-from tz_core.bitacora_normalization import normalize_msisdn, parse_duration_seconds
+from tz_core.bitacora_normalization import (
+    normalize_msisdn,
+    parse_duration_seconds,
+    clasificar_confiabilidad_duracion,
+    DuracionEstado,
+)
 import numpy as np
 from datetime import time as _time, datetime as _dt
 from typing import List, Dict, Any, Optional, Tuple
@@ -266,7 +271,12 @@ def _fallback_todos_contactos(mensaje: str) -> str:
     )
 
 
-def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optional[Dict[str, str]] = None) -> str:
+def construir_seccion_todos_contactos(
+    df: pd.DataFrame,
+    columnas_config: Optional[Dict[str, str]] = None,
+    *,
+    duracion_estado: Optional[DuracionEstado] = None,
+) -> str:
     """
     Construye sección HTML 'Todos los contactos' separada en tres bloques P0-B.
 
@@ -277,6 +287,12 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
     Args:
         df: DataFrame con datos de contactos/llamadas
         columnas_config: Mapeo opcional de nombres de columnas
+        duracion_estado: resultado ya resuelto de `clasificar_confiabilidad_duracion`.
+            Si es None y no existe una columna "_sec" ya calculada por el
+            llamador, se calcula internamente sobre `df`. Solo se convierten
+            valores de la columna "duracion" a minutos reales cuando el
+            estado es "segura" (respetando unidad); si es "ambigua", no se
+            fabrican minutos a partir de enteros de unidad desconocida.
 
     Returns:
         String con HTML de la sección completa con tres bloques P0-B,
@@ -320,13 +336,33 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
         d = df.copy()
 
         # Calcular _sec sobre la copia completa antes de filtrar por categoría
+        duracion_ambigua_visible = False
         if "_sec" in d.columns:
+            # Contrato preexistente: el llamador ya entrega segundos resueltos.
             sec = pd.to_numeric(d["_sec"], errors="coerce").fillna(0)
         elif "duracion" in d.columns:
-            d_dur = d["duracion"].map(lambda x: parse_duration_seconds(x, default=0.0))
-            sec = pd.to_numeric(d_dur, errors="coerce").fillna(0)
+            if duracion_estado is None:
+                duracion_estado = clasificar_confiabilidad_duracion(
+                    df, columnas_config={"duracion": "duracion"}
+                )
+            if duracion_estado.estado == "segura":
+                unidad = duracion_estado.unidad
+                if unidad == "hhmmss":
+                    d_dur = d["duracion"].map(lambda x: parse_duration_seconds(x, default=0.0))
+                    sec = pd.to_numeric(d_dur, errors="coerce").fillna(0)
+                else:
+                    numeric_dur = pd.to_numeric(d["duracion"], errors="coerce").fillna(0.0)
+                    if unidad == "minutos":
+                        sec = numeric_dur * 60.0
+                    elif unidad == "milisegundos":
+                        sec = numeric_dur / 1000.0
+                    else:
+                        sec = numeric_dur
+            else:
+                sec = pd.Series(0, index=d.index)
+                duracion_ambigua_visible = True
         else:
-            sec = 0
+            sec = pd.Series(0, index=d.index)
         d["_sec"] = pd.to_numeric(sec, errors="coerce").fillna(0).astype(int)
 
         _MOTIVO_DISPLAY = {
@@ -370,6 +406,14 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
         # --- BLOQUE A: Contactos telefónicos plausibles ---
         da = d[d["contacto_categoria"] == "telefonico_plausible"].copy()
         out.append('<h3>Números con formato telefónico</h3>')
+        if duracion_ambigua_visible:
+            out.append(
+                '<p style="font-size:13px; color:#444; background:#f8f9fa; '
+                'border-left:3px solid #ccc; padding:6px 10px; margin-bottom:8px;">'
+                '<em>Nota:</em> Duración no calculada: la unidad de los valores '
+                'reportados no pudo confirmarse.'
+                '</p>'
+            )
         if da.empty:
             out.append(
                 '<p style="font-size:13px; color:#444;">'
@@ -394,12 +438,13 @@ def construir_seccion_todos_contactos(df: pd.DataFrame, columnas_config: Optiona
                 '</tr></thead><tbody>'
             )
             for i, row in tba.iterrows():
+                minutos_cell = "N/D" if duracion_ambigua_visible else f"{int(row['minutos']):,}"
                 out.append(
                     "<tr>"
                     f"<td class='mono' style='text-align:center'>{i + 1}</td>"
                     f"<td class='mono' style='text-align:center'>{_html.escape(_safe(row['contacto_norm']))}</td>"
                     f"<td class='mono' style='text-align:center'>{int(row['conteo']):,}</td>"
-                    f"<td class='mono' style='text-align:center'>{int(row['minutos']):,}</td>"
+                    f"<td class='mono' style='text-align:center'>{minutos_cell}</td>"
                     "</tr>"
                 )
             out.append("</tbody></table></div>")
