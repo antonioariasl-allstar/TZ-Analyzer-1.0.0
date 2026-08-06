@@ -1,5 +1,6 @@
 """Helpers for manual mapping wizard setup and execution."""
 
+import builtins
 from typing import Any, Dict, List, Optional, Tuple, Callable
 import warnings
 
@@ -41,11 +42,21 @@ def build_wizard_io(
     log_enabled_default: bool = True,
     log_debug: Optional[Callable[[str], None]] = None,
     log_info: Optional[Callable[[str], None]] = None,
-    input_fn=input,
+    input_fn: Optional[Callable[[str], str]] = None,
+    output_fn: Optional[Callable[[str], None]] = None,
 ) -> WizardIO:
-    """Create a WizardIO with optional logging hooks."""
+    """Create a WizardIO with optional logging hooks.
+
+    ``input_fn``/``output_fn`` se resuelven aquí, en tiempo de llamada, en
+    vez de quedar fijados como default de firma (``= input``) capturado en
+    tiempo de importación. Esto permite que un llamador no interactivo
+    inyecte ambos explícitamente sin depender de la referencia a
+    ``builtins.input``/``print`` vigente cuando se importó este módulo.
+    """
 
     log_enabled = log_enabled_default if log_to_system is None else bool(log_to_system)
+    resolved_input = input_fn if input_fn is not None else builtins.input
+    resolved_output = output_fn if output_fn is not None else builtins.print
 
     def _wizard_input(message: str) -> str:
         """Callback de entrada para el wizard con logging opcional."""
@@ -56,13 +67,13 @@ def build_wizard_io(
                 pass
 
         try:
-            return input_fn(message)
+            return resolved_input(message)
         except Exception:
             return ""
 
     def _wizard_output(message: str) -> None:
         """Callback de salida para el wizard con impresión y logging opcional."""
-        print(message)
+        resolved_output(message)
         if log_enabled and log_info:
             try:
                 log_info(message)

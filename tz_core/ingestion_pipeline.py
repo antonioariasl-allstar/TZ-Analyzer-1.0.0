@@ -31,6 +31,7 @@ from tz_core.bitacora_normalization import (
     DuracionEstado,
 )
 from tz_core.capabilities import Capacidad, CapabilitiesReport, detectar_capacidades
+from tz_core.exceptions import ArchivoNoProcesableError
 from tz_core.qc_engine import run_qc
 from tz_core.site_inference import agregar_sitio_analitico
 from tz_core.ui_utils import safe_input, UserCancelledError
@@ -210,11 +211,22 @@ def run_ingestion_pipeline(
     run_manual_mapping_fn: Optional[Callable[..., Any]] = None,
     config_path: str = "config.json",
     preguntar_unidad_duracion_fn: Callable[[], str] = preguntar_unidad_duracion_qc,
+    date_order_prompt_fn: Optional[Callable[[str], str]] = None,
+    qc_bloqueante_prompt_fn: Optional[Callable[[str], str]] = None,
 ) -> IngestionResult:
     """Ejecuta normalización de schema, QC manual opcional y filtros de tiempo.
 
     Devuelve el DataFrame listo para downstream junto con los filtros aplicados
     y cualquier lista de errores de validación devuelta por el validador.
+
+    ``date_order_prompt_fn``/``qc_bloqueante_prompt_fn`` resuelven, respectivamente,
+    la ambigüedad de orden de fechas y la confirmación ante un problema técnico
+    bloqueante detectado por QC. Si no se proporcionan (``None``), se resuelven
+    en tiempo de llamada a ``safe_input`` — el mismo comportamiento interactivo
+    histórico —, en vez de quedar fijados como default de firma (lo que
+    impediría a las pruebas parchear ``tz_core.ingestion_pipeline.safe_input``
+    y a un orquestador no interactivo inyectar la decisión sin invocar
+    ``input()``).
     """
 
     log = logger or (lambda _msg: None)
@@ -258,7 +270,7 @@ def run_ingestion_pipeline(
     dayfirst = resolve_date_dayfirst(
         df_norm,
         config=cfg,
-        prompt_fn=safe_input,
+        prompt_fn=date_order_prompt_fn if date_order_prompt_fn is not None else safe_input,
         output_fn=out,
     )
     df_norm = normalize_temporal_fields(df_norm, dayfirst=dayfirst)
@@ -317,10 +329,12 @@ def run_ingestion_pipeline(
     imprimir_resumen_capacidades(capabilities_report, output_fn=out)
 
     if not capabilities_report.procesable:
+        motivo = ", ".join(capabilities_report.bloqueos_globales)
         out("\n[BLOQUEADO] El archivo no tiene datos procesables — no se puede continuar.")
-        out(f"  Motivo: {', '.join(capabilities_report.bloqueos_globales)}")
-        import sys
-        sys.exit(0)
+        out(f"  Motivo: {motivo}")
+        raise ArchivoNoProcesableError(
+            f"El archivo no tiene datos procesables. Motivo: {motivo}"
+        )
 
     # Salvaguarda para errores técnicos reales no modelados como capacidades
     # (p.ej. una futura condición de run_qc distinta de la ausencia de campos
@@ -329,10 +343,12 @@ def run_ingestion_pipeline(
     # interaccion, fecha, hora, coordenadas o antena ausentes.
     if qc_result is not None and qc_result.bloqueante:
         out("\n⚠️  ADVERTENCIA: se detectó un problema técnico que puede comprometer el análisis.")
-        respuesta = safe_input("¿Desea continuar de todas formas? (S/N, C=cancelar): ").upper()
+        confirm_fn = qc_bloqueante_prompt_fn if qc_bloqueante_prompt_fn is not None else safe_input
+        respuesta = confirm_fn("¿Desea continuar de todas formas? (S/N, C=cancelar): ").upper()
         if respuesta != "S":
-            import sys
-            sys.exit(0)
+            raise ArchivoNoProcesableError(
+                "El análisis QC detectó un problema técnico bloqueante y no se confirmó continuar."
+            )
 
     time_filters: TimeFilterResult = apply_time_filter_prompt(
         option=time_filter_option,

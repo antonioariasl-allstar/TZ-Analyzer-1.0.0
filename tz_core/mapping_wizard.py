@@ -31,6 +31,7 @@ COMPATIBILIDAD:
 Mantiene firma exacta de _wizard_qc_mapeo() original para garantizar cero regresiones.
 """
 
+import builtins
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Set, Any, Callable, Sequence
 
@@ -43,8 +44,23 @@ from tz_core.field_roles import WIZARD_ORDER_PRIMARY, WIZARD_ORDER_SECONDARY
 class WizardIO:
     """Abstrae interacción de consola para permitir pruebas sin `input`/`print`."""
 
-    input_fn: Callable[[str], str] = input
-    output_fn: Callable[[str], None] = print
+    input_fn: Optional[Callable[[str], str]] = None
+    output_fn: Optional[Callable[[str], None]] = None
+
+    def __post_init__(self) -> None:
+        """Resuelve los defaults en tiempo de instanciación, no de importación.
+
+        Si ``input_fn``/``output_fn`` se fijaran como default de la firma
+        (``= input``), quedarían atados a la referencia de ``builtins.input``
+        vigente al importar este módulo, y un monkeypatch posterior de
+        ``builtins.input`` (p. ej. en pruebas, o en un futuro orquestador no
+        interactivo) no tendría efecto. Resolviendo aquí, cada instancia usa
+        el ``input``/``print`` vigente en el momento en que se crea.
+        """
+        if self.input_fn is None:
+            self.input_fn = builtins.input
+        if self.output_fn is None:
+            self.output_fn = builtins.print
 
     def prompt(self, message: str) -> str:
         """Obtiene entrada del usuario. Escribe 'C' para cancelar."""

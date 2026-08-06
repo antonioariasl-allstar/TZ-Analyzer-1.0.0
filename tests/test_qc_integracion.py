@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 from tz_core.capabilities import CapabilitiesReport
+from tz_core.exceptions import ArchivoNoProcesableError
 from tz_core.ingestion_pipeline import resolve_date_dayfirst, run_ingestion_pipeline
 from tz_core.manual_flow import TimeFilterResult
 
@@ -98,7 +99,7 @@ def test_bloqueante_respuesta_n_aborta(tmp_path):
                 score=20, bloqueante=True, resumen=["CRITICO: columna contacto ausente"]
             )
             with patch("tz_core.ingestion_pipeline.safe_input", return_value="N"):
-                with pytest.raises(SystemExit):
+                with pytest.raises(ArchivoNoProcesableError):
                     run_ingestion_pipeline(**_base_kwargs(df, tmp_path))
 
 
@@ -281,7 +282,7 @@ def test_dataframe_vacio_tras_validacion_aborta_por_capacidades(tmp_path):
 
     with _patch_time_filter(df):
         with patch("builtins.input") as mock_input:
-            with pytest.raises(SystemExit):
+            with pytest.raises(ArchivoNoProcesableError):
                 run_ingestion_pipeline(**kwargs)
             mock_input.assert_not_called()
 
@@ -299,5 +300,5 @@ def test_sin_datos_significativos_aborta_por_capacidades(tmp_path):
     kwargs["wizard_io_factory"] = lambda: _SkippingWizardIO()
 
     with _patch_time_filter(df):
-        with pytest.raises(SystemExit):
+        with pytest.raises(ArchivoNoProcesableError):
             run_ingestion_pipeline(**kwargs)

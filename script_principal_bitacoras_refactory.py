@@ -76,7 +76,7 @@ import warnings
 warnings.filterwarnings('ignore', category=UserWarning)
 warnings.filterwarnings('ignore', category=FutureWarning)
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -138,6 +138,7 @@ from tz_core.ui_utils import (
     UserCancelledError,
 )
 from tz_core.output_flow import prepare_output_setup
+from tz_core.exceptions import ArchivoNoProcesableError
 from tz_core.manual_flow import (
     normalize_and_validate_schema,
     apply_time_filter_prompt,
@@ -197,14 +198,28 @@ ALIAS_VISIBLES = {
 }
 
 
-def _build_wizard_io(log_to_system: Optional[bool] = None) -> WizardIO:
-    """Wrapper que reusa build_wizard_io con logging opcional controlado por env."""
+def _build_wizard_io(
+    log_to_system: Optional[bool] = None,
+    *,
+    input_fn: Optional[Callable[[str], str]] = None,
+    output_fn: Optional[Callable[[str], None]] = None,
+) -> WizardIO:
+    """Wrapper que reusa build_wizard_io con logging opcional controlado por env.
+
+    ``input_fn``/``output_fn`` se propagan explícitamente hacia
+    ``build_wizard_io`` en vez de depender de sus defaults `input`/`print`
+    capturados en tiempo de importación, para que un orquestador no
+    interactivo pueda inyectar ambos (p. ej. vía ``wizard_io_factory``) sin
+    tocar el flujo de consola existente.
+    """
 
     return _build_wizard_io_helper(
         log_to_system,
         log_enabled_default=WIZARD_IO_LOGGING_ENABLED,
         log_debug=log_debug,
         log_info=log_info,
+        input_fn=input_fn,
+        output_fn=output_fn,
     )
 
 # === SECCIÓN: WIZARD DE MAPEO DE COLUMNAS ===
@@ -662,26 +677,32 @@ def main():
     except Exception:
         schema_fields = {}
 
-    ingestion = run_ingestion_pipeline(
-        df=df,
-        config=CONFIG,
-        original_columns=cols_originales,
-        manual_qc_mapping=MANUAL_QC_MAPPING,
-        alias_visibles=ALIAS_VISIBLES,
-        wizard_io_factory=_build_wizard_io,
-        persist_synonym_fn=_persist_user_synonym,
-        validate_schema_fn=validate_schema_or_abort_local,
-        validar_datos_fn=validar_datos,
-        time_filter_option=opcion,
-        solicitar_filtros_fn=solicitar_filtros_tiempo,
-        aplicar_filtros_fn=aplicar_filtros_tiempo,
-        logger=log,
-        output_fn=print,
-        run_manual_mapping_fn=_run_manual_mapping,
-        preguntar_unidad_duracion_fn=lambda: preguntar_unidad_duracion_qc(
-            prompt_fn=_build_wizard_io().prompt
-        ),
-    )
+    try:
+        ingestion = run_ingestion_pipeline(
+            df=df,
+            config=CONFIG,
+            original_columns=cols_originales,
+            manual_qc_mapping=MANUAL_QC_MAPPING,
+            alias_visibles=ALIAS_VISIBLES,
+            wizard_io_factory=_build_wizard_io,
+            persist_synonym_fn=_persist_user_synonym,
+            validate_schema_fn=validate_schema_or_abort_local,
+            validar_datos_fn=validar_datos,
+            time_filter_option=opcion,
+            solicitar_filtros_fn=solicitar_filtros_tiempo,
+            aplicar_filtros_fn=aplicar_filtros_tiempo,
+            logger=log,
+            output_fn=print,
+            run_manual_mapping_fn=_run_manual_mapping,
+            preguntar_unidad_duracion_fn=lambda: preguntar_unidad_duracion_qc(
+                prompt_fn=_build_wizard_io().prompt
+            ),
+        )
+    except ArchivoNoProcesableError:
+        # run_ingestion_pipeline ya imprimió el motivo vía output_fn antes de
+        # lanzar la excepción; esto solo replica el sys.exit(0) histórico
+        # (aborto limpio, sin traceback) para preservar la salida del CLI.
+        sys.exit(0)
 
     df = ingestion.dataframe
     errores = ingestion.errores
