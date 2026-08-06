@@ -32,7 +32,7 @@ from tz_core.html.assembler import generar_informe_html
 from tz_core.kml_generator import generar_kml
 from tests.normalize_outputs import normalize_kml_from_kmz, normalize_html
 
-ROOT = os.path.dirname(os.path.dirname(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TESTS = os.path.join(ROOT, 'tests')
 DATA = os.path.join(TESTS, 'data')
 GOLDEN_DIR = os.path.join(TESTS, 'golden')
