@@ -264,34 +264,56 @@ def test_generar_informe_html_compatible_sin_capabilities_report(tmp_path):
     assert "Identificación no disponible" in limitaciones
 
 
-# ── Tarjeta compacta de capacidades (Tarea 6) ──────────────────────────────
+# ── Bloque "Capacidades analíticas" retirado (Pulido UX v1.1) ─────────────
+# La tarjeta compacta duplicaba información ya presente en "Limitaciones del
+# análisis"; se eliminó sin sustituto para no repetir contenido. Las tres
+# pruebas siguientes reemplazan (no simplemente eliminan) la cobertura previa
+# de la tarjeta: (1) el bloque ya no aparece bajo el Resumen Ejecutivo,
+# (2) "Limitaciones del análisis" sigue presente, y (3) capabilities_report
+# sigue gobernando su contenido (la desconexión de la tarjeta no desconectó
+# el pipeline de detección de capacidades).
 
-def test_resumen_capacidades_compacto_presente_y_no_duplica_limitaciones(tmp_path):
+def test_resumen_capacidades_ya_no_aparece_bajo_resumen_ejecutivo(tmp_path):
     df = _df_completa().drop(columns=["tel", "imei"])
     html_path = _generar(df, tmp_path)
     html = Path(html_path).read_text(encoding="utf-8")
 
-    assert 'id="resumen-capacidades"' in html
-    assert "Capacidades analíticas:" in html
-    assert "disponibles" in html and "no disponibles" in html
+    assert 'id="resumen-capacidades"' not in html
+    assert "Capacidades analíticas:" not in html
 
-    resumen_match = re.search(r'<div id="resumen-capacidades"[^>]*>(.*?)</div>', html, re.S)
-    assert resumen_match, "No se encontró la tarjeta de resumen de capacidades."
-    resumen = resumen_match.group(1)
-    # El resumen es compacto: no repite las frases largas de Limitaciones.
-    assert "número telefónico o IMEI utilizable" not in resumen
+    # El bloque no debe reaparecer en ningún punto del documento, no solo
+    # inmediatamente bajo el resumen ejecutivo.
+    assert html.count('id="resumen-capacidades"') == 0
 
 
-def test_resumen_capacidades_bitacora_completa_no_muestra_no_disponibles(tmp_path):
-    df = _df_completa()
+def test_limitaciones_del_analisis_sigue_presente_tras_retirar_capacidades(tmp_path):
+    df = _df_completa().drop(columns=["tel", "imei"])
     html_path = _generar(df, tmp_path)
     html = Path(html_path).read_text(encoding="utf-8")
 
-    resumen_match = re.search(r'<div id="resumen-capacidades"[^>]*>(.*?)</div>', html, re.S)
-    assert resumen_match
-    resumen = resumen_match.group(1)
-    assert "no disponibles" not in resumen
-    assert "parciales" not in resumen
+    assert 'id="limitaciones-analisis"' in html
+    assert "<h2>Limitaciones del análisis</h2>" in html
+    limitaciones = _extraer_limitaciones(html)
+    assert "número telefónico o IMEI utilizable" in limitaciones
+
+
+def test_capabilities_report_sigue_gobernando_limitaciones_sin_tarjeta(tmp_path):
+    """capabilities_report debe seguir siendo la única fuente de verdad para
+    "Limitaciones del análisis": la tarjeta compacta que antes leía el mismo
+    objeto ya no existe, pero el objeto sigue propagándose hasta el HTML."""
+    from tz_core.capabilities import detectar_capacidades
+
+    df = _df_completa()
+    df["hora"] = ""  # antenas/cronología parcial: hora ausente, fecha presente
+    reporte = detectar_capacidades(df)
+    assert reporte.capacidad("cronologia").estado == "parcial"
+
+    html_path = _generar(df, tmp_path, capabilities_report=reporte)
+    html = Path(html_path).read_text(encoding="utf-8")
+
+    assert 'id="resumen-capacidades"' not in html
+    limitaciones = _extraer_limitaciones(html)
+    assert "Hora no disponible" in limitaciones
 
 
 def test_generar_informe_html_usa_capabilities_report_provisto(tmp_path, monkeypatch):

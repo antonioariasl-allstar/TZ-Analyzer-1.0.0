@@ -33,12 +33,6 @@ from tz_core.bitacora_normalization import (
 from tz_core.html_helpers import fmt_imei_item
 from tz_core.time_utils import _to_datetime_series, _fmt_hms
 
-# Tarea 5 (P0-B) — etiqueta neutral para un contacto excluido del análisis
-# interpersonal (DATOS, IP, dominio, URL, APN, alfanumérico, código corto,
-# autocontacto, indeterminado). El valor original NO se muestra en su lugar
-# para no filtrar identificadores técnicos como si fueran un contacto.
-_ETIQUETA_NO_CONTACTO = "No es contacto interpersonal"
-
 
 def _resolver_clasificacion_contacto(
     df_local: pd.DataFrame,
@@ -310,8 +304,13 @@ def construir_seccion_interacciones(
             df_local["_contacto_categoria"] = _cat_p0b.reindex(df_local.index)
             df_local["_contacto_limpio"] = _limpio_p0b.reindex(df_local.index)
             df_local["_contacto_valido"] = df_local["_contacto_categoria"] == "telefonico_plausible"
+            # Esta tabla es el detalle cronológico de las interacciones: siempre
+            # muestra el valor original recibido en la bitácora, nunca la
+            # etiqueta P0-B (esa clasificación se reserva para rankings,
+            # perfiles, contactos únicos, alertas y "Todos los contactos").
             contacto_visible = raw_contacto.astype(str).str.strip()
-            df_local["_contacto"] = contacto_visible.where(df_local["_contacto_valido"], _ETIQUETA_NO_CONTACTO)
+            _raw_significativo = raw_contacto.map(es_valor_significativo)
+            df_local["_contacto"] = contacto_visible.where(_raw_significativo, "No disponible")
         else:
             # Sin ninguna evidencia de tipo de evento: no hay base para aplicar
             # la matriz P0-B (DESCONOCIDO nunca asciende a telefonico_plausible

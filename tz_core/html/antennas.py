@@ -190,7 +190,7 @@ def build_top_antennas_section(
         if df is None or df.empty:
             return (
                 '<section id="resumen-antenas">'
-                "<h2>Antenas más activadas</h2>"
+                "<h2>Antenas con mayor número de activaciones</h2>"
                 '<p class="nota">No se registraron eventos en esta bitácora. '
                 "Análisis de antenas no generado.</p>"
                 "</section>"
@@ -218,7 +218,7 @@ def build_top_antennas_section(
         if not col_ant:
             return (
                 '<section id="resumen-antenas">'
-                "<h2>Antenas más activadas</h2>"
+                "<h2>Antenas con mayor número de activaciones</h2>"
                 '<p class="nota">Campo de antena no mapeado en esta bitácora. '
                 "Análisis de antenas no generado.</p>"
                 "</section>"
@@ -247,7 +247,7 @@ def build_top_antennas_section(
         if dfv.empty:
             return (
                 '<section id="resumen-antenas">'
-                "<h2>Antenas más activadas</h2>"
+                "<h2>Antenas con mayor número de activaciones</h2>"
                 '<p class="nota">No se registraron antenas válidas para el período analizado. '
                 "Análisis de antenas no generado.</p>"
                 "</section>"
@@ -307,7 +307,8 @@ def build_top_antennas_section(
         tiene_mojibake = dfv[col_ant].astype(str).str.contains("?", regex=False).any()
         out: list[str] = []
         out.append('<section id="resumen-antenas">')
-        out.append(f'<h2>Antenas más activadas (Top {top_n})</h2>')
+        _titulo_antenas = "Antenas/Sitios" if hay_sitio_inferido else "Antenas"
+        out.append(f'<h2>{_titulo_antenas} con mayor número de activaciones (Top {top_n})</h2>')
         if tiene_mojibake:
             out.append(
                 '<div class="aviso-dato">'
@@ -315,7 +316,14 @@ def build_top_antennas_section(
                 "Esto puede deberse a la calidad del archivo de origen."
                 "</div>"
             )
-        out.append('<p class="nota"><b>Nota:</b> En esta sección se muestra un top list de las antenas más activadas en el periodo analizado; seguidamente se muestra la ubicación de esas antenas segun sus coordenadas.</p>')
+        _sujeto_nota_antenas = "antenas o sitios" if hay_sitio_inferido else "antenas"
+        out.append(
+            '<p class="nota"><b>Nota:</b> En esta sección se muestran las '
+            f'{_sujeto_nota_antenas} con mayor número de activaciones durante el período '
+            "analizado y su ubicación según las coordenadas registradas. Puede consultar la "
+            "ubicación en el mapa incorporado o hacer clic en el nombre de la antena para "
+            "abrirla en Google Maps.</p>"
+        )
         if hay_sitio_inferido:
             out.append(_nota_sitios_inferidos_html())
         _th_antena_top = "Antena/Sitio" if hay_sitio_inferido else "Antena"

@@ -289,24 +289,14 @@ def build_top_contacts_sections(
         n_ind = int((d["contacto_categoria"] == "indeterminado").sum())
         d_plaus = d[d["contacto_categoria"] == "telefonico_plausible"].copy()
 
-        # Nota de exclusiones: una sola vez, antes de la tabla de frecuencia
-        _nota_exclusion = (
-            "<p style='font-size:13px; color:#444; background:#f8f9fa; "
-            "border-left:3px solid #ccc; padding:6px 10px; margin-bottom:8px;'>"
-            "El ranking considera únicamente números con formato telefónico de ocho o más dígitos. "
-            "Los registros de datos, valores técnicos y números de menor longitud se conservan "
-            "en apartados separados."
-            "</p>"
-        )
-
         if d_plaus.empty:
             _msg_fallback = (
                 "<p class='small'>No se registraron números con formato telefónico "
                 "en el período analizado.</p>"
             )
-            top_contactos_cnt_html = _nota_exclusion + _msg_fallback
+            top_contactos_cnt_html = _msg_fallback
             if d_col:
-                top_contactos_dur_html = _nota_exclusion + _msg_fallback
+                top_contactos_dur_html = _msg_fallback
         else:
             d_plaus["_c_norm"] = (
                 d_plaus["contacto_limpio"].fillna("—").astype(str)
@@ -336,13 +326,13 @@ def build_top_contacts_sections(
                     f"</td></tr>"
                 )
             if rows:
-                top_contactos_cnt_html = _nota_exclusion + (
+                top_contactos_cnt_html = (
                     "<table class='tbl'>"
                     "<thead><tr><th class='right'>#</th><th>Contacto</th><th>Interacciones</th></tr></thead>"
                     "<tbody>" + "".join(rows) + "</tbody></table>"
                 )
             else:
-                top_contactos_cnt_html = _nota_exclusion + (
+                top_contactos_cnt_html = (
                     "<p class='small'>No se registraron números con formato telefónico "
                     "en el período analizado.</p>"
                 )
@@ -596,7 +586,15 @@ def interpretar_contactos(
         if "relacion_sostenida" in etiquetas:
             lineas.append(f"Contacto activo en {dias} días distintos del período analizado.")
         if "contacto_reciente" in etiquetas:
-            lineas.append(f"Última interacción registrada: {ult}.")
+            _ult_fmt = None
+            try:
+                _ult_ts = pd.to_datetime(ult, errors="coerce")
+                if pd.notna(_ult_ts):
+                    _ult_fmt = _ult_ts.strftime("%d/%m/%Y")
+            except Exception:
+                _ult_fmt = None
+            if _ult_fmt:
+                lineas.append(f"Última interacción registrada: {_ult_fmt}.")
 
         resultado[numero] = {
             "categoria":  categoria,

@@ -29,10 +29,10 @@ from tz_core.html_helpers import (
 )
 from tz_core.runtime_utils import collect_env_snapshot
 from tz_core.html_toc import apply_toc
-from tz_core.time_utils import to_datetime_silent, normalize_hour_to_hhmmss
+from tz_core.time_utils import to_datetime_silent, normalize_hour_to_hhmmss, format_seconds_hms
 from tz_core.analytics import generar_historial_cambios_antena
 from tz_core.file_utils import write_detailed_hashes_report
-from tz_core.interacciones_builder import construir_seccion_interacciones
+from tz_core.interacciones_builder import construir_seccion_interacciones, _valor_predominante
 from tz_core.bitacora_normalization import (
     parse_duration_seconds,
     sanitize_latlon,
@@ -63,6 +63,11 @@ def _construir_resumen_ejecutivo(
     df: "pd.DataFrame",
     top_antena: str,
     _log,
+    *,
+    duracion_estado: Optional[DuracionEstado] = None,
+    rango_str: str = "",
+    tel_val: Optional[str] = None,
+    imei_val: Optional[str] = None,
 ) -> str:
     """
     Construye el bloque HTML del resumen ejecutivo narrativo.
@@ -80,43 +85,106 @@ def _construir_resumen_ejecutivo(
     )
     try:
         _oraciones = []
-        _oraciones.append(
-            f"Durante el período analizado, el dispositivo registró "
-            f"<strong>{total}</strong> interacciones."
-        )
+
+        # --- Apertura: sujeto (número/IMEI/ninguno) + período (si es válido) + total ---
+        try:
+            if tel_val:
+                _sujeto_txt = f"La bitácora telefónica correspondiente al número {tel_val}"
+            elif imei_val:
+                _sujeto_txt = (
+                    f"La bitácora de la terminal telefónica identificada mediante el "
+                    f"IMEI {imei_val}"
+                )
+            else:
+                _sujeto_txt = "La bitácora analizada"
+
+            _periodo_valido = bool(
+                rango_str and rango_str != "Sin datos" and " — " in rango_str
+            )
+            if _periodo_valido:
+                _fecha_ini, _fecha_fin = (p.strip()[:10] for p in rango_str.split(" — ", 1))
+                _oraciones.append(
+                    f"{_sujeto_txt} comprende el período del {_fecha_ini} al {_fecha_fin}, "
+                    f"durante el cual se registraron <strong>{total}</strong> interacciones."
+                )
+            else:
+                _oraciones.append(
+                    f"{_sujeto_txt} comprende un total de <strong>{total}</strong> "
+                    f"interacciones registradas."
+                )
+        except Exception as exc:
+            _log(f"[WARN] resumen_ejecutivo_apertura: {exc}")
+            _oraciones.append(
+                f"La bitácora analizada comprende un total de <strong>{total}</strong> "
+                f"interacciones registradas."
+            )
+
+        # --- Contacto con mayor frecuencia y, si es confiable, con mayor duración ---
         try:
             if orden and metricas:
-                _ct_num = orden[0]
-                _ct_frec = metricas[_ct_num]["total_interacciones"]
-                _oraciones.append(
-                    f"El contacto con mayor frecuencia fue <strong>{_ct_num}</strong>, "
-                    f"con {_ct_frec} registros."
-                )
-        except Exception as exc:
-            _log(f"[WARN] resumen_ejecutivo_contacto: {exc}")
-        try:
-            if "hora" in df.columns and df["hora"].notna().any():
-                _horas = (
-                    pd.to_numeric(
-                        df["hora"].astype(str).str.extract(r"(\d{1,2}):\d{2}")[0],
-                        errors="coerce",
-                    ).dropna()
-                )
-                if not _horas.empty:
-                    _h = int(_horas.value_counts().idxmax())
-                    _h2 = (_h + 1) % 24
+                _ct_frec = orden[0]
+                _n_frec = metricas[_ct_frec]["total_interacciones"]
+
+                _ct_dur = None
+                _dur_seg = 0.0
+                if duracion_estado is not None and getattr(duracion_estado, "confiable", False):
+                    _candidatos_dur = [
+                        (k, float(v.get("total_duracion_seg", 0.0) or 0.0))
+                        for k, v in metricas.items()
+                    ]
+                    _candidatos_dur = [c for c in _candidatos_dur if c[1] > 0]
+                    if _candidatos_dur:
+                        _ct_dur, _dur_seg = max(_candidatos_dur, key=lambda c: c[1])
+
+                if _ct_dur is None:
                     _oraciones.append(
-                        f"La actividad se concentró principalmente en la franja "
-                        f"<strong>{_h:02d}:00\u2013{_h2:02d}:00</strong> horas."
+                        f"El contacto con mayor frecuencia fue <strong>{_ct_frec}</strong>, "
+                        f"con {_n_frec} registros."
+                    )
+                elif _ct_dur == _ct_frec:
+                    _oraciones.append(
+                        f"El contacto con mayor frecuencia fue <strong>{_ct_frec}</strong>, "
+                        f"con {_n_frec} registros. Este mismo contacto acumuló la mayor "
+                        f"duración de comunicación, con {format_seconds_hms(_dur_seg)}."
+                    )
+                else:
+                    _oraciones.append(
+                        f"El contacto con mayor frecuencia fue <strong>{_ct_frec}</strong>, "
+                        f"con {_n_frec} registros, mientras que <strong>{_ct_dur}</strong> "
+                        f"acumuló la mayor duración de comunicación, con "
+                        f"{format_seconds_hms(_dur_seg)}."
                     )
         except Exception as exc:
-            _log(f"[WARN] resumen_ejecutivo_hora: {exc}")
+            _log(f"[WARN] resumen_ejecutivo_contacto: {exc}")
+
+        # --- Antena/sitio con mayor número de activaciones ---
         try:
-            if top_antena and str(top_antena).strip() not in ("", "nan", "N/A"):
-                _oraciones.append(
-                    f"A nivel geográfico, las conexiones se registraron con mayor "
-                    f"recurrencia en <strong>{top_antena}</strong>."
-                )
+            if top_antena and str(top_antena).strip() not in ("", "nan", "N/A", "—"):
+                _es_sitio_inferido = False
+                try:
+                    _col_ant_kpi = (
+                        "antena_analitica" if "antena_analitica" in df.columns else "antena"
+                    )
+                    if "sitio_inferido" in df.columns and _col_ant_kpi in df.columns:
+                        _mask_top = (
+                            df[_col_ant_kpi].astype(str).str.strip() == str(top_antena).strip()
+                        )
+                        _es_sitio_inferido = bool(
+                            df.loc[_mask_top, "sitio_inferido"].fillna(False).astype(bool).any()
+                        )
+                except Exception:
+                    _es_sitio_inferido = False
+
+                if _es_sitio_inferido:
+                    _oraciones.append(
+                        f"El sitio inferido con mayor número de activaciones fue "
+                        f"<strong>{top_antena}</strong>."
+                    )
+                else:
+                    _oraciones.append(
+                        f"La antena con mayor número de activaciones fue "
+                        f"<strong>{top_antena}</strong>."
+                    )
         except Exception as exc:
             _log(f"[WARN] resumen_ejecutivo_antena: {exc}")
         if _oraciones:
@@ -134,50 +202,6 @@ def _construir_resumen_ejecutivo(
     except Exception as exc:
         _log(f"[WARN] resumen_ejecutivo: {exc}")
         return _FALLBACK
-
-
-_CAPACIDADES_EXCLUIDAS_DEL_RESUMEN = frozenset({"metadatos", "hashes"})
-
-
-def _construir_resumen_capacidades_html(capabilities_report) -> str:
-    """Tarjeta compacta de capacidades analíticas (Hito 4).
-
-    Resumen de una línea (disponibles/parciales/no disponibles); el detalle
-    de qué falta y por qué vive únicamente en "Limitaciones del análisis"
-    para no duplicar contenido.
-    """
-    if capabilities_report is None or not getattr(capabilities_report, "procesable", False):
-        return ""
-    try:
-        estados = [
-            cap.estado
-            for nombre, cap in capabilities_report.capacidades.items()
-            if nombre not in _CAPACIDADES_EXCLUIDAS_DEL_RESUMEN
-        ]
-    except Exception:
-        return ""
-    if not estados:
-        return ""
-
-    n_disponibles = estados.count("disponible")
-    n_parciales = estados.count("parcial")
-    n_no_disponibles = estados.count("no_disponible")
-
-    partes = [f"{n_disponibles} disponibles"]
-    if n_parciales:
-        partes.append(f"{n_parciales} parciales")
-    if n_no_disponibles:
-        partes.append(f"{n_no_disponibles} no disponibles")
-    detalle = " · ".join(partes)
-
-    return (
-        '<div id="resumen-capacidades" style="background:#f4f6f8;'
-        'border-left:4px solid var(--accent);padding:8px 16px;margin:8px 0 16px 0;'
-        'border-radius:4px;font-size:0.85em;color:#444;">'
-        f"<strong>Capacidades analíticas:</strong> {detalle}. "
-        'Ver detalle en «Limitaciones del análisis».'
-        "</div>"
-    )
 
 
 def generar_informe_html(
@@ -340,10 +364,38 @@ def generar_informe_html(
     except Exception:
         analisis_html = ""
 
-    resumen_ejecutivo_html = _construir_resumen_ejecutivo(
-        total, _orden, _metricas, df, top_antena, _log
+    # --- Sujeto analizado (número/IMEI), reutilizado en el resumen ejecutivo y en
+    #     la nota de la sección de contactos (misma fuente que "Número/IMEI analizado"
+    #     de tz_core.interacciones_builder). ---
+    _cfg_cols_sujeto = (config or {}).get("columnas", {}) if config is not None else {}
+    _col_tel_sujeto = pick_first_existing_column(df, [_cfg_cols_sujeto.get("tel"), "tel"])
+    _col_imei_sujeto = pick_first_existing_column(df, [_cfg_cols_sujeto.get("imei"), "imei"])
+    tel_val = _valor_predominante(df, _col_tel_sujeto)
+    imei_val = _valor_predominante(df, _col_imei_sujeto)
+    if imei_val:
+        imei_val = normalize_imei(fmt_imei_item(imei_val)) or imei_val
+
+    if tel_val:
+        _sujeto_contactos = " del número analizado"
+    elif imei_val:
+        _sujeto_contactos = " de la terminal analizada"
+    else:
+        _sujeto_contactos = ""
+    _nota_contactos_txt = (
+        f"Esta sección presenta los principales contactos{_sujeto_contactos} según dos "
+        "criterios independientes: recuento total de interacciones y duración acumulada "
+        "de las comunicaciones. Ambos rankings incluyen únicamente contactos válidos para "
+        "el análisis; los registros de datos, valores técnicos, códigos cortos y demás "
+        "valores excluidos se conservan en apartados separados para fines de trazabilidad."
     )
-    resumen_capacidades_html = _construir_resumen_capacidades_html(capabilities_report)
+
+    resumen_ejecutivo_html = _construir_resumen_ejecutivo(
+        total, _orden, _metricas, df, top_antena, _log,
+        duracion_estado=duracion_estado,
+        rango_str=rango_str,
+        tel_val=tel_val,
+        imei_val=imei_val,
+    )
 
     logo_html = build_logo_html(
         config if config is not None else None
@@ -464,7 +516,6 @@ def generar_informe_html(
     html = f"""{html_header}
 {body_header}
 {resumen_ejecutivo_html}
-{resumen_capacidades_html}
 {metadata_section}
 
 {kpi_section}
@@ -476,14 +527,14 @@ def generar_informe_html(
   
     <section>
     <h2>Contactos con más comunicación</h2>
-    <p class="nota"><b>Nota:</b> Esta sección presenta los principales contactos del número analizado según dos criterios independientes: recuento total de interacciones y duración acumulada de las comunicaciones. Cada tabla permite identificar patrones diferenciados en la dinámica de contacto.</p>
+    <p class="nota"><b>Nota:</b> {_nota_contactos_txt}</p>
     <div class="two">
       <div>
-        <h3 class="small">Top List por recuento de interacciones <span class="sub">(Top {_topC})</span></h3>
+        <h3 class="small">Ranking por número de interacciones <span class="sub">(Top {_topC})</span></h3>
         {top_contactos_cnt_html}
       </div>
       <div>
-        <h3 class="small">Top List por recuento de minutos acumulados <span class="sub">(Top {_topC})</span></h3>
+        <h3 class="small">Ranking por duración acumulada <span class="sub">(Top {_topC})</span></h3>
         {top_contactos_dur_html}
       </div>
     </div>
@@ -1006,8 +1057,7 @@ def generar_informe_html(
             # 2A) Insertar primero el HEATMAP (si existe) y luego mover
             #     el bloque "Contactos con más comunicación" inmediatamente
             #     después del heatmap. Si no hay heatmap, va debajo del resumen.
-            hdr_resumen = "<h2>Antenas más activadas"
-            idx_res = html.find(hdr_resumen)
+            idx_res = html.find('id="resumen-antenas"')
             if idx_res != -1:
                 # localizar bloque de "<h2>Contactos con más comunicación"
                 # primero busca con id, si no, por el H2 plano
@@ -1049,8 +1099,8 @@ def generar_informe_html(
                     if j_int != -1:
                         html = html[:j_int+10] + "\n" + sec_ant_rangos + html[j_int+10:]
                 else:
-                    # fallback: debajo de "Antenas más activadas"
-                    i = html.find(hdr_resumen)
+                    # fallback: debajo de "Antenas con mayor número de activaciones"
+                    i = html.find('id="resumen-antenas"')
                     if i != -1:
                         j = html.find("</section>", i)
                         if j != -1:
@@ -1577,7 +1627,7 @@ def generar_informe_html(
         if _has("meta"):
             _links.append('<a href="#meta">Metadatos</a>')
         if _has("resumen-antenas"):
-            _links.append('<a href="#resumen-antenas">Antenas más activadas</a>')
+            _links.append('<a href="#resumen-antenas">Antenas con mayor número de activaciones</a>')
         # Heatmap integrado en el resumen de antenas: no incluir enlace específico en el TOC.
         if _has("interacciones"):
             _links.append('<a href="#interacciones">Contactos con más comunicación</a>')

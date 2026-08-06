@@ -64,7 +64,7 @@ def test_antena_sin_hora_top_antenas_existe():
     df = _df_antena_sin_hora()
     html = build_top_antennas_section(df, config=None, overrides=None)
     assert "ANT-A" in html
-    assert "Antenas más activadas" in html
+    assert "Antenas con mayor número de activaciones" in html
 
 
 def test_antena_sin_hora_rango_horario_declara_ausencia():

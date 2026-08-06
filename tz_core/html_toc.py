@@ -21,7 +21,7 @@ def _collect_links(html: str) -> List[str]:
     if 'id="meta"' in html:
         links.append('<a href="#meta">Metadatos</a>')
     if 'id="resumen-antenas"' in html:
-        links.append('<a href="#resumen-antenas">Antenas más activadas</a>')
+        links.append('<a href="#resumen-antenas">Antenas con mayor número de activaciones</a>')
     if 'id="interacciones"' in html:
         links.append('<a href="#interacciones">Contactos con más comunicación</a>')
 

@@ -245,18 +245,13 @@ def generate_kpi_section(
     _interp_oraciones = []
     if ant_uniq > 1:
         _interp_oraciones.append(
-            "Se observa que el dispositivo registró actividad en múltiples antenas, "
+            "Las interacciones se distribuyeron entre múltiples antenas, "
             "lo que evidencia movilidad dentro del área analizada."
         )
     if top_pct >= 30.0:
         _interp_oraciones.append(
             "Se identifica concentración de actividad en una antena predominante, "
             "lo que puede sugerir un punto de permanencia recurrente."
-        )
-    if coord_invalidas > 0:
-        _interp_oraciones.append(
-            "Se registran interacciones sin coordenadas geográficas válidas, "
-            "lo que limita parcialmente el análisis de cobertura espacial."
         )
     _interp_kpi_html = (
         '<p style="font-size:0.88em;color:#555;margin:12px 0 0 0;line-height:1.6;">'
@@ -280,10 +275,6 @@ def generate_kpi_section(
       <div class="card">
         <div class="n">{ant_uniq:,}</div>
         <div class="label">{_label_ant_uniq}</div>
-      </div>
-      <div class="card">
-        <div class="n">{cel_uniq:,}</div>
-        <div class="label">{cel_label}</div>
       </div>
       <div class="card">
         <div class="n">{top_antena}</div>

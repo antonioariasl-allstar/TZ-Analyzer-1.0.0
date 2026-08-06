@@ -325,11 +325,20 @@ def test_caso15_limitaciones_distingue_parcial_de_no_disponible(tmp_path):
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Caso 16 — La tarjeta de capacidades cuenta "antenas" parcial correctamente
+# Caso 16 — La tarjeta compacta de "Capacidades analíticas" fue retirada
+# (Pulido UX v1.1); esta prueba reemplaza la cobertura previa del caso.
 # ─────────────────────────────────────────────────────────────────────────
 
-def test_caso16_tarjeta_capacidades_cuenta_parciales(tmp_path):
+def test_caso16_capacidades_parciales_sin_tarjeta_compacta(tmp_path):
+    """La tarjeta compacta que antes contaba estados parciales/no disponibles
+    fue retirada sin sustituto. Verifica que ya no aparece en el HTML y que
+    la capacidad "antenas" en estado "parcial" (sitios inferidos por
+    coordenadas) se sigue detectando correctamente y queda señalizada
+    únicamente en "Limitaciones del análisis" (texto completo en Caso 15)."""
     df_parcial = agregar_sitio_analitico(_make_df_sin_antena_con_coords(rows=3))
+    reporte = detectar_capacidades(df_parcial)
+    assert reporte.capacidad("antenas").estado == "parcial"
+
     html_path = generar_informe_html(
         df=df_parcial,
         archivo_kml=str(tmp_path / "no_existe.kml"),
@@ -338,11 +347,9 @@ def test_caso16_tarjeta_capacidades_cuenta_parciales(tmp_path):
         config={},
     )
     html = Path(html_path).read_text(encoding="utf-8")
-    m = re.search(r'<div id="resumen-capacidades"[^>]*>(.*?)</div>', html, re.S)
-    assert m, "No se encontró la tarjeta de capacidades en el HTML."
-    assert re.search(r"\b1 parciales?\b|\bparciales?\b", m.group(1)), (
-        "La tarjeta de capacidades debe reflejar al menos una capacidad parcial."
-    )
+    assert 'id="resumen-capacidades"' not in html
+    assert "Capacidades analíticas:" not in html
+    assert 'id="limitaciones-analisis"' in html
 
 
 # ─────────────────────────────────────────────────────────────────────────

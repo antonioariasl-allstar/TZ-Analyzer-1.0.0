@@ -61,8 +61,14 @@ def test_p0b_usa_contacto_limpio_como_clave_de_agrupacion():
 
 
 # ── NOTA DE EXCLUSIONES ─────────────────────────────────────────────────────
+# Pulido UX pre-empaquetado (Mejora 5): la nota de exclusiones por-tabla que
+# vivía aquí se retiró de build_top_contacts_sections(); ahora hay una sola
+# nota a nivel de sección en tz_core.html.assembler (evita la nota duplicada
+# que antes solo aparecía en el ranking por interacciones). Estos tests
+# verifican que la tabla ya no la incluye; la nota única se cubre en
+# tests/test_ux_pulido_pre_empaquetado.py::test_rankings_una_sola_nota_principal.
 
-def test_nota_con_ambos_tipos_excluidos():
+def test_tabla_no_incluye_nota_de_exclusiones_por_tabla():
     df = _df_p0b(
         categorias=[
             "telefonico_plausible", "telefonico_plausible",
@@ -72,38 +78,7 @@ def test_nota_con_ambos_tipos_excluidos():
         contactos_limpios=["70001234", "70005678", None, None, "700", "701"],
     )
     cnt_html, _, _ = build_top_contacts_sections(df)
-    assert "El ranking considera únicamente números con formato telefónico" in cnt_html
-
-
-def test_nota_solo_tecnicos_usa_estos():
-    df = _df_p0b(
-        categorias=["telefonico_plausible", "tecnico_no_personal", "tecnico_no_personal"],
-        contactos_limpios=["70001234", None, None],
-    )
-    cnt_html, _, _ = build_top_contacts_sections(df)
-    assert "El ranking considera" in cnt_html
-    assert "registros indeterminados" not in cnt_html
-
-
-def test_nota_solo_indeterminados_usa_estos():
-    df = _df_p0b(
-        categorias=["telefonico_plausible", "indeterminado", "indeterminado"],
-        contactos_limpios=["70001234", "700", "701"],
-    )
-    cnt_html, _, _ = build_top_contacts_sections(df)
-    assert "El ranking considera" in cnt_html
-    assert "registros técnicos" not in cnt_html
-
-
-def test_nota_siempre_visible_en_p0b():
-    df = _df_p0b(
-        categorias=["telefonico_plausible", "telefonico_plausible"],
-        contactos_limpios=["70001234", "70005678"],
-    )
-    cnt_html, _, _ = build_top_contacts_sections(df)
-    assert "registros técnicos" not in cnt_html
-    assert "registros indeterminados" not in cnt_html
-    assert "El ranking considera únicamente números con formato telefónico" in cnt_html
+    assert "El ranking considera únicamente números con formato telefónico" not in cnt_html
 
 
 # ── FALLBACK CUANDO NO HAY PLAUSIBLES ──────────────────────────────────────
@@ -117,13 +92,13 @@ def test_fallback_sin_telefonicos_menciona_formato_telefonico():
     assert "formato telefónico" in cnt_html
 
 
-def test_fallback_sin_telefonicos_incluye_nota_metodologica():
+def test_fallback_sin_telefonicos_no_incluye_nota_de_exclusiones_por_tabla():
     df = _df_p0b(
         categorias=["tecnico_no_personal", "indeterminado"],
         contactos_limpios=[None, "700"],
     )
     cnt_html, _, _ = build_top_contacts_sections(df)
-    assert "El ranking considera" in cnt_html
+    assert "El ranking considera" not in cnt_html
 
 
 # ── RAMA LEGACY ────────────────────────────────────────────────────────────

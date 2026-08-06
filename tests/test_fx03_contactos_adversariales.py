@@ -356,17 +356,65 @@ def test_red_imsi_like_no_asciende_automaticamente_a_plausible():
 # PRUEBAS ROJAS — RUTAS LEGACY (auditoría previa, confirmadas aquí con FX-03)
 # ═══════════════════════════════════════════════════════════════════════
 
-def test_red_interacciones_builder_cuenta_datos_como_contacto_unico():
-    """RED — interacciones_builder.py usa solo es_valor_significativo(), no
-    contacto_categoria. Un identificador DATOS/IP/dominio/URL/APN cuenta
-    como 'contacto único' del día y puede aparecer en la tabla como si
-    fuera un contacto interpersonal válido."""
+def test_interacciones_builder_muestra_valor_original_pese_a_clasificacion_tecnica():
+    """Pulido UX v1.1 (Cambio 1) — "Filtrar interacciones por fecha" es el
+    detalle cronológico de la bitácora: siempre muestra el valor original
+    recibido, aunque contacto_categoria lo excluya de rankings/perfiles
+    (DATOS/IP/dominio/URL/APN). La clasificación P0-B se preserva para el
+    KPI 'Contactos únicos' de esta misma tabla, que no debe contarlos."""
     df = _fx03_p0b_df()
     html = construir_seccion_interacciones(df, dias=1, columnas_config={})
-    # El HTML de interacciones no debería listar valores técnicos como contacto
-    assert "80012345" not in html, "Identificador DATOS apareció como contacto en interacciones_builder"
-    assert "192.168.1.15" not in html, "IPv4 apareció como contacto en interacciones_builder"
-    assert "internet.claro.sv" not in html, "Dominio apareció como contacto en interacciones_builder"
+    assert "80012345" in html, "Identificador DATOS debe mostrarse con su valor original"
+    assert "192.168.1.15" in html, "IPv4 debe mostrarse con su valor original"
+    assert "internet.claro.sv" in html, "Dominio debe mostrarse con su valor original"
+    # FX-03 tiene 8 filas telefonico_plausible pero 5 strings crudos distintos
+    # (los casos 1-4 son el mismo número en 4 formatos, contados por separado
+    # hoy — ver test_red_interacciones_builder_no_consolida_formatos_equivalentes).
+    assert "Contactos únicos:</strong> 5" in html, (
+        "El KPI 'Contactos únicos' debe seguir contando solo telefonico_plausible, "
+        "sin importar que los valores técnicos ahora se muestren en la tabla."
+    )
+
+
+def test_datos_dominante_no_genera_alerta_de_concentracion():
+    """Pulido UX v1.1 (Cambio 1, bullet 3) — un identificador DATOS que
+    domina las interacciones del día (80%) sigue mostrando su valor
+    original en la tabla, pero contacto_categoria=tecnico_no_personal lo
+    excluye de las alertas de "Concentración" (interacciones/duración):
+    esas alertas se calculan solo sobre _contacto_valido (P0-B), sin
+    cambios respecto al comportamiento previo a este pulido."""
+    df = pd.DataFrame({
+        "fecha": ["05/08/2026"] * 5,
+        "hora": [f"08:{i:02d}:00" for i in range(5)],
+        "tel": [TEL_INVESTIGADO] * 5,
+        "contacto": ["80099999", "80099999", "80099999", "80099999", "70011111"],
+        "interaccion": ["DATOS", "DATOS", "DATOS", "DATOS", "VOZ"],
+        "duracion": ["00:01:00"] * 5,
+        "antena": ["ANT-001"] * 5,
+        "lat": [13.7000] * 5,
+        "long": [-89.2000] * 5,
+        "azimut": [90] * 5,
+    })
+    df = normalize_event_fields(df, col_tipo="interaccion")
+    df = normalize_contact_fields(df)
+    fila = df[df["contacto"] == "80099999"].iloc[0]
+    assert fila["contacto_categoria"] == "tecnico_no_personal", (
+        "Precondición del caso: '80099999' debe clasificarse como técnico, no personal."
+    )
+
+    html = construir_seccion_interacciones(df, dias=1, columnas_config={})
+
+    # Bullet 1 — la tabla sigue mostrando el valor original pese a dominar el día.
+    assert "80099999" in html
+
+    # Bullet 3 — no debe presentarse como sujeto de una alerta de concentración.
+    import re
+    assert "Concentración (interacciones): 80099999" not in html
+    assert "Concentración (duración): 80099999" not in html
+    assert not re.search(r"80099999\s+(acumula|concentra)", html), (
+        "'80099999' no puede aparecer como sujeto de una afirmación de "
+        "concentración/ranking; es un identificador técnico, no un contacto."
+    )
 
 
 def test_red_interacciones_builder_no_consolida_formatos_equivalentes():
