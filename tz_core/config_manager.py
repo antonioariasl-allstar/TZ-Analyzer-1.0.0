@@ -88,10 +88,6 @@ def cargar_config() -> Dict[str, Any]:
         # En caso de cualquier error, retornar configuración por defecto
         return DEFAULT_CONFIG
 
-    def add_user_synonym(self, key, synonym):
-        """Agregar sinónimo definido por usuario"""
-        pass
-
 
 # === FUNCIONES DE BOOTSTRAP Y SINÓNIMOS ===
 

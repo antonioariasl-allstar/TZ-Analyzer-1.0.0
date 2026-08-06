@@ -74,6 +74,27 @@ def test_cargar_config_archivo_real():
     print("✅ PASS: Config.json real cargado correctamente")
 
 
+def test_cargar_config_tras_eliminar_codigo_muerto():
+    """Test que cargar_config sigue funcionando tras eliminar el add_user_synonym
+    anidado (inalcanzable) que vivía después de los returns del try/except."""
+    print("🧪 Testing cargar_config tras eliminar código muerto...")
+
+    import inspect
+
+    # La función ya no debe declarar un add_user_synonym anidado.
+    fuente = inspect.getsource(cargar_config)
+    assert "def add_user_synonym" not in fuente, (
+        "cargar_config no debe contener una definición anidada de add_user_synonym"
+    )
+
+    config = cargar_config()
+    assert isinstance(config, dict), "Debe retornar un diccionario"
+    assert "kml" in config, "Debe contener sección kml"
+    assert "azimuth_km" in config["kml"], "Debe contener azimuth_km"
+
+    print("✅ PASS: cargar_config funciona correctamente sin el código muerto")
+
+
 def test_default_config_structure():
     """Test que DEFAULT_CONFIG tiene la estructura esperada"""
     print("🧪 Testing estructura de DEFAULT_CONFIG...")
@@ -393,6 +414,7 @@ def main():
         test_default_config_structure,
         test_cargar_config_default,
         test_cargar_config_archivo_real,
+        test_cargar_config_tras_eliminar_codigo_muerto,
         test_normalize_key_for_synonyms,
         test_cfg_build_rename_map,
         test_log_function,
