@@ -324,6 +324,69 @@ def test_prompt_output_routing_handles_hex_and_folder_fallback():
     assert any("color hex" in msg.lower() for msg in outputs)
 
 
+def test_prompt_output_routing_folder_fallback_shows_explicit_notice():
+    """Cuando select_folder no entrega carpeta, debe avisarse explícitamente
+    con la ruta usada (además del mensaje [QC] Carpeta destino existente)."""
+    outputs: list[str] = []
+
+    routing = prompt_output_routing(
+        base_name="CASO_AUTO",
+        input_fn=lambda _prompt="": "",
+        output_fn=outputs.append,
+        sanitize_fn=lambda value: value or "CASO_AUTO",
+        select_folder=lambda: None,
+        cwd_fn=lambda: r"C:\Users\test\Documents\TZ Analyzer",
+        ensure_dir=lambda _path: None,
+        separate_kml=False,
+    )
+
+    assert routing.base_folder == r"C:\Users\test\Documents\TZ Analyzer"
+    aviso = [m for m in outputs if "No se seleccionó carpeta" in m]
+    assert len(aviso) == 1
+    assert r"C:\Users\test\Documents\TZ Analyzer" in aviso[0]
+
+
+def test_prompt_output_routing_no_fallback_notice_when_folder_selected():
+    """Cuando el usuario sí selecciona carpeta, no debe aparecer el aviso de
+    fallback (solo aplica cuando cwd_fn se usa)."""
+    outputs: list[str] = []
+
+    prompt_output_routing(
+        base_name="CASO_AUTO",
+        input_fn=lambda _prompt="": "",
+        output_fn=outputs.append,
+        sanitize_fn=lambda value: value or "CASO_AUTO",
+        select_folder=lambda: "/elegida",
+        cwd_fn=lambda: "/nunca-usada",
+        ensure_dir=lambda _path: None,
+        separate_kml=False,
+    )
+
+    assert not any("No se seleccionó carpeta" in m for m in outputs)
+
+
+def test_prompt_output_routing_suggested_folder_message_has_no_emoji():
+    """El texto '📁' debe haberse reemplazado por un marcador ASCII seguro
+    para consola cp1252 (ver ítem 3 del gate v1.1: encoding de consola)."""
+    outputs: list[str] = []
+
+    prompt_output_routing(
+        base_name="CASO_AUTO",
+        input_fn=lambda _prompt="": "",
+        output_fn=outputs.append,
+        sanitize_fn=lambda value: value or "CASO_AUTO",
+        select_folder=lambda: "/elegida",
+        cwd_fn=lambda: "/nunca-usada",
+        ensure_dir=lambda _path: None,
+        separate_kml=False,
+    )
+
+    joined = "\n".join(outputs)
+    assert "\U0001F4C1" not in joined  # 📁
+    assert "[CARPETA]" in joined
+    joined.encode("cp1252")  # no debe lanzar UnicodeEncodeError
+
+
 def test_summarize_outputs_prints_kml_and_kmz():
     messages: list[str] = []
 

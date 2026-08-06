@@ -405,6 +405,200 @@ def test_add_user_synonym_invalid_inputs():
     print("✅ PASS: Validación de entradas inválidas funciona")
 
 
+# ---------------------------------------------------------------------------
+# Gate pre-PyInstaller v1.1: config base/usuario en modo frozen
+# ---------------------------------------------------------------------------
+
+def _write_json(path, data):
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+
+
+def test_cargar_config_normal_mode_sigue_leyendo_config_repo():
+    """Modo normal: cargar_config debe seguir leyendo el config.json del repo
+    (comportamiento histórico, sin fusión de config de usuario)."""
+    assert getattr(sys, "frozen", False) is False
+
+    config = cargar_config()
+    assert "kml" in config
+    # _info/_ejemplo son las únicas claves de synonyms_user en el repo real
+    assert "_info" in (config.get("synonyms_user") or {})
+
+
+def test_cargar_config_frozen_lee_base_desde_meipass(tmp_path, monkeypatch):
+    """Modo frozen: la config base se lee desde sys._MEIPASS, no del repo."""
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    _write_json(bundle_dir / "config.json", {"kml": {"azimuth_km": 9.9}})
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle_dir), raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+
+    config = cargar_config()
+
+    assert config["kml"]["azimuth_km"] == 9.9
+
+
+def test_cargar_config_frozen_fusiona_synonyms_user_de_localappdata(tmp_path, monkeypatch):
+    """Modo frozen: synonyms_user del archivo de usuario se fusiona sobre la base,
+    conservando kml/branding/schema de la base intactos."""
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    _write_json(
+        bundle_dir / "config.json",
+        {
+            "kml": {"azimuth_km": 1.5},
+            "branding": {"logo_path": "logo.png"},
+            "schema": {"fields": {"lat": {}}},
+            "synonyms_user": {"_info": "no editar a mano"},
+        },
+    )
+
+    localappdata = tmp_path / "localappdata"
+    user_dir = localappdata / "TZ Analyzer"
+    user_dir.mkdir(parents=True)
+    _write_json(user_dir / "config.json", {"synonyms_user": {"numero": "tel"}})
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle_dir), raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
+
+    config = cargar_config()
+
+    assert config["kml"] == {"azimuth_km": 1.5}
+    assert config["branding"] == {"logo_path": "logo.png"}
+    assert config["schema"] == {"fields": {"lat": {}}}
+    assert config["synonyms_user"]["_info"] == "no editar a mano"
+    assert config["synonyms_user"]["numero"] == "tel"
+
+
+def test_add_user_synonym_frozen_escribe_solo_localappdata_y_no_toca_meipass(tmp_path, monkeypatch):
+    """Modo frozen: add_user_synonym debe escribir únicamente en LOCALAPPDATA,
+    sin modificar el config.json base (_MEIPASS)."""
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    base_config_path = bundle_dir / "config.json"
+    _write_json(base_config_path, {"kml": {"azimuth_km": 1.5}})
+    original_bytes = base_config_path.read_bytes()
+
+    localappdata = tmp_path / "localappdata"
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle_dir), raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
+
+    test_config = {"synonyms_user": {}}
+    result = add_user_synonym(test_config, "tel", "numero_telefono")
+
+    assert result["synonyms_user"]["numero_telefono"] == "tel"
+    # _MEIPASS no debe modificarse
+    assert base_config_path.read_bytes() == original_bytes
+    # Debe existir el archivo de usuario en LOCALAPPDATA
+    user_config_path = localappdata / "TZ Analyzer" / "config.json"
+    assert user_config_path.exists()
+    persisted = json.loads(user_config_path.read_text(encoding="utf-8"))
+    assert persisted["synonyms_user"]["numero_telefono"] == "tel"
+
+
+def test_add_user_synonym_frozen_segunda_carga_recupera_sinonimo(tmp_path, monkeypatch):
+    """Tras escribir un sinónimo en modo frozen, una segunda carga de config
+    (nuevo 'arranque' del proceso) debe recuperarlo."""
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    _write_json(bundle_dir / "config.json", {"kml": {"azimuth_km": 1.5}})
+
+    localappdata = tmp_path / "localappdata"
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle_dir), raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
+
+    # Primera "sesión": agrega el sinónimo
+    config_v1 = cargar_config()
+    add_user_synonym(config_v1, "tel", "numero_telefono")
+
+    # Segunda "sesión": nueva carga desde cero
+    config_v2 = cargar_config()
+    assert config_v2["synonyms_user"]["numero_telefono"] == "tel"
+
+
+def test_add_user_synonym_frozen_json_usuario_corrupto_continua_con_advertencia(tmp_path, monkeypatch, capsys):
+    """Archivo de usuario corrupto: cargar_config no debe fallar, debe continuar
+    con advertencia visible en consola."""
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    _write_json(bundle_dir / "config.json", {"kml": {"azimuth_km": 1.5}})
+
+    localappdata = tmp_path / "localappdata"
+    user_dir = localappdata / "TZ Analyzer"
+    user_dir.mkdir(parents=True)
+    (user_dir / "config.json").write_text("{esto no es json", encoding="utf-8")
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle_dir), raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
+
+    config = cargar_config()
+
+    assert config["kml"]["azimuth_km"] == 1.5  # sigue funcionando con la base
+    captured = capsys.readouterr()
+    assert "no se pudo leer" in captured.out.lower()
+
+
+def test_add_user_synonym_frozen_permission_error_al_escribir_genera_advertencia(tmp_path, monkeypatch, capsys):
+    """PermissionError al escribir el archivo de usuario: debe avisar visible/
+    capturable en consola, sin lanzar excepción."""
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+
+    def _boom(*args, **kwargs):
+        raise PermissionError("acceso denegado")
+
+    monkeypatch.setattr("tz_core.user_paths.tempfile.mkstemp", _boom)
+
+    test_config = {"synonyms_user": {}}
+    # No debe lanzar excepción
+    result = add_user_synonym(test_config, "tel", "numero_telefono")
+
+    assert result["synonyms_user"]["numero_telefono"] == "tel"  # en memoria sí se agrega
+    captured = capsys.readouterr()
+    assert "no se pudo guardar" in captured.out.lower()
+
+
+def test_add_user_synonym_archivo_usuario_ausente_no_falla(tmp_path, monkeypatch):
+    """Primera ejecución sin archivo de usuario previo: no debe fallar."""
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    _write_json(bundle_dir / "config.json", {"kml": {"azimuth_km": 1.5}})
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle_dir), raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata_nuevo"))
+
+    config = cargar_config()
+    assert config["kml"]["azimuth_km"] == 1.5
+
+
+def test_config_json_repo_conserva_hash_identico_tras_operaciones_frozen(tmp_path, monkeypatch):
+    """Ejercitar el flujo frozen no debe tocar el config.json real del repo."""
+    import hashlib
+
+    repo_config = Path(__file__).resolve().parent.parent.parent / "config.json"
+    hash_before = hashlib.sha256(repo_config.read_bytes()).hexdigest()
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path / "bundle_inexistente"), raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+
+    # cargar_config con _MEIPASS inválido cae a DEFAULT_CONFIG (no toca el repo)
+    cargar_config()
+    add_user_synonym({"synonyms_user": {}}, "tel", "numero_telefono")
+
+    hash_after = hashlib.sha256(repo_config.read_bytes()).hexdigest()
+    assert hash_before == hash_after
+
+
 def main():
     """Ejecutar todos los tests"""
     print("🏗️  TESTS UNITARIOS - tz_core.config_manager")

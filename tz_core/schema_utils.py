@@ -558,7 +558,17 @@ def run_schema_location_assistant(
                 columns_menu.append(real_target)
 
     def _persist_config_snapshot() -> None:
-        """Persiste snapshot del config dict actual a archivo JSON sin modificar sinónimos."""
+        """Persiste snapshot del config dict actual a archivo JSON sin modificar sinónimos.
+
+        NOTA (v1.1, condición legacy): esta rama solo se ejecuta cuando
+        `run_schema_location_assistant` es invocada con `manual_qc_mapping=False`
+        desde `tz_core.manual_flow.normalize_and_validate_schema`. En el flujo
+        de producción actual `MANUAL_QC_MAPPING = True` (script_principal_*.py),
+        por lo que esta escritura está dormida hoy — se conserva intacta y no
+        se refactoriza. No tiene relación con el helper de config de usuario de
+        `tz_core.user_paths` (LOCALAPPDATA): ese helper nunca invoca esta función
+        ni el `config_path="config.json"` por defecto que usa.
+        """
         if not (isinstance(config_dict, Mapping) and config_path):
             return
         with open(config_path, "w", encoding="utf-8") as handle:

@@ -367,7 +367,7 @@ def prompt_output_routing(
     """Gestiona el rename opcional, carpeta destino y rutas finales de salida."""
 
     output_fn("[QC] Carpeta sugerida por TZ Analyzer:")
-    output_fn(f"  📁 {base_name}\n")
+    output_fn(f"  [CARPETA] {base_name}\n")
     output_fn("[QC] Se generarán estos archivos:")
     output_fn(f"  - {base_name}_informe.html")
     output_fn(f"  - {base_name}_mapeo.kmz")
@@ -398,6 +398,7 @@ def prompt_output_routing(
         carpeta_base = ""
     if not carpeta_base:
         carpeta_base = cwd_fn()
+        output_fn(f"No se seleccionó carpeta. Se utilizará: {carpeta_base}")
     output_fn(f"[QC] Carpeta destino: {carpeta_base}")
 
     case_folder = nombre_salida

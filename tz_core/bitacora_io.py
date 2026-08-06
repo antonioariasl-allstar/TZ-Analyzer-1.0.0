@@ -11,6 +11,7 @@ import os
 from typing import Optional
 
 from tz_core.ui_utils import safe_input, UserCancelledError
+from tz_core.user_paths import default_output_cwd_fn
 
 try:  # pragma: no cover - depende del entorno (Tkinter)
     from .ui_utils import seleccionar_archivo as _sel_archivo
@@ -34,7 +35,9 @@ def seleccionar_archivo(titulo: str = "Seleccionar bitácora Excel") -> Optional
 
 
 def seleccionar_carpeta(titulo: str = "Seleccionar carpeta de salida") -> Optional[str]:
-    """Devuelve ruta de carpeta; Tkinter si existe, de lo contrario consola con cwd por defecto."""
+    """Devuelve ruta de carpeta; Tkinter si existe, de lo contrario consola con
+    fallback seguro por defecto (ver tz_core.user_paths.default_output_cwd_fn:
+    cwd en modo normal, Documents\\TZ Analyzer en modo frozen — nunca cwd)."""
     if _sel_carpeta:
         try:
             return _sel_carpeta(titulo=titulo)
@@ -43,7 +46,7 @@ def seleccionar_carpeta(titulo: str = "Seleccionar carpeta de salida") -> Option
         except Exception:
             pass
     ruta = safe_input("Ruta de la carpeta de salida (Enter=actual, C=cancelar): ").strip('"')
-    return ruta if ruta else os.getcwd()
+    return ruta if ruta else default_output_cwd_fn()
 
 
 def ensure_dir(path: str) -> str:
@@ -56,8 +59,17 @@ def ensure_dir(path: str) -> str:
 
 
 def seleccionar_carpeta_salida(titulo: str = "Seleccionar carpeta de salida") -> str:
-    """Selecciona carpeta de salida y garantiza que exista."""
-    carpeta = seleccionar_carpeta(titulo=titulo) or os.getcwd()
+    """Selecciona carpeta de salida y garantiza que exista.
+
+    Si el usuario cancela la selección (diálogo Tkinter), cae a la carpeta
+    de salida predeterminada: modo normal preserva el comportamiento
+    histórico (cwd); modo frozen nunca usa cwd, resuelve/crea
+    Documents\\TZ Analyzer (ver tz_core.user_paths.default_output_cwd_fn).
+    """
+    carpeta = seleccionar_carpeta(titulo=titulo)
+    if not carpeta:
+        carpeta = default_output_cwd_fn()
+        print(f"No se seleccionó carpeta. Se utilizará: {carpeta}")
     return ensure_dir(carpeta)
 
 

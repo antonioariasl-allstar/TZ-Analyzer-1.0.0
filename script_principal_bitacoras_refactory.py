@@ -88,6 +88,7 @@ import pandas as pd
 # No modificar comportamientos aquí sin coordinar con los módulos extraídos; si se
 # refactoriza, moverlos a una capa de compatibilidad y deprecarlos de forma
 # controlada.
+from tz_core.user_paths import default_output_cwd_fn
 from tz_core.bitacora_io import (
     seleccionar_archivo,
     seleccionar_carpeta_salida,
@@ -728,7 +729,7 @@ def main():
         collect_top_overrides=collect_top_overrides,
         prompt_output_routing=prompt_output_routing,
         select_folder=seleccionar_carpeta_salida,
-        cwd_fn=os.getcwd,
+        cwd_fn=default_output_cwd_fn,
         ensure_dir=ensure_dir,
     )
 
@@ -801,7 +802,7 @@ def main():
         logger=log,
         output_fn=print,
         path_exists=os.path.exists,
-        cwd_fn=os.getcwd,
+        cwd_fn=default_output_cwd_fn,
         log_file_path=None,
         set_interactions_section=lambda _html: None,
         set_contacts_section=lambda _html: None,

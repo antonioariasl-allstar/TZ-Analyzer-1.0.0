@@ -81,7 +81,15 @@ def cargar_config() -> Dict[str, Any]:
         except Exception:
             # Fallo en blindaje no es crítico
             pass
-        
+
+        # Modo frozen: fusionar synonyms_user del archivo de usuario
+        # (%LOCALAPPDATA%\TZ Analyzer\config.json) sobre el config base.
+        # En modo normal no se toca nada (comportamiento histórico intacto).
+        if getattr(sys, "frozen", False):
+            from tz_core.user_paths import load_user_config, merge_user_config
+            user_cfg = load_user_config(warn=log)
+            cfg = merge_user_config(cfg, user_cfg)
+
         return cfg
         
     except Exception:
@@ -286,24 +294,32 @@ def add_user_synonym(CONFIG: dict, canonico: str, encabezado_crudo: str, ruta_cf
     # Agregar sinónimo si no existe ya
     if encabezado_crudo not in CONFIG["synonyms_user"]:
         CONFIG["synonyms_user"][encabezado_crudo] = canonico
-        
-        # Persistir automáticamente en config.json
-        try:
-            import os
-            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Subir 2 niveles desde tz_core/
-            ruta_cfg = ruta_cfg or os.path.join(base, "config.json")
-            atomic_write_json(ruta_cfg, CONFIG)
-            
-            try: 
-                log(f"[INFO][synonyms] Añadido '{encabezado_crudo}' → '{canonico}' (persistido en config.json).")
-            except Exception: 
-                pass
-        except Exception as e:
-            try: 
-                log(f"[WARN][synonyms] No se pudo guardar config.json: {e}")
-            except Exception: 
-                pass
-    
+
+        if getattr(sys, "frozen", False):
+            # Modo frozen: persistir SOLO en el archivo de usuario
+            # (%LOCALAPPDATA%\TZ Analyzer\config.json). Nunca se escribe en
+            # config base ni en sys._MEIPASS.
+            from tz_core.user_paths import write_user_synonym
+            write_user_synonym(canonico, encabezado_crudo, warn=log)
+        else:
+            # Modo normal: comportamiento histórico intacto (persiste en
+            # config.json del repo, o en ruta_cfg si se indica explícitamente).
+            try:
+                import os
+                base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Subir 2 niveles desde tz_core/
+                ruta_cfg = ruta_cfg or os.path.join(base, "config.json")
+                atomic_write_json(ruta_cfg, CONFIG)
+
+                try:
+                    log(f"[INFO][synonyms] Añadido '{encabezado_crudo}' → '{canonico}' (persistido en config.json).")
+                except Exception:
+                    pass
+            except Exception as e:
+                try:
+                    log(f"[WARN][synonyms] No se pudo guardar config.json: {e}")
+                except Exception:
+                    pass
+
     return CONFIG
 
 

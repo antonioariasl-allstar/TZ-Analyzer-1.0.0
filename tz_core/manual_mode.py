@@ -36,6 +36,7 @@ from collections import Counter
 
 from tz_core.logging_utils import log
 from tz_core.utils import sanear_nombre_archivo
+from tz_core.user_paths import is_frozen, resolve_default_output_dir
 
 
 def modo_manual(config: dict):
@@ -248,7 +249,7 @@ def modo_manual(config: dict):
                     "long": lon,
                     "azimut": None,  # sin orientación
                 })
-                print("✓ Punto agregado.")
+                print("[OK] Punto agregado.")
             else:
                 # Antena/Celda
                 antena = _input_str("Nombre de la antena (recomendado corto): ", True, 120)
@@ -284,7 +285,7 @@ def modo_manual(config: dict):
                     "tel_contacto": tel_contacto,
                     "duracion": duracion
                 })
-                print("✓ Registro agregado.")
+                print("[OK] Registro agregado.")
             continue
 
         if op == "G":
@@ -310,8 +311,14 @@ def modo_manual(config: dict):
                 carpeta_base = None
 
             if not carpeta_base:
-                print("[QC] Selección de carpeta cancelada. Operación abortada.")
-                return
+                if is_frozen():
+                    # Modo frozen: nunca abortar por cancelación ni caer en
+                    # os.getcwd(); se usa la carpeta de salida predeterminada.
+                    carpeta_base = resolve_default_output_dir()
+                    print(f"No se seleccionó carpeta. Se utilizará: {carpeta_base}")
+                else:
+                    print("[QC] Selección de carpeta cancelada. Operación abortada.")
+                    return
 
             print(f"[QC] Carpeta destino: {carpeta_base}")
 
