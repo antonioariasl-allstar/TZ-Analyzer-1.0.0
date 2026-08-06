@@ -51,9 +51,20 @@ def prepare_report_metrics(
     coord_validas = int(valid_coord)
     coord_invalidas = int(total - coord_validas)
 
-    # antenas únicas (mismo filtro que la tabla: sin nombres inválidos y con coords válidas)
-    if "antena" in df.columns:
-        s_ant = df["antena"].astype(str).str.strip()
+    # antenas/sitios únicos (HITO 2B: antena_analitica prioriza antena real
+    # sobre el identificador SITIO_<lat>_<long> inferido por coordenadas —
+    # ver tz_core.site_inference — cayendo a "antena" cuando la columna
+    # derivada no existe, p.ej. DataFrames que no pasaron por el pipeline de
+    # ingesta). Mismo filtro que la tabla: sin nombres inválidos y con coords
+    # válidas; nunca cuenta placeholders ni mezcla sitios inferidos distintos,
+    # porque antena_analitica ya es un identificador único por antena/sitio.
+    col_ant_kpi = "antena_analitica" if "antena_analitica" in df.columns else "antena"
+    hay_sitio_inferido = bool(
+        "sitio_inferido" in df.columns
+        and df["sitio_inferido"].fillna(False).astype(bool).any()
+    )
+    if col_ant_kpi in df.columns:
+        s_ant = df[col_ant_kpi].astype(str).str.strip()
         invalid_names = {"", "0", "null", "none", "nan", "sin inf", "sin inf.", "s/i"}
         m_name = ~s_ant.str.lower().isin(invalid_names)
 
@@ -75,7 +86,7 @@ def prepare_report_metrics(
     else:
         ant_uniq = 0
         top_antena, top_count, top_pct = "—", 0, 0.0
-        print(f"Antenas únicas (KPI): {ant_uniq} — Top antena: {top_antena} ({top_count})")
+        print(f"Antenas/Sitios únicos (KPI): {ant_uniq} — Top antena: {top_antena} ({top_count})")
 
     # celdas únicas (robusto: usa LAC+CID si ambos; si no, el que exista)
     cel_label = "Celdas (CID) únicas"
@@ -173,6 +184,7 @@ def prepare_report_metrics(
         "coord_validas": coord_validas,
         "coord_invalidas": coord_invalidas,
         "ant_uniq": ant_uniq,
+        "hay_sitio_inferido": hay_sitio_inferido,
         "top_antena": top_antena,
         "top_count": top_count,
         "top_pct": top_pct,
@@ -185,15 +197,16 @@ def prepare_report_metrics(
 
 
 def generate_kpi_section(
-    total: int, 
-    coord_validas: int, 
-    coord_invalidas: int, 
-    ant_uniq: int, 
-    cel_uniq: int, 
+    total: int,
+    coord_validas: int,
+    coord_invalidas: int,
+    ant_uniq: int,
+    cel_uniq: int,
     cel_label: str,
-    top_antena: str, 
-    top_count: int, 
-    top_pct: float
+    top_antena: str,
+    top_count: int,
+    top_pct: float,
+    hay_sitio_inferido: bool = False,
 ) -> str:
     """
     Genera la sección de KPIs/Indicadores del HTML con tarjetas de métricas clave.
@@ -217,7 +230,10 @@ def generate_kpi_section(
         top_antena (str): Identificador de la antena más frecuente
         top_count (int): Número de registros de la antena top
         top_pct (float): Porcentaje que representa la antena top del total
-        
+        hay_sitio_inferido (bool): True si al menos un antena/sitio contado
+            fue inferido por coordenadas (HITO 2B). Cambia la etiqueta de la
+            tarjeta a "Antenas/Sitios únicos" en vez de "Antenas únicas".
+
     Returns:
         str: HTML completo de la sección de indicadores KPI
         
@@ -247,6 +263,7 @@ def generate_kpi_section(
         + " ".join(_interp_oraciones)
         + "</p>"
     ) if _interp_oraciones else ""
+    _label_ant_uniq = "Antenas/Sitios únicos" if hay_sitio_inferido else "Antenas únicas"
     return f"""  <section>
     <h2>Indicadores</h2>
     <div class="kpis">
@@ -262,7 +279,7 @@ def generate_kpi_section(
 
       <div class="card">
         <div class="n">{ant_uniq:,}</div>
-        <div class="label">Antenas únicas</div>
+        <div class="label">{_label_ant_uniq}</div>
       </div>
       <div class="card">
         <div class="n">{cel_uniq:,}</div>

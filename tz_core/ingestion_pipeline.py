@@ -32,6 +32,7 @@ from tz_core.bitacora_normalization import (
 )
 from tz_core.capabilities import Capacidad, CapabilitiesReport, detectar_capacidades
 from tz_core.qc_engine import run_qc
+from tz_core.site_inference import agregar_sitio_analitico
 from tz_core.ui_utils import safe_input, UserCancelledError
 
 
@@ -282,6 +283,15 @@ def run_ingestion_pipeline(
             encabezado_original=duracion_encabezado_original,
             unidad_declarada=unidad_respuesta,
         )
+
+    # --- Inferencia de identidad analítica de sitio (HITO 2A) — se ejecuta
+    # una sola vez, después de la normalización/mapeo/validación técnica y
+    # antes de detectar_capacidades/run_qc, para que ambos consumidores vean
+    # ya antena_analitica/sitio_inferido. Resuelve columnas por los nombres
+    # canónicos (antena/lat/long) ya normalizados arriba; no muta df_norm ni
+    # sobrescribe la antena original.
+    bbox_cfg = ((cfg.get("geografia") or {}).get("sv_bbox"))
+    df_norm = agregar_sitio_analitico(df_norm, bbox=bbox_cfg)
 
     # --- Capacidades analíticas (HITO 2) — se calcula una sola vez, con el
     # df normalizado y la duracion_estado ya definitiva, y se reutiliza tanto

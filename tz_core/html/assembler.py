@@ -51,7 +51,9 @@ from .antennas import (
     resolve_top_antennas_n,
     build_antennas_table,
     build_top_antennas_section,
-    build_antennas_by_hour_section
+    build_antennas_by_hour_section,
+    NOTA_SITIOS_INFERIDOS,
+    _BADGE_SITIO_INFERIDO,
 )
 
 def _construir_resumen_ejecutivo(
@@ -238,6 +240,7 @@ def generar_informe_html(
     coord_validas = metrics["coord_validas"]
     coord_invalidas = metrics["coord_invalidas"]
     ant_uniq = metrics["ant_uniq"]
+    hay_sitio_inferido_kpi = metrics["hay_sitio_inferido"]
     top_antena = metrics["top_antena"]
     top_count = metrics["top_count"]
     top_pct = metrics["top_pct"]
@@ -349,7 +352,7 @@ def generar_informe_html(
     html_header = generate_html_header(theme_hex, nombre_salida)
     body_header = generate_body_header(logo_html, nombre_salida, hoja, gen_dt, config)
     metadata_section = generate_metadata_section(nombre_bitacora, hoja, rango_str, ident_rows)
-    kpi_section = generate_kpi_section(total, coord_validas, coord_invalidas, ant_uniq, cel_uniq, cel_label, top_antena, top_count, top_pct)
+    kpi_section = generate_kpi_section(total, coord_validas, coord_invalidas, ant_uniq, cel_uniq, cel_label, top_antena, top_count, top_pct, hay_sitio_inferido_kpi)
     
     # --- Sección de limitaciones ---
     _moji = any(
@@ -429,6 +432,12 @@ def generar_informe_html(
             _items.append(
                 "<li>Antena nominal no disponible: no se identificó nombre o código de "
                 "antena; el análisis nominal de antenas no está disponible.</li>"
+            )
+        elif _cap_antenas.estado == "parcial":
+            _items.append(
+                "<li>No se proporcionó nombre o código de antena. Los registros fueron "
+                "agrupados mediante identificadores técnicos derivados de coordenadas "
+                "normalizadas.</li>"
             )
 
         _cap_kml = capabilities_report.capacidad("kml")
@@ -679,30 +688,49 @@ def generar_informe_html(
         try:
             saltos = generar_historial_cambios_antena(df, max_saltos=100)
             if saltos:
+                # HITO 2B: el título y los encabezados reconocen sitios inferidos
+                # solo cuando al menos un salto los involucra, para no introducir
+                # ruido en bitácoras con antena real completa.
+                hay_sitio_inferido_hist = any(
+                    salto.get('origen_inferido') or salto.get('destino_inferido')
+                    for salto in saltos
+                )
                 out = []
                 out.append('<section id="historial-cambios">')
-                out.append('<h2>Historial de cambios de antena</h2>')
-                out.append('<p class="nota"><b>Nota:</b> Esta tabla muestra los cambios de antena detectados en orden cronológico. Cada fila representa un momento en que el dispositivo cambió de una antena a otra.</p>')
+                titulo_hist = (
+                    "Historial de cambios de antena/sitio" if hay_sitio_inferido_hist
+                    else "Historial de cambios de antena"
+                )
+                out.append(f'<h2>{titulo_hist}</h2>')
+                out.append('<p class="nota"><b>Nota:</b> Esta tabla muestra los cambios de antena/sitio detectados en orden cronológico. Cada fila representa un momento en que el dispositivo cambió de una antena/sitio a otra.</p>' if hay_sitio_inferido_hist else '<p class="nota"><b>Nota:</b> Esta tabla muestra los cambios de antena detectados en orden cronológico. Cada fila representa un momento en que el dispositivo cambió de una antena a otra.</p>')
+                if hay_sitio_inferido_hist:
+                    out.append(f'<p class="nota nota-sitios-inferidos"><em>Nota:</em> {NOTA_SITIOS_INFERIDOS}</p>')
+                th_origen = "Antena/Sitio Origen" if hay_sitio_inferido_hist else "Antena Origen"
+                th_destino = "Antena/Sitio Destino" if hay_sitio_inferido_hist else "Antena Destino"
                 out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
                 out.append('<thead><tr>'
                           '<th>#</th>'
                           '<th>Fecha y Hora</th>'
-                          '<th>Antena Origen</th>'
-                          '<th>Antena Destino</th>'
+                          f'<th>{th_origen}</th>'
+                          f'<th>{th_destino}</th>'
                           '<th>Distancia (km)</th>'
                           '</tr></thead><tbody>')
-                
+
                 for idx, salto in enumerate(saltos, start=1):
                     ts_str = salto['timestamp'].strftime('%d/%m/%Y %H:%M:%S') if salto['timestamp'] else '—'
                     origen = salto['origen']
                     destino = salto['destino']
-                    
+                    if salto.get('origen_inferido'):
+                        origen += _BADGE_SITIO_INFERIDO
+                    if salto.get('destino_inferido'):
+                        destino += _BADGE_SITIO_INFERIDO
+
                     # Formato distancia
                     if salto['distancia_km'] is not None:
                         dist_str = f"{salto['distancia_km']:.2f}"
                     else:
                         dist_str = '—'
-                    
+
                     out.append('<tr>'
                               f'<td>{idx}</td>'
                               f'<td>{ts_str}</td>'
@@ -710,7 +738,7 @@ def generar_informe_html(
                               f'<td>{destino}</td>'
                               f'<td>{dist_str}</td>'
                               '</tr>')
-                
+
                 out.append('</tbody></table></div>')
                 out.append("""
 <style>

@@ -288,6 +288,11 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
         P.append(", ".join(l4))
         seccion_ubicacion_tuvo_datos = True
 
+    # Nota breve de sitio inferido (HITO 2B): la nota extensa de alcance solo
+    # aparece una vez, como leyenda general del documento KML.
+    if campos.get("sitio_inferido"):
+        P.append('<i style="color:#666;">Sitio inferido por coordenadas normalizadas.</i>')
+
     # Dirección (opcional)
     direccion = fmt("direccion")
     # Etiqueta configurable

@@ -188,6 +188,11 @@ _COLUMNAS_DIAGNOSTICO_DERIVADAS: frozenset[str] = frozenset({
     "tipo_evento_normalizado",
     "evento_valido_analisis",
     "datetime_evento",
+    "antena_analitica",
+    "sitio_inferido",
+    "sitio_inferencia_motivo",
+    "sitio_lat_normalizada",
+    "sitio_long_normalizada",
 })
 
 
@@ -244,22 +249,47 @@ def _detectar_filtros_temporales(df: pd.DataFrame) -> Capacidad:
 
 
 def _detectar_antenas(df: pd.DataFrame) -> Capacidad:
+    """A. Antena original con valor significativo: disponible (nomenclatura oficial).
+
+    B. Sin antena original pero con ``antena_analitica`` inferida por
+    coordenadas (HITO 2A — ver ``tz_core.site_inference``): disponible,
+    pero en estado "parcial" — el identificador de sitio no es la
+    nomenclatura oficial del operador, solo agrupa por coordenadas.
+
+    C. Ninguna de las dos: no disponible. ``antena_analitica`` solo se
+    inspecciona si ya existe en ``df`` (el enriquecimiento es responsabilidad
+    de ``run_ingestion_pipeline``, no de este detector).
+    """
     if _columna_tiene_valor_significativo(df, "antena"):
-        return Capacidad(True, "disponible", (), "antena_presente")
+        return Capacidad(True, "disponible", (), "antena_original_presente")
+    if _columna_tiene_valor_significativo(df, "antena_analitica"):
+        return Capacidad(
+            True, "parcial", ("antena",), "sitios_inferidos_por_coordenadas"
+        )
     return Capacidad(False, "no_disponible", ("antena",), "sin_antena_con_valor_significativo")
 
 
 def _detectar_antenas_por_horario(df: pd.DataFrame) -> Capacidad:
     antena_ok = _columna_tiene_valor_significativo(df, "antena")
+    antena_analitica_ok = _columna_tiene_valor_significativo(df, "antena_analitica")
     hora_ok = _hora_valida_presente(df)
     dt_ok = _datetime_evento_usable(df)
-    if not antena_ok:
-        faltantes = ("antena",) if (hora_ok or dt_ok) else ("antena", "hora")
-        return Capacidad(False, "no_disponible", faltantes, "sin_antena")
-    if hora_ok or dt_ok:
-        motivo = "antena_y_hora_disponibles" if hora_ok else "antena_y_datetime_evento_disponibles"
-        return Capacidad(True, "disponible", (), motivo)
-    return Capacidad(False, "no_disponible", ("hora",), "antena_presente_sin_hora_ni_datetime_evento")
+
+    if antena_ok:
+        if hora_ok or dt_ok:
+            motivo = "antena_y_hora_disponibles" if hora_ok else "antena_y_datetime_evento_disponibles"
+            return Capacidad(True, "disponible", (), motivo)
+        return Capacidad(False, "no_disponible", ("hora",), "antena_presente_sin_hora_ni_datetime_evento")
+
+    if antena_analitica_ok:
+        if hora_ok or dt_ok:
+            return Capacidad(
+                True, "parcial", ("antena",), "sitios_inferidos_por_coordenadas_con_hora"
+            )
+        return Capacidad(False, "no_disponible", ("hora",), "sitio_inferido_sin_hora_ni_datetime_evento")
+
+    faltantes = ("antena",) if (hora_ok or dt_ok) else ("antena", "hora")
+    return Capacidad(False, "no_disponible", faltantes, "sin_antena")
 
 
 def _detectar_kml(df: pd.DataFrame) -> Capacidad:

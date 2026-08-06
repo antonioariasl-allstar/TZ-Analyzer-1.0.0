@@ -31,6 +31,21 @@ from tz_core.bitacora_normalization import (
 from tz_core.html_helpers import fmt_imei_item
 from tz_core.time_utils import _to_datetime_series, _fmt_hms
 
+# Nota HITO 2A — texto idéntico al de tz_core.html.antennas; se duplica aquí
+# (en vez de importarlo) para no crear un ciclo con tz_core.html.__init__,
+# que importa .assembler y este módulo a su vez importa interacciones_builder.
+_NOTA_SITIOS_INFERIDOS = (
+    "Uno o más identificadores de sitio fueron generados por TZ Analyzer a "
+    "partir de coordenadas normalizadas. No corresponden necesariamente a la "
+    "nomenclatura oficial del operador."
+)
+_BADGE_SITIO_INFERIDO = (
+    ' <span class="tz-badge-inferido" '
+    'style="font-size:0.75em;color:#888;font-style:italic;margin-left:6px;" '
+    'title="Identificador generado por TZ Analyzer a partir de coordenadas normalizadas">'
+    "Inferido por coordenadas</span>"
+)
+
 
 def _valor_predominante(df: pd.DataFrame, columna: Optional[str]) -> Optional[str]:
     """Devuelve el valor más frecuente y significativo de ``columna``, o None."""
@@ -131,7 +146,11 @@ def construir_seccion_interacciones(
     )
     col_lat = pick_first_existing_column(df, [columnas_config.get("lat"), "lat", "latitude", "latitud"])
     col_long = pick_first_existing_column(df, [columnas_config.get("long"), columnas_config.get("lon"), "long", "lon", "longitud"])
-    col_antena = pick_first_existing_column(
+    # HITO 2A: antena_analitica prioriza la antena real cuando es
+    # significativa, y cae al identificador SITIO_<lat>_<long> inferido por
+    # coordenadas cuando no la hay (ver tz_core.site_inference). Se usa como
+    # identificador único para agrupaciones, tabla y marcadores de heatmap.
+    col_antena = "antena_analitica" if "antena_analitica" in df.columns else pick_first_existing_column(
         df,
         [
             columnas_config.get("antena"),
@@ -141,6 +160,10 @@ def construir_seccion_interacciones(
             "cell",
             "site",
         ],
+    )
+    hay_sitio_inferido = bool(
+        "sitio_inferido" in df.columns
+        and df["sitio_inferido"].fillna(False).astype(bool).any()
     )
     col_azimut = pick_first_existing_column(df, [columnas_config.get("azimut"), "azimut", "azimuth", "azi", "angulo"])
     col_tel = pick_first_existing_column(df, [columnas_config.get("tel"), "tel"])
@@ -283,6 +306,11 @@ def construir_seccion_interacciones(
             "identificó una columna de duración utilizable en la bitácora.</p>"
         )
 
+    if hay_sitio_inferido:
+        out.append(
+            f'<p class="nota nota-sitios-inferidos"><em>Nota:</em> {_NOTA_SITIOS_INFERIDOS}</p>'
+        )
+
     fmin = min(fechas_sel)
     fmax = max(fechas_sel)
     out.append(
@@ -381,7 +409,7 @@ def construir_seccion_interacciones(
         thead_cols = [
             "#", "contacto", "hora",
             "tipo de interacción" if hay_tipo_evento else "tipo de evento",
-            "duración", "antena", "lat", "long", "azimut",
+            "duración", "antena/sitio" if hay_sitio_inferido else "antena", "lat", "long", "azimut",
         ]
         if include_celda:
             thead_cols.append("celda")
@@ -444,6 +472,8 @@ def construir_seccion_interacciones(
                 tipo_val = "No disponible"
             dur_hms = _fmt_hms(r.get("_dur_sec", 0)) if duracion_disponible else "No disponible"
             ant_val = _ant_fmt_link(r.get(col_antena, ""), r.get(col_lat, None), r.get(col_long, None)) if col_antena else "—"
+            if hay_sitio_inferido and bool(r.get("sitio_inferido", False)):
+                ant_val += _BADGE_SITIO_INFERIDO
             lat_val = _fmt_coord(r.get(col_lat, None))
             long_val = _fmt_coord(r.get(col_long, None))
             az_val = _fmt_az(r.get(col_azimut, None)) if col_azimut else "—"

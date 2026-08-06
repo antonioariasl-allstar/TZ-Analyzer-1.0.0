@@ -141,21 +141,31 @@ def analizar_antenas(df: pd.DataFrame, archivo_salida: str) -> None:
 
 def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100) -> List[Dict[str, Any]]:
     """
-    Extrae la secuencia de saltos entre antenas (cambios de antena en el tiempo).
-    
-    Detecta cambios de antena ordenados cronológicamente y calcula:
-    - Antena origen y destino del salto
+    Extrae la secuencia de saltos entre antenas/sitios (cambios en el tiempo).
+
+    Detecta cambios de identidad de antena/sitio ordenados cronológicamente y calcula:
+    - Antena/sitio origen y destino del salto
     - Timestamp del cambio
-    - Coordenadas de origen y destino  
+    - Coordenadas de origen y destino
     - Distancia geográfica en kilómetros (fórmula haversine)
-    
+
+    HITO 2B: prioriza ``antena_analitica`` (antena real cuando es significativa,
+    o el identificador ``SITIO_<lat>_<long>`` inferido por coordenadas cuando no
+    la hay — ver ``tz_core.site_inference``) sobre la columna ``antena`` original,
+    para que dos filas sin antena reportada pero con las mismas coordenadas
+    normalizadas se reconozcan como el mismo sitio (permanencia) y no como un
+    salto. Las coordenadas usadas para el cálculo Haversine son siempre las
+    originales de la fila, no las normalizadas.
+
     Args:
-        df: DataFrame con columnas 'antena', 'fecha y hora' (o similar), 'lat', 'long'
+        df: DataFrame con columnas 'antena_analitica' o 'antena', 'fecha y hora'
+            (o similar), 'lat', 'long'
         max_saltos: Límite máximo de saltos a retornar (para no saturar HTML)
-    
+
     Returns:
-        Lista de diccionarios con: {origen, destino, timestamp, lat_origen, lon_origen, 
-                                   lat_destino, lon_destino, distancia_km}
+        Lista de diccionarios con: {origen, destino, timestamp, lat_origen, lon_origen,
+                                   lat_destino, lon_destino, distancia_km,
+                                   origen_inferido, destino_inferido}
     """
     try:
         # Detectar columnas de antena y timestamp
@@ -164,70 +174,74 @@ def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100) ->
         col_ts = None
         col_lat = None
         col_lon = None
-        
-        for name_var in ["antena", "antenanombre", "antena_nombre"]:
+        col_inferido = cols_low.get("sitio_inferido")
+
+        for name_var in ["antena_analitica", "antena", "antenanombre", "antena_nombre"]:
             if name_var in cols_low:
                 col_ant = cols_low[name_var]
                 break
-        
+
         for name_var in ["fecha y hora", "fechahora", "datetime", "timestamp", "fecha_hora", "fechayhora"]:
             if name_var in cols_low:
                 col_ts = cols_low[name_var]
                 break
-        
+
         for name_var in ["lat", "latitud"]:
             if name_var in cols_low:
                 col_lat = cols_low[name_var]
                 break
-        
+
         for name_var in ["long", "lon", "longitud"]:
             if name_var in cols_low:
                 col_lon = cols_low[name_var]
                 break
-        
+
         if not col_ant or not col_ts:
             return []
-        
+
         # Copiar y limpiar
         work_df = df.copy()
         work_df[col_ant] = work_df[col_ant].astype(str).str.strip()
-        
+
         # Convertir timestamp
         work_df['_ts'] = pd.to_datetime(work_df[col_ts], errors='coerce')
-        
-        # Filtrar válidos y sin antena = '0' o vacío
+
+        # Filtrar válidos y sin antena/sitio = '0', vacío o placeholder "nan"/"none"
+        # ("nan"/"none" aparecen cuando antena_analitica es NA — ver MOTIVO_SIN_DATOS
+        # de agregar_sitio_analitico — y no deben tratarse como un identificador real).
         work_df = work_df[
             (work_df['_ts'].notna()) &
             (work_df[col_ant] != '') &
             (work_df[col_ant] != '0') &
+            (~work_df[col_ant].str.lower().isin({'nan', 'none', '<na>'})) &
             (work_df[col_ant].notna())
         ].sort_values('_ts').reset_index(drop=True)
-        
+
         if len(work_df) < 2:
             return []
-        
+
         # Convertir lat/lon
         if col_lat and col_lat in work_df.columns:
             work_df[col_lat] = pd.to_numeric(work_df[col_lat], errors='coerce')
         if col_lon and col_lon in work_df.columns:
             work_df[col_lon] = pd.to_numeric(work_df[col_lon], errors='coerce')
-        
-        # Detectar saltos (cambios de antena)
+
+        # Detectar saltos (cambios de antena/sitio)
         saltos = []
         for i in range(1, len(work_df)):
             ant_prev = str(work_df.iloc[i-1][col_ant]).strip()
             ant_curr = str(work_df.iloc[i][col_ant]).strip()
             ts_curr = work_df.iloc[i]['_ts']
-            
+
             if ant_prev != ant_curr:
                 lat_prev = work_df.iloc[i-1].get(col_lat) if col_lat else None
                 lon_prev = work_df.iloc[i-1].get(col_lon) if col_lon else None
                 lat_curr = work_df.iloc[i].get(col_lat) if col_lat else None
                 lon_curr = work_df.iloc[i].get(col_lon) if col_lon else None
-                
+
                 # Calcular distancia si hay coords
                 dist_km = None
-                if (lat_prev is not None and lon_prev is not None and 
+                if (lat_prev is not None and lon_prev is not None and
                     lat_curr is not None and lon_curr is not None and
                     not (pd.isna(lat_prev) or pd.isna(lon_prev) or pd.isna(lat_curr) or pd.isna(lon_curr))):
                     try:
@@ -239,7 +253,10 @@ def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100) ->
                         dist_km = 6371 * c
                     except Exception:
                         dist_km = None
-                
+
+                origen_inferido = bool(col_inferido and bool(work_df.iloc[i-1].get(col_inferido, False)))
+                destino_inferido = bool(col_inferido and bool(work_df.iloc[i].get(col_inferido, False)))
+
                 saltos.append({
                     'origen': ant_prev,
                     'destino': ant_curr,
@@ -248,12 +265,14 @@ def generar_historial_cambios_antena(df: pd.DataFrame, max_saltos: int = 100) ->
                     'lon_origen': lon_prev,
                     'lat_destino': lat_curr,
                     'lon_destino': lon_curr,
-                    'distancia_km': dist_km
+                    'distancia_km': dist_km,
+                    'origen_inferido': origen_inferido,
+                    'destino_inferido': destino_inferido,
                 })
-                
+
                 if len(saltos) >= max_saltos:
                     break
-        
+
         return saltos
     except Exception as e:
         # Note: log function would need to be imported or replaced with print/logging

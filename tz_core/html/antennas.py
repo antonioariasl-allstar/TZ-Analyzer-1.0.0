@@ -17,6 +17,38 @@ from tz_core.logging_utils import log
 from tz_core.time_utils import normalize_hour_to_hhmmss
 
 
+NOTA_SITIOS_INFERIDOS = (
+    "Uno o más identificadores de sitio fueron generados por TZ Analyzer a "
+    "partir de coordenadas normalizadas. No corresponden necesariamente a la "
+    "nomenclatura oficial del operador."
+)
+
+_BADGE_SITIO_INFERIDO = (
+    ' <span class="tz-badge-inferido" '
+    'style="font-size:0.75em;color:#888;font-style:italic;margin-left:6px;" '
+    'title="Identificador generado por TZ Analyzer a partir de coordenadas normalizadas">'
+    "Inferido por coordenadas</span>"
+)
+
+
+def _nota_sitios_inferidos_html() -> str:
+    return f'<p class="nota nota-sitios-inferidos"><em>Nota:</em> {NOTA_SITIOS_INFERIDOS}</p>'
+
+
+def _resolver_columna_antena(df: pd.DataFrame, *alias_adicionales: str) -> "str | None":
+    """Resuelve la columna a usar como identidad de antena/sitio en HTML.
+
+    Prioriza ``antena_analitica`` (HITO 2A): ya contiene la antena real
+    cuando es significativa, o el identificador ``SITIO_<lat>_<long>``
+    inferido por coordenadas cuando no la hay. Si no existe (la bitácora no
+    pasó por el enriquecimiento del pipeline de ingesta), cae a la antena
+    original / alias de compatibilidad, igual que antes de HITO 2A.
+    """
+    if "antena_analitica" in df.columns:
+        return "antena_analitica"
+    return pick_first_existing_column(df, list(alias_adicionales))
+
+
 def resolve_top_antennas_n(config: dict | None, overrides: dict | None, default: int = 3) -> int:
     """Obtiene el Top N de antenas respetando overrides y config.
 
@@ -42,13 +74,20 @@ def resolve_top_antennas_n(config: dict | None, overrides: dict | None, default:
 
 
 def build_antennas_table(df: pd.DataFrame, config: dict | None = None) -> str:
-    """Construye tabla HTML de todas las antenas con coords, conteo y azimuts frecuentes."""
+    """Construye tabla HTML de todas las antenas/sitios con coords, conteo y azimuts frecuentes.
+
+    Usa ``antena_analitica`` (HITO 2A) cuando existe: antena real cuando es
+    significativa, o el identificador ``SITIO_<lat>_<long>`` inferido por
+    coordenadas cuando no la hay. La antena original nunca se descarta: sigue
+    siendo la fuente de ``antena_analitica`` cuando es significativa.
+    """
     top_tab_html = "<p class='nota'>Campo de antena no disponible en esta bitácora.</p>"
-    if "antena" in df.columns:
+    col_ant = _resolver_columna_antena(df, "antena")
+    if col_ant:
         df_a = df.copy()
-        df_a["antena"] = df_a.get("antena", "").astype(str).str.strip()
+        df_a[col_ant] = df_a.get(col_ant, "").astype(str).str.strip()
         _invalid_names = {"", "0", "null", "none", "nan", "sin inf", "sin inf.", "s/i"}
-        df_a = df_a[~df_a["antena"].str.lower().isin(_invalid_names)]
+        df_a = df_a[~df_a[col_ant].str.lower().isin(_invalid_names)]
 
         if not df_a.empty:
             # timestamp (fecha + hora si existe)
@@ -77,9 +116,12 @@ def build_antennas_table(df: pd.DataFrame, config: dict | None = None) -> str:
             df_a["_lon"] = pd.to_numeric(df_a.get("long", pd.Series(dtype=float)), errors="coerce")
             df_a = df_a[df_a["_lat"].notna() & df_a["_lon"].notna()]
 
+        tiene_col_inferido = "sitio_inferido" in df_a.columns
+
         # Construimos entradas y ordenamos por conteo (desc)
         entries = []
-        for antenna, g in df_a.groupby("antena", dropna=False):
+        hay_sitio_inferido = False
+        for antenna, g in df_a.groupby(col_ant, dropna=False):
             cnt = int(len(g))
             lat_v = g["_lat"].dropna()
             lon_v = g["_lon"].dropna()
@@ -87,17 +129,21 @@ def build_antennas_table(df: pd.DataFrame, config: dict | None = None) -> str:
             lon_s = f"{lon_v.iloc[0]:.6f}" if not lon_v.empty else "—"
             azvc = g["_az_i"].dropna().value_counts().head(3)
             az_s = ", ".join([f"{int(k)}° ({int(v)})" for k, v in azvc.items()]) if not azvc.empty else "—"
-            entries.append((cnt, antenna, lat_s, lon_s, az_s))
+            es_inferido = bool(tiene_col_inferido and g["sitio_inferido"].fillna(False).astype(bool).any())
+            hay_sitio_inferido = hay_sitio_inferido or es_inferido
+            entries.append((cnt, antenna, lat_s, lon_s, az_s, es_inferido))
 
         entries.sort(key=lambda x: x[0], reverse=True)
 
         rows = []
-        for idx, (cnt, antenna, lat_s, lon_s, az_s) in enumerate(entries, start=1):
+        for idx, (cnt, antenna, lat_s, lon_s, az_s, es_inferido) in enumerate(entries, start=1):
             # Si hay coordenadas válidas, convertir la antena en link a Google Maps
             if lat_s != "—" and lon_s != "—":
                 ant_cell = f'<a href="https://www.google.com/maps?q={lat_s},{lon_s}" target="_blank" rel="noopener">{antenna}</a>'
             else:
                 ant_cell = antenna
+            if es_inferido:
+                ant_cell += _BADGE_SITIO_INFERIDO
 
             rows.append(
                 f"<tr>"
@@ -111,10 +157,13 @@ def build_antennas_table(df: pd.DataFrame, config: dict | None = None) -> str:
             )
 
         if rows:
+            nota_html = _nota_sitios_inferidos_html() if hay_sitio_inferido else ""
+            th_antena = "Antena/Sitio" if hay_sitio_inferido else "Antena"
             top_tab_html = (
-                "<table class='tbl'>"
+                nota_html
+                + "<table class='tbl'>"
                 "<thead><tr>"
-                "<th>#</th><th>Antena</th><th>Lat</th><th>Long</th><th>Conteo</th><th>Azimuts frecuentes</th>"
+                f"<th>#</th><th>{th_antena}</th><th>Lat</th><th>Long</th><th>Conteo</th><th>Azimuts frecuentes</th>"
                 "</tr></thead><tbody>"
                 + "".join(rows) +
                 "</tbody></table>"
@@ -159,7 +208,7 @@ def build_top_antennas_section(
         top_n = resolve_top_antennas_n(config, overrides, default=3)
 
         # Columnas
-        col_ant = pick_first_existing_column(df, ["antena", "nombre_antena", "cell_name"])
+        col_ant = _resolver_columna_antena(df, "antena", "nombre_antena", "cell_name")
         col_lat = pick_first_existing_column(df, ["lat", "latitud", "latitude"])
         col_lon = pick_first_existing_column(df, ["long", "lon", "longitud", "lng", "longitude"])
         col_az = pick_first_existing_column(df, ["azimut", "azimuth", "azi", "angulo"])
@@ -211,6 +260,8 @@ def build_top_antennas_section(
         if int(top_n) > 0:
             top = top.head(int(top_n))
 
+        tiene_col_inferido = "sitio_inferido" in dfv.columns
+        hay_sitio_inferido = False
         filas = []
         for _, r0 in top.iterrows():
             ant = str(r0[col_ant])
@@ -218,6 +269,9 @@ def build_top_antennas_section(
 
             lt = float(sub[col_lat].astype(float).mean()) if (col_lat and col_lat in sub.columns) else None
             lg = float(sub[col_lon].astype(float).mean()) if (col_lon and col_lon in sub.columns) else None
+
+            es_inferido = bool(tiene_col_inferido and sub["sitio_inferido"].fillna(False).astype(bool).any())
+            hay_sitio_inferido = hay_sitio_inferido or es_inferido
 
             az_dom, desg = "—", "—"
             if col_az and (col_az in sub.columns):
@@ -243,6 +297,8 @@ def build_top_antennas_section(
                 lt_fmt, lg_fmt = f"{lt:.6f}", f"{lg:.6f}"
             else:
                 ant_fmt, lt_fmt, lg_fmt = ant, "—", "—"
+            if es_inferido:
+                ant_fmt += _BADGE_SITIO_INFERIDO
 
             filas.append((ant_fmt, int(r0["activaciones"]), lt_fmt, lg_fmt, az_dom, desg))
 
@@ -258,10 +314,13 @@ def build_top_antennas_section(
                 "</div>"
             )
         out.append('<p class="nota"><b>Nota:</b> En esta sección se muestra un top list de las antenas más activadas en el periodo analizado; seguidamente se muestra la ubicación de esas antenas segun sus coordenadas.</p>')
+        if hay_sitio_inferido:
+            out.append(_nota_sitios_inferidos_html())
+        _th_antena_top = "Antena/Sitio" if hay_sitio_inferido else "Antena"
         out.append('<div class="tabla-scroll"><table class="tabla-compacta">')
         out.append('<thead><tr>'
                   '<th>#</th>'
-                  '<th>Antena</th>'
+                  f'<th>{_th_antena_top}</th>'
                   '<th>Latitud</th>'
                   '<th>Longitud</th>'
                   '<th>Activaciones</th>'
@@ -317,7 +376,7 @@ def build_antennas_by_hour_section(
                 "</section>"
             )
 
-        col_ant = pick_first_existing_column(df, ["antena", "antenanombre", "antena_nombre"])
+        col_ant = _resolver_columna_antena(df, "antena", "antenanombre", "antena_nombre")
         col_lat = pick_first_existing_column(df, ["lat", "latitud"])
         col_lon = pick_first_existing_column(df, ["lon", "long", "longitud"])
         col_hora = pick_first_existing_column(
@@ -447,11 +506,18 @@ def build_antennas_by_hour_section(
             return (None, None)
 
         top_n = resolve_top_antennas_n(config, overrides, default=3)
+        tiene_col_inferido = "sitio_inferido" in df.columns
+        hay_sitio_inferido_global = bool(
+            tiene_col_inferido and df["sitio_inferido"].fillna(False).astype(bool).any()
+        )
+        _th_antena_rangos = "Antena/Sitio" if hay_sitio_inferido_global else "Antena"
 
         out: list[str] = []
         out.append('<section id="antenas-rangos">')
         out.append('<h2>Antenas por rango horario</h2>')
         out.append('<p class="nota"><b>Nota:</b> Si desea verificar la ubicación de una antena, puede hacer clic en el nombre para abrir su posición en Google Maps.</p>')
+        if hay_sitio_inferido_global:
+            out.append(_nota_sitios_inferidos_html())
         out.append('<style>#antenas-rangos h3.sub{background:#f7f7f7;border:1px solid #e6e6e6;border-radius:6px;padding:.5rem .75rem;margin:1rem 0 .5rem}#antenas-rangos .mono{font-family:ui-monospace,Menlo,Consolas,monospace}#antenas-rangos .nowrap{white-space:nowrap}</style>')
 
         rangos = hours.map(_lab)
@@ -481,7 +547,7 @@ def build_antennas_by_hour_section(
                 top_series = conteo.head(int(top_n))
 
             out.append(f'<h3 class="sub">{lab} <span class="sub">({total} activaciones)</span></h3>')
-            out.append('<table class="tbl"><thead><tr><th>#</th><th>Antena</th><th>Latitud</th><th>Longitud</th><th>Conteo</th><th>Azimuts frecuentes</th></tr></thead><tbody>')
+            out.append(f'<table class="tbl"><thead><tr><th>#</th><th>{_th_antena_rangos}</th><th>Latitud</th><th>Longitud</th><th>Conteo</th><th>Azimuts frecuentes</th></tr></thead><tbody>')
 
             for idx, (ant, cnt) in enumerate(top_series.items(), start=1):
                 sub_ant = sub_valid[sub_valid[col_ant] == ant]
@@ -494,6 +560,8 @@ def build_antennas_by_hour_section(
                     ant_html = f'<a href="https://www.google.com/maps?q={lat_s},{lon_s}" target="_blank" rel="noopener">{ant}</a>'
                 else:
                     ant_html = f"{ant}"
+                if tiene_col_inferido and bool(sub_ant["sitio_inferido"].fillna(False).astype(bool).any()):
+                    ant_html += _BADGE_SITIO_INFERIDO
 
                 az_s = "—"
                 if col_az and (col_az in sub_ant.columns):

@@ -62,3 +62,5 @@ logs/
 *_copia*
 *_backup*
 tests/config.json
+
+.claude/

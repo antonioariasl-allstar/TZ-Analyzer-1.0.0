@@ -47,13 +47,58 @@ from tz_core.bitacora_normalization import (
     parse_date_series,
     clasificar_confiabilidad_duracion,
     DuracionEstado,
+    es_valor_significativo,
 )
+from tz_core.site_inference import construir_identificador_sitio
 
 # Separador HTML compacto (usado en descripciones)
 HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
 
 # Cache global de estilos KML reutilizables (performance)
 _REUSABLE_STYLES = None
+
+# Nota de alcance breve, para burbujas individuales de sitios inferidos
+# (HITO 2B). La nota extensa (con la mención a "TZ Analyzer") solo aparece
+# una vez, como leyenda general del documento — ver GUIA_SITIOS_INFERIDOS_KML.
+NOTA_SITIO_INFERIDO_BURBUJA = "Sitio inferido por coordenadas normalizadas."
+
+GUIA_SITIOS_INFERIDOS_KML = (
+    "Uno o más sitios fueron identificados mediante coordenadas normalizadas "
+    "debido a que la bitácora no proporcionó nombre o código de antena. Estos "
+    "identificadores son internos de TZ Analyzer."
+)
+
+
+def _resolver_nombre_punto_kml(row, lat: float, lon: float) -> Tuple[str, bool]:
+    """Resuelve el nombre visible de un punto KML y si es un sitio inferido.
+
+    Prioridad (HITO 2B):
+      1. antena_analitica, si existe y es significativa (ya prioriza antena
+         real sobre sitio inferido por coordenadas — ver tz_core.site_inference).
+      2. antena original, para bitácoras/llamadas que no pasaron por
+         agregar_sitio_analitico (p.ej. DataFrames sintéticos en pruebas).
+      3. Identificador neutral SITIO_<lat>_<long> derivado localmente de las
+         coordenadas ya validadas del punto — nunca el literal genérico
+         "Antena", que fusionaría puntos distintos sin antena reportada.
+
+    Returns:
+        (nombre_visible, es_sitio_inferido)
+    """
+    antena_analitica = row.get("antena_analitica", None)
+    if es_valor_significativo(antena_analitica):
+        valor = str(antena_analitica).strip()
+        es_inferido = bool(row.get("sitio_inferido", False))
+        return valor, es_inferido
+
+    antena_original = row.get("antena", None)
+    if es_valor_significativo(antena_original):
+        return str(antena_original).strip(), False
+
+    identificador = construir_identificador_sitio(lat, lon)
+    if identificador:
+        return identificador, True
+
+    return "Antena", False
 
 
 def _crear_feature_kml(
@@ -487,9 +532,9 @@ def generar_kml(
         except Exception:
             pass
 
-        # Nombre y descripción del punto
-        nombre_punto = row.get("antena", "Antena") if str(row.get("antena", "")).strip() else "Antena"
-        
+        # Nombre y descripción del punto (HITO 2B: antena_analitica > antena > sitio inferido)
+        nombre_punto, es_sitio_inferido = _resolver_nombre_punto_kml(row, lat, lon)
+
         partes = []
         for bloque in desc_spec:
             agregar_bloque(partes, row, [(etq, col) for etq, col in bloque])
@@ -506,6 +551,7 @@ def generar_kml(
         items.append({
             "antena": nombre_punto,
             "antena_completa": row.get("antena", None),
+            "sitio_inferido": es_sitio_inferido,
             "lon": lon,
             "long": lon,
             "lat": lat,
@@ -531,6 +577,9 @@ def generar_kml(
 
     # Contador global para deduplicación
     pair_counter_all = Counter((it["antena"], it["azimut_i"]) for it in items)
+
+    # HITO 2B: nota general única cuando el KMZ contiene al menos un sitio inferido
+    hay_sitio_inferido_global = any(it.get("sitio_inferido") for it in items)
 
     # Pre-calcular numeración y padding antes de construir carpetas
     total_activaciones = len(items)
@@ -610,6 +659,11 @@ def generar_kml(
         f"Representa gr\u00e1ficamente la orientaci\u00f3n del sector conforme al azimut "
         f"registrado en la bit\u00e1cora y se muestra \u00fanicamente cuando dicho dato est\u00e1 disponible"
     )
+    if hay_sitio_inferido_global:
+        f_lea.description += (
+            f"<br><br><b>\u00bfQu\u00e9 son los sitios SITIO_&lt;lat&gt;_&lt;long&gt;?</b><br>"
+            f"{GUIA_SITIOS_INFERIDOS_KML}"
+        )
 
     # Carpeta principal: todas_las_antenas
     f_todas = raiz.newfolder(name="todas_las_antenas")
@@ -780,7 +834,8 @@ def generar_kml(
                     "azimuts": {},
                     "antena": it["antena"],
                     "lat": it["lat"],
-                    "lon": it["lon"]
+                    "lon": it["lon"],
+                    "sitio_inferido": bool(it.get("sitio_inferido")),
                 }
             grupos[key]["items"].append(it)
             grupos[key]["azimuts"][az] = grupos[key]["azimuts"].get(az, 0) + 1
@@ -884,6 +939,13 @@ def generar_kml(
                 if _norm_text(direccion) != _norm_text(antena):
                     _dir_line = f"<b>{_label_dir_top}:</b> {direccion}<br>"
 
+            # Nota breve de sitio inferido (HITO 2B) — la nota extensa aparece
+            # una sola vez, como leyenda general del documento.
+            _sitio_inferido_line = (
+                '<i style="color:#666;">Sitio inferido por coordenadas normalizadas.</i><br>'
+                if datos.get("sitio_inferido") else ""
+            )
+
             desc_core = f"""
 <b>Total de activaciones:</b> {total}<br>
 <hr>
@@ -896,12 +958,12 @@ def generar_kml(
 {_ant_line}<b>Lat:</b> {lat} &nbsp; <b>Long:</b> {lon}<br>
 <b>Celda:</b> {celda}<br>
 {_dir_line}
-<hr>
+{_sitio_inferido_line}<hr>
 <b>Azimut principal:</b> {az_p_disp}° ({cuenta_principal} veces)<br>
 <b>Azimuts secundarios:</b> {secundarios_text if secundarios_text else 'Ninguno'}
 """
 
-            _crear_feature_kml(container, antena, lon, lat, desc_core, 
+            _crear_feature_kml(container, antena, lon, lat, desc_core,
                              az_principal, config, azimuts_extra=az_sec)
 
     # 4) Poblar carpeta "por_rango_horario" (opcional)
