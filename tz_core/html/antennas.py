@@ -93,12 +93,14 @@ def build_antennas_table(df: pd.DataFrame, config: dict | None = None) -> str:
             # timestamp (fecha + hora si existe)
             if "fecha" in df_a.columns:
                 fechas = parse_date_series(df_a["fecha"], dayfirst=True).dt.normalize()
-                horas = pd.to_timedelta(
-                    df_a.get("hora", "").astype(str).str[:8],
-                    errors="coerce",
-                )
-                ts = fechas + horas
-                df_a["_ts"] = ts
+                if "hora" in df_a.columns:
+                    horas = pd.to_timedelta(
+                        df_a["hora"].astype(str).str[:8],
+                        errors="coerce",
+                    )
+                    df_a["_ts"] = fechas + horas
+                else:
+                    df_a["_ts"] = pd.NaT
             else:
                 df_a["_ts"] = pd.NaT
 
