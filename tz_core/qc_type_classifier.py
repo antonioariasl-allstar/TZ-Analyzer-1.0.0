@@ -6,39 +6,19 @@ Función pura sin side effects. No modifica datos, solo clasifica.
 
 from __future__ import annotations
 import pandas as pd
-from typing import Dict
 
-# Keywords por categoría — se buscan con "in" sobre el texto uppercased.
-# Orden importa: DATOS primero (para que "GPRS" no matchee con otra cosa).
-_KEYWORDS: Dict[str, list[str]] = {
-    "DATOS": [
-        "DATA", "DATOS", "GPRS", "INTERNET", "NAV", "NAVEGACION",
-        "BROWSE", "WAP", "APN", "PDP",
-    ],
-    "SMS": [
-        "SMS", "MENSAJE", "MESSAGE", "TEXT", "MO-SMS", "MT-SMS",
-        "SHORT", "SMSC",
-    ],
-    "VOZ": [
-        "CALL", "VOZ", "VOICE", "MTC", "MOC", "MFC",
-        "INCOMING", "OUTGOING", "ENTRANTE", "SALIENTE",
-        "LLAMADA", "RING", "CONFERENCE", "CONF",
-    ],
-}
+from tz_core.event_classification import classify_event_type
 
 
 def classify_single(value) -> str:
-    """Clasifica un valor individual de tipo de interacción."""
-    if value is None:
-        return "DESCONOCIDO"
-    text = str(value).strip().upper()
-    if not text or text in ("NAN", "NONE", "NULL", "N/A", "NA", "SIN INF.", "SIN INF", "S/I", "--"):
-        return "DESCONOCIDO"
-    for category, keywords in _KEYWORDS.items():
-        for kw in keywords:
-            if kw in text:
-                return category
-    return "DESCONOCIDO"
+    """Clasifica un valor individual de tipo de interacción.
+
+    Delegado a `tz_core.event_classification.classify_event_type` — fuente
+    única de verdad compartida con `normalize_event_fields` (P0-B) para que
+    ambos clasifiquen igual el mismo valor. Ver
+    docs/P0B_CONTRATO_CLASIFICACION_CONTACTOS.md §10.
+    """
+    return classify_event_type(value)
 
 
 def classify_interaction_type(series: pd.Series) -> pd.Series:

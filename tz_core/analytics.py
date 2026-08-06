@@ -403,6 +403,8 @@ def construir_seccion_todos_contactos(
             "sms_longitud_valida":            "SMS — longitud válida",
             "sin_columna_contacto":           "Columna de contacto no disponible",
             "sin_clasificacion_error":        "Error interno en clasificación",
+            "autocontacto":                   "Coincide con el número investigado; se conserva para revisión y se excluye del ranking de contactos.",
+            "identificador_15_digitos_no_confirmado": "Bloque de 15 dígitos sin evidencia de formato internacional confirmada",
         }
 
         def _safe(v):

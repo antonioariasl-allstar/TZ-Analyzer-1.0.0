@@ -27,9 +27,61 @@ from tz_core.bitacora_normalization import (
     DuracionEstado,
     es_valor_significativo,
     normalize_imei,
+    normalize_event_fields,
+    normalize_contact_fields,
 )
 from tz_core.html_helpers import fmt_imei_item
 from tz_core.time_utils import _to_datetime_series, _fmt_hms
+
+# Tarea 5 (P0-B) — etiqueta neutral para un contacto excluido del análisis
+# interpersonal (DATOS, IP, dominio, URL, APN, alfanumérico, código corto,
+# autocontacto, indeterminado). El valor original NO se muestra en su lugar
+# para no filtrar identificadores técnicos como si fueran un contacto.
+_ETIQUETA_NO_CONTACTO = "No es contacto interpersonal"
+
+
+def _resolver_clasificacion_contacto(
+    df_local: pd.DataFrame,
+    col_contacto: Optional[str],
+    col_tipo: Optional[str],
+    col_tel: Optional[str],
+) -> tuple[pd.Series, pd.Series, bool]:
+    """Resuelve (contacto_categoria, contacto_limpio, hay_evidencia_p0b) para df_local.
+
+    Reutiliza la fuente única P0-B (normalize_event_fields + normalize_contact_fields)
+    en vez del criterio legacy `es_valor_significativo(contacto crudo)` (Tarea 5).
+
+    - Si `df_local` ya trae `contacto_categoria`/`contacto_limpio` calculadas
+      aguas arriba, se usan tal cual (no se crea una segunda clasificación).
+    - Si no, pero hay evidencia de tipo de evento (columna de tipo/interacción
+      con al menos un valor significativo), se calculan localmente sobre una
+      copia mínima.
+    - Si no hay ninguna evidencia de tipo de evento, `hay_evidencia_p0b` es
+      False: el llamador conserva el criterio previo para no romper bitácoras
+      sin columna de tipo (el tipo DESCONOCIDO nunca asciende a
+      telefonico_plausible por diseño — contrato §9).
+    """
+    if "contacto_categoria" in df_local.columns and "contacto_limpio" in df_local.columns:
+        return df_local["contacto_categoria"], df_local["contacto_limpio"], True
+
+    if not col_contacto or col_contacto not in df_local.columns:
+        vacio = pd.Series(dtype="object")
+        return vacio, vacio, False
+
+    hay_tipo_evidencia = bool(
+        col_tipo and col_tipo in df_local.columns
+        and df_local[col_tipo].map(es_valor_significativo).any()
+    )
+    if not hay_tipo_evidencia:
+        return pd.Series(dtype="object"), pd.Series(dtype="object"), False
+
+    tmp = pd.DataFrame(index=df_local.index)
+    tmp["contacto"] = df_local[col_contacto]
+    tmp["tel"] = df_local[col_tel] if (col_tel and col_tel in df_local.columns) else None
+    tmp["_tipo_evento_src"] = df_local[col_tipo]
+    tmp = normalize_event_fields(tmp, col_tipo="_tipo_evento_src")
+    tmp = normalize_contact_fields(tmp)
+    return tmp["contacto_categoria"], tmp["contacto_limpio"], True
 
 # Nota HITO 2A — texto idéntico al de tz_core.html.antennas; se duplica aquí
 # (en vez de importarlo) para no crear un ciclo con tz_core.html.__init__,
@@ -244,11 +296,31 @@ def construir_seccion_interacciones(
     if col_contacto not in df_local.columns:
         df_local["_contacto_valido"] = False
         df_local["_contacto"] = "No disponible"
+        df_local["_contacto_limpio"] = None
     else:
+        _cat_p0b, _limpio_p0b, _hay_evidencia_p0b = _resolver_clasificacion_contacto(
+            df_local, col_contacto, col_tipo, col_tel
+        )
         raw_contacto = df_local[col_contacto]
-        df_local["_contacto_valido"] = raw_contacto.map(es_valor_significativo)
-        contacto_visible = raw_contacto.astype(str).str.strip()
-        df_local["_contacto"] = contacto_visible.where(df_local["_contacto_valido"], "No disponible")
+        if _hay_evidencia_p0b:
+            # P0-B disponible (columnas ya calculadas o computables localmente):
+            # solo telefonico_plausible cuenta como contacto válido. DATOS, IP,
+            # dominio, URL, APN, alfanumérico, código corto, autocontacto e
+            # indeterminado quedan fuera (Tarea 5).
+            df_local["_contacto_categoria"] = _cat_p0b.reindex(df_local.index)
+            df_local["_contacto_limpio"] = _limpio_p0b.reindex(df_local.index)
+            df_local["_contacto_valido"] = df_local["_contacto_categoria"] == "telefonico_plausible"
+            contacto_visible = raw_contacto.astype(str).str.strip()
+            df_local["_contacto"] = contacto_visible.where(df_local["_contacto_valido"], _ETIQUETA_NO_CONTACTO)
+        else:
+            # Sin ninguna evidencia de tipo de evento: no hay base para aplicar
+            # la matriz P0-B (DESCONOCIDO nunca asciende a telefonico_plausible
+            # por diseño). Se conserva el criterio previo para no romper
+            # bitácoras sin columna de tipo de evento.
+            df_local["_contacto_valido"] = raw_contacto.map(es_valor_significativo)
+            contacto_visible = raw_contacto.astype(str).str.strip()
+            df_local["_contacto"] = contacto_visible.where(df_local["_contacto_valido"], "No disponible")
+            df_local["_contacto_limpio"] = df_local["_contacto"]
 
     if duracion_estado is None:
         duracion_estado = clasificar_confiabilidad_duracion(df, columnas_config=columnas_config)
@@ -375,7 +447,7 @@ def construir_seccion_interacciones(
             pct_sin_antena = 0.0
 
         contactos_unicos = (
-            int(df_d.loc[df_d["_contacto_valido"], "_contacto"].nunique())
+            int(df_d.loc[df_d["_contacto_valido"], "_contacto_limpio"].nunique())
             if "_contacto_valido" in df_d.columns
             else 0
         )
@@ -533,8 +605,8 @@ def construir_seccion_interacciones(
                 df_contactos_validos = df_d[df_d["_contacto_valido"]]
                 if not df_contactos_validos.empty:
                     agg = (
-                        df_contactos_validos.groupby("_contacto")
-                        .agg(interacciones=("_contacto", "size"), dur_total=("_dur_sec", "sum"))
+                        df_contactos_validos.groupby("_contacto_limpio")
+                        .agg(interacciones=("_contacto_limpio", "size"), dur_total=("_dur_sec", "sum"))
                         .reset_index()
                     )
                 else:
@@ -550,7 +622,7 @@ def construir_seccion_interacciones(
             prop_inter = top_row_inter["interacciones"] / total_dia
             if prop_inter >= 0.60:
                 alertas.append(
-                    f"Concentración (interacciones): {_mask_contact(top_row_inter['_contacto'])} acumula "
+                    f"Concentración (interacciones): {_mask_contact(top_row_inter['_contacto_limpio'])} acumula "
                     f"{prop_inter:.0%} del día ({int(top_row_inter['interacciones'])}/{total_dia})."
                 )
 
@@ -562,7 +634,7 @@ def construir_seccion_interacciones(
                 prop_dur = float(top_row_dur["dur_total"]) / sum_dur if sum_dur else 0.0
                 if prop_dur >= 0.60:
                     alertas.append(
-                        f"Concentración (duración): {_mask_contact(top_row_dur['_contacto'])} acumula "
+                        f"Concentración (duración): {_mask_contact(top_row_dur['_contacto_limpio'])} acumula "
                         f"{prop_dur:.0%} del día ({_fmt_hms(top_row_dur['dur_total'])} de {_fmt_hms(sum_dur)})."
                     )
 

@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 from decimal import Decimal
 
+from tz_core.event_classification import classify_event_type
+
 
 def normalize_time_strings(series: pd.Series) -> pd.Series:
     """Normaliza strings de hora a HH:MM:SS si cumplen patrón, conserva NaN en otros casos."""
@@ -391,10 +393,26 @@ def normalize_temporal_fields(
     return df
 
 
-def _classify_contact_category(raw, limpio, tipo_norm: str) -> tuple:
+def _tiene_evidencia_formato_internacional(raw_str: str) -> bool:
+    """Indica si ``raw_str`` trae evidencia explícita de formato internacional.
+
+    Evidencia reconocida: prefijo "+" o prefijo de discado internacional "00".
+    No implementa una base de códigos de país — solo detecta la marca de
+    formato que el propio valor trae consigo (ver contrato §5, Tarea 2).
+    """
+    s = raw_str.strip()
+    return s.startswith("+") or s.startswith("00")
+
+
+def _classify_contact_category(raw, limpio, tipo_norm: str, tel_limpio: Optional[str] = None) -> tuple:
     """Clasifica el contacto en (categoria, motivo) usando cascada raw+limpio+tipo.
 
     Categorías: telefonico_plausible | indeterminado | tecnico_no_personal
+
+    ``tel_limpio`` (opcional): número investigado ya normalizado. Si
+    ``limpio`` coincide con él (autocontacto — el número marcándose a sí
+    mismo), se clasifica como técnico con motivo dedicado ``autocontacto``,
+    fuera de ranking (ver contrato §6-C).
     """
     _EMPTY = ("tecnico_no_personal", "vacio_o_nulo")
 
@@ -419,6 +437,14 @@ def _classify_contact_category(raw, limpio, tipo_norm: str) -> tuple:
 
     # 5. Alfanumérico o formato incompatible (excluyendo notación científica)
     raw_phone_stripped = re.sub(r"[\s\+\-\(\)]", "", raw_str)
+    # 5b. Decimal terminado en .0/.00... (representación Excel de un entero):
+    # sanear ANTES del gate alfanumérico para no perder un identificador
+    # numérico válido por el sufijo. Solo aplica a un único punto con
+    # fracción exactamente cero — no reinterpreta IPv4 (ya resuelto en el
+    # paso 3, que exige 4 octetos) ni decimales con fracción no nula
+    # (ej. "70021111.5", que debe seguir cayendo en formato_alfanumerico).
+    if re.match(r"^\d+\.0+$", raw_phone_stripped):
+        raw_phone_stripped = raw_phone_stripped.split(".", 1)[0]
     if not is_scientific and not raw_phone_stripped.isdigit():
         return ("tecnico_no_personal", "formato_alfanumerico")
 
@@ -436,6 +462,12 @@ def _classify_contact_category(raw, limpio, tipo_norm: str) -> tuple:
     if not limpio_digits.isdigit():
         return ("tecnico_no_personal", "limpio_no_numerico")
 
+    # 7b. Autocontacto: el contacto coincide con el número investigado.
+    if tel_limpio is not None and not (isinstance(tel_limpio, float) and pd.isna(tel_limpio)):
+        tel_limpio_digits = str(tel_limpio).strip().lstrip("+")
+        if tel_limpio_digits and limpio_digits == tel_limpio_digits:
+            return ("tecnico_no_personal", "autocontacto")
+
     # 8. Longitud 0–1 → técnico (no indeterminado)
     n = len(limpio_digits)
     if n <= 1:
@@ -445,6 +477,8 @@ def _classify_contact_category(raw, limpio, tipo_norm: str) -> tuple:
     if tipo_norm == "VOZ":
         if n > 15:
             return ("indeterminado", "longitud_excesiva")
+        if n == 15 and not _tiene_evidencia_formato_internacional(raw_str):
+            return ("indeterminado", "identificador_15_digitos_no_confirmado")
         return (
             ("telefonico_plausible", "voz_longitud_valida") if n >= 8
             else ("indeterminado", "voz_longitud_corta")
@@ -452,6 +486,8 @@ def _classify_contact_category(raw, limpio, tipo_norm: str) -> tuple:
     if tipo_norm == "SMS":
         if n > 15:
             return ("indeterminado", "longitud_excesiva")
+        if n == 15 and not _tiene_evidencia_formato_internacional(raw_str):
+            return ("indeterminado", "identificador_15_digitos_no_confirmado")
         return (
             ("telefonico_plausible", "sms_longitud_valida") if n >= 8
             else ("indeterminado", "sms_longitud_ambigua")
@@ -507,9 +543,10 @@ def normalize_contact_fields(df: pd.DataFrame) -> pd.DataFrame:
             )
             df["contacto_valido"] = df["contacto_limpio"].apply(_is_valid)
             _tipo_col = df["tipo_evento_normalizado"] if "tipo_evento_normalizado" in df.columns else pd.Series(["DESCONOCIDO"] * len(df), index=df.index)
+            _tel_limpio_col = df["tel_limpio"] if "tel_limpio" in df.columns else pd.Series([None] * len(df), index=df.index)
             _clasificaciones = [
-                _classify_contact_category(r, l, t)
-                for r, l, t in zip(df["contacto"], df["contacto_limpio"], _tipo_col)
+                _classify_contact_category(r, l, t, tl)
+                for r, l, t, tl in zip(df["contacto"], df["contacto_limpio"], _tipo_col, _tel_limpio_col)
             ]
             df["contacto_categoria"] = [c[0] for c in _clasificaciones]
             df["contacto_motivo"]    = [c[1] for c in _clasificaciones]
@@ -557,16 +594,7 @@ def normalize_event_fields(
     def _classify(value) -> str:
         if value is None or (isinstance(value, float) and pd.isna(value)):
             return "DESCONOCIDO"
-        text = str(value).strip().upper()
-        if not text:
-            return "DESCONOCIDO"
-        if "DATOS" in text:
-            return "DATOS"
-        if "SMS" in text:
-            return "SMS"
-        if "VOZ" in text or "CALL" in text or "LLAMADA" in text:
-            return "VOZ"
-        return "DESCONOCIDO"
+        return classify_event_type(value)
 
     if col_tipo is None or col_tipo not in df.columns:
         df["tipo_evento_normalizado"] = "DESCONOCIDO"

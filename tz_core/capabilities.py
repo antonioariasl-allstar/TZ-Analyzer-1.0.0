@@ -29,6 +29,8 @@ from tz_core.bitacora_normalization import (
     clasificar_confiabilidad_duracion,
     coalesce_cols,
     es_valor_significativo,
+    normalize_contact_fields,
+    normalize_event_fields,
     parse_date_series,
     validate_latlon,
 )
@@ -311,18 +313,39 @@ def _detectar_heatmap(df: pd.DataFrame) -> Capacidad:
 
 
 def _detectar_contactos(df: pd.DataFrame) -> Capacidad:
-    if "contacto_valido" in df.columns:
-        ok = _bool_col_any_true(df, "contacto_valido")
-        motivo_ok = "contacto_valido_derivado_presente"
+    """Disponible únicamente si existe al menos un ``contacto_categoria ==
+    "telefonico_plausible"``. No usa ``contacto_valido`` (validez estructural
+    7-15 dígitos) como sustituto semántico: un dataset 100% DATOS/IP/dominio
+    puede tener `contacto_valido=True` en todas sus filas sin tener un solo
+    contacto interpersonal real (ver Tarea 7 / FX-03).
+    """
+    if "contacto_categoria" in df.columns:
+        ok = bool((df["contacto_categoria"] == "telefonico_plausible").any())
+        motivo_ok = "contacto_categoria_telefonico_plausible_presente"
     elif "contacto" in df.columns:
-        ok = _columna_tiene_valor_significativo(df, "contacto")
-        motivo_ok = "contacto_con_valor_significativo"
+        # Sin columna derivada: calcular localmente con la fuente única
+        # (normalize_event_fields + normalize_contact_fields), sin crear una
+        # segunda clasificación.
+        tmp = pd.DataFrame(index=df.index)
+        tmp["contacto"] = df["contacto"]
+        tipo_col = next(
+            (c for c in ("tipo_evento_normalizado", "interaccion", "tipo", "tipo_interaccion") if c in df.columns),
+            None,
+        )
+        if tipo_col:
+            tmp["_tipo_src"] = df[tipo_col]
+            tmp = normalize_event_fields(tmp, col_tipo="_tipo_src")
+        else:
+            tmp = normalize_event_fields(tmp, col_tipo=None)
+        tmp = normalize_contact_fields(tmp)
+        ok = bool((tmp["contacto_categoria"] == "telefonico_plausible").any())
+        motivo_ok = "contacto_categoria_calculada_localmente"
     else:
         ok = False
         motivo_ok = ""
     if ok:
         return Capacidad(True, "disponible", (), motivo_ok)
-    return Capacidad(False, "no_disponible", ("contacto",), "sin_contacto_valido")
+    return Capacidad(False, "no_disponible", ("contacto",), "sin_contacto_telefonico_plausible")
 
 
 def _detectar_tipo_evento(df: pd.DataFrame) -> Capacidad:

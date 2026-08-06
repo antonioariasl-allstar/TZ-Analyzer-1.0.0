@@ -13,15 +13,20 @@ def test_clasificacion_voz():
 
 
 def test_clasificacion_sms():
+    # Tarea 4 (P0-B) unificó el vocabulario de normalize_event_fields con el
+    # de qc_type_classifier (fuente única tz_core.event_classification);
+    # "MENSAJE" ya es un término reconocido de SMS en ambos módulos.
     df = pd.DataFrame({"interaccion": ["SMS ENVIADO", "SMS-MO", "MENSAJE"]})
     result = normalize_event_fields(df, col_tipo="interaccion")
-    assert list(result["tipo_evento_normalizado"]) == ["SMS", "SMS", "DESCONOCIDO"]
+    assert list(result["tipo_evento_normalizado"]) == ["SMS", "SMS", "SMS"]
 
 
 def test_clasificacion_datos():
+    # Tarea 4 (P0-B): "GPRS" e "INTERNET" ya son términos reconocidos de
+    # DATOS en el vocabulario unificado (antes solo lo era el literal "DATOS").
     df = pd.DataFrame({"interaccion": ["GPRS SESSION", "DATOS MOVILES", "INTERNET"]})
     result = normalize_event_fields(df, col_tipo="interaccion")
-    assert list(result["tipo_evento_normalizado"]) == ["DESCONOCIDO", "DATOS", "DESCONOCIDO"]
+    assert list(result["tipo_evento_normalizado"]) == ["DATOS", "DATOS", "DATOS"]
 
 
 def test_clasificacion_desconocido():
@@ -71,6 +76,7 @@ def test_no_modifica_columna_original():
 
 
 def test_case_insensitive():
+    # Tarea 4 (P0-B): "gprs" ya es un término reconocido de DATOS.
     df = pd.DataFrame({"interaccion": ["llamada", "sms entrante", "gprs"]})
     result = normalize_event_fields(df, col_tipo="interaccion")
-    assert list(result["tipo_evento_normalizado"]) == ["VOZ", "SMS", "DESCONOCIDO"]
+    assert list(result["tipo_evento_normalizado"]) == ["VOZ", "SMS", "DATOS"]

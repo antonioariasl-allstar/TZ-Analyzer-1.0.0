@@ -237,6 +237,57 @@ def log_debug(msg: str) -> None:
     log(f"[DEBUG] {msg}")
 
 
+_INVALID_CONTACT_TOKENS_LEGACY = {"", "0", "null", "none", "nan", "sin inf", "sin inf."}
+
+
+def _contar_contactos_unicos_p0b(df: pd.DataFrame) -> int:
+    """Cuenta contactos únicos con el mismo criterio P0-B (telefonico_plausible).
+
+    Opción A: si `contacto_categoria`/`contacto_limpio` ya existen (calculadas
+    aguas arriba por `normalize_contact_fields`), se usan tal cual — el
+    conteo coincide con el de "Contactos únicos" del HTML/P0-B.
+
+    Opción B: si no existen pero hay una columna de contacto (`contacto` o
+    `tel_contacto` — no se asume una sola) y evidencia de tipo de evento, se
+    calculan localmente con la misma fuente única (`normalize_event_fields` +
+    `normalize_contact_fields`), sin crear una segunda clasificación.
+
+    Si no hay ninguna evidencia de tipo de evento, se conserva el criterio
+    previo (unicidad de valores no-placeholder) para mantener compatibilidad
+    con llamadores/datos que no participan del pipeline P0-B.
+    """
+    if "contacto_categoria" in df.columns and "contacto_limpio" in df.columns:
+        cat = df["contacto_categoria"]
+        limpio = df["contacto_limpio"]
+        return int(limpio[cat == "telefonico_plausible"].nunique())
+
+    contacto_col = None
+    if "contacto" in df.columns:
+        contacto_col = "contacto"
+    elif "tel_contacto" in df.columns:
+        contacto_col = "tel_contacto"
+    if contacto_col is None:
+        return 0
+
+    tipo_col = next(
+        (c for c in ("tipo_evento_normalizado", "interaccion", "tipo", "tipo_interaccion") if c in df.columns),
+        None,
+    )
+    if tipo_col is None:
+        s_ct = df[contacto_col].astype(str).str.strip()
+        s_ct = s_ct.mask(s_ct.str.lower().isin(_INVALID_CONTACT_TOKENS_LEGACY))
+        return int(s_ct.nunique(dropna=True))
+
+    from tz_core.bitacora_normalization import normalize_event_fields, normalize_contact_fields
+
+    tmp = pd.DataFrame(index=df.index)
+    tmp["contacto"] = df[contacto_col]
+    tmp["_tipo_src"] = df[tipo_col]
+    tmp = normalize_event_fields(tmp, col_tipo="_tipo_src")
+    tmp = normalize_contact_fields(tmp)
+    return int(tmp.loc[tmp["contacto_categoria"] == "telefonico_plausible", "contacto_limpio"].nunique())
+
+
 def write_minimal_filter_log(
     df: pd.DataFrame,
     resumen_filtro: str,
@@ -268,12 +319,7 @@ def write_minimal_filter_log(
         s_ant = s_ant[~s_ant.str.lower().isin(invalid)]
         ant_unicas = int(s_ant.nunique())
 
-    contactos_unicos = 0
-    if "tel_contacto" in df.columns:
-        s_ct = df["tel_contacto"].astype(str).str.strip()
-        invalid_contacts = {"", "0", "null", "none", "nan", "sin inf", "sin inf."}
-        s_ct = s_ct.mask(s_ct.str.lower().isin(invalid_contacts))
-        contactos_unicos = int(s_ct.nunique(dropna=True))
+    contactos_unicos = _contar_contactos_unicos_p0b(df)
 
     path_str = os.fspath(output_path)
     with open(path_str, "w", encoding="utf-8") as f:

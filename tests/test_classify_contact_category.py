@@ -69,6 +69,55 @@ def test_notacion_cientifica_voz_plausible():
     assert _classify_contact_category("7.5E+10", "75000000000", "VOZ") == ("telefonico_plausible", "voz_longitud_valida")
 
 
+# --- CAPA 4b: formato ".0" (Tarea 1 — corrección de defecto de núcleo) ---
+# Pruebas directas por tipo de entrada: int, float, string ".0", decimal no
+# entero, IPv4, dominio, notación científica. Ver
+# docs/P0B_CONTRATO_CLASIFICACION_CONTACTOS.md §8.0 para la causa raíz.
+
+def test_punto_cero_entero_python_es_plausible():
+    """int puro (sin sufijo .0 posible) — caso de control, no debe romperse."""
+    assert _classify_contact_category(70021111, "70021111", "VOZ") == ("telefonico_plausible", "voz_longitud_valida")
+
+
+def test_punto_cero_float_python_es_plausible():
+    """float real 70021111.0 (no string) — el caso exacto del defecto documentado."""
+    assert _classify_contact_category(70021111.0, "70021111", "VOZ") == ("telefonico_plausible", "voz_longitud_valida")
+
+
+def test_punto_cero_string_es_plausible():
+    """string "70021111.0" (exportación típica de Excel/CSV) — mismo defecto, vía string."""
+    assert _classify_contact_category("70021111.0", "70021111", "VOZ") == ("telefonico_plausible", "voz_longitud_valida")
+
+
+def test_punto_cero_doble_cero_es_plausible():
+    """string "70021111.00" — fracción de más de un cero, misma regla."""
+    assert _classify_contact_category("70021111.00", "70021111", "VOZ") == ("telefonico_plausible", "voz_longitud_valida")
+
+
+def test_decimal_no_entero_no_se_convierte_en_telefono():
+    """"70021111.5" tiene fracción no nula — debe seguir cayendo en formato_alfanumerico,
+    NO convertirse en teléfono. El saneamiento de Tarea 1 es específico a fracción cero."""
+    assert _classify_contact_category("70021111.5", None, "VOZ") == ("tecnico_no_personal", "formato_alfanumerico")
+
+
+def test_ipv4_no_se_reinterpreta_como_decimal_punto_cero():
+    """IPv4 sigue siendo IPv4 — el gate de IPv4 (4 octetos) corre antes y no debe
+    verse afectado por el saneamiento de decimales .0 de un solo punto."""
+    assert _classify_contact_category("192.168.1.0", None, "VOZ") == ("tecnico_no_personal", "ipv4")
+
+
+def test_dominio_con_puntos_sigue_siendo_alfanumerico():
+    """Un dominio (letras + puntos) no matchea el patrón "solo dígitos.solo ceros"
+    y debe seguir cayendo en formato_alfanumerico, no convertirse en teléfono."""
+    assert _classify_contact_category("internet.claro.sv", None, "VOZ") == ("tecnico_no_personal", "formato_alfanumerico")
+
+
+def test_notacion_cientifica_no_afectada_por_saneamiento_punto_cero():
+    """La notación científica ya se resolvía correctamente antes de Tarea 1 (el chequeo
+    de científica corre antes del gate alfanumérico); el saneamiento nuevo no debe alterarla."""
+    assert _classify_contact_category("7.5E+10", "75000000000", "VOZ") == ("telefonico_plausible", "voz_longitud_valida")
+
+
 # --- CAPA 5: solo ceros ---
 
 def test_solo_ceros_es_tecnico():
@@ -142,6 +191,66 @@ def test_sms_digitos_4_es_indeterminado():
     assert _classify_contact_category("7000", "7000", "SMS") == ("indeterminado", "sms_longitud_ambigua")
 
 
+# --- Tarea 2: prudencia con bloques de 15 dígitos sin evidencia de formato ---
+
+def test_15_digitos_sin_evidencia_es_indeterminado():
+    limpio = "1" * 15
+    assert _classify_contact_category(limpio, limpio, "VOZ") == (
+        "indeterminado", "identificador_15_digitos_no_confirmado"
+    )
+
+def test_15_digitos_sms_sin_evidencia_es_indeterminado():
+    limpio = "1" * 15
+    assert _classify_contact_category(limpio, limpio, "SMS") == (
+        "indeterminado", "identificador_15_digitos_no_confirmado"
+    )
+
+def test_15_digitos_con_prefijo_mas_es_plausible():
+    raw = "+" + ("1" * 14)  # 14 dígitos tras el "+", 15 en total normalizado
+    limpio = "1" * 15
+    assert _classify_contact_category(raw, limpio, "VOZ") == ("telefonico_plausible", "voz_longitud_valida")
+
+def test_15_digitos_con_prefijo_00_es_plausible():
+    raw = "00" + ("1" * 13)
+    limpio = "1" * 15
+    assert _classify_contact_category(raw, limpio, "VOZ") == ("telefonico_plausible", "voz_longitud_valida")
+
+def test_14_digitos_sin_evidencia_sigue_plausible():
+    """La prudencia de Tarea 2 aplica solo a exactamente 15 dígitos, no a 14."""
+    limpio = "1" * 14
+    assert _classify_contact_category(limpio, limpio, "VOZ") == ("telefonico_plausible", "voz_longitud_valida")
+
+def test_16_digitos_sigue_siendo_longitud_excesiva():
+    """16 dígitos sigue cayendo en longitud_excesiva (E.164), no en la regla de 15."""
+    limpio = "1" * 16
+    assert _classify_contact_category(limpio, limpio, "VOZ") == ("indeterminado", "longitud_excesiva")
+
+
+# --- Tarea 3: autocontacto ---
+
+def test_autocontacto_mismo_numero_es_tecnico():
+    assert _classify_contact_category("70099999", "70099999", "VOZ", "70099999") == (
+        "tecnico_no_personal", "autocontacto"
+    )
+
+def test_autocontacto_numeros_distintos_no_es_autocontacto():
+    assert _classify_contact_category("70011111", "70011111", "VOZ", "70099999") == (
+        "telefonico_plausible", "voz_longitud_valida"
+    )
+
+def test_autocontacto_sin_tel_limpio_no_es_autocontacto():
+    """tel_limpio=None (parámetro no provisto) — comportamiento por defecto sin cambios."""
+    assert _classify_contact_category("70099999", "70099999", "VOZ") == (
+        "telefonico_plausible", "voz_longitud_valida"
+    )
+
+def test_autocontacto_datos_prevalece_sobre_autocontacto():
+    """DATOS se evalúa antes que autocontacto (§6-D del contrato: DATOS prevalece siempre)."""
+    assert _classify_contact_category("70099999", "70099999", "DATOS", "70099999") == (
+        "tecnico_no_personal", "tipo_datos"
+    )
+
+
 # --- Matriz DESCONOCIDO ---
 
 def test_desconocido_digitos_8_es_indeterminado():
@@ -170,8 +279,10 @@ def test_integracion_datos_produce_tecnico():
     assert result["contacto_motivo"].iloc[0] == "tipo_datos"
 
 def test_integracion_voz_plausible():
+    # tel distinto de contacto: un mismo valor en ambas columnas activaría la
+    # exclusión de autocontacto (Tarea 3, P0-B), que no es lo que este test cubre.
     df = pd.DataFrame({
-        "tel": ["70001234"],
+        "tel": ["70009999"],
         "contacto": ["70001234"],
         "tipo_evento_normalizado": ["VOZ"],
     })
@@ -190,9 +301,13 @@ def test_integracion_hex_sms_es_tecnico():
     assert result["contacto_motivo"].iloc[0] == "formato_alfanumerico"
 
 def test_integracion_sin_tipo_evento_normalizado():
-    """Sin columna tipo_evento_normalizado → DESCONOCIDO → indeterminado si formato válido."""
+    """Sin columna tipo_evento_normalizado → DESCONOCIDO → indeterminado si formato válido.
+
+    tel distinto de contacto: un mismo valor activaría la exclusión de
+    autocontacto (Tarea 3, P0-B), que no es lo que este test cubre.
+    """
     df = pd.DataFrame({
-        "tel": ["70001234"],
+        "tel": ["70009999"],
         "contacto": ["70001234"],
     })
     result = normalize_contact_fields(df)
