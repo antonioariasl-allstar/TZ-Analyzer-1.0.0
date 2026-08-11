@@ -465,6 +465,25 @@ def summarize_outputs(
     return kmz_path
 
 
+_FECHA_FILTRO_ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+
+
+def _parse_filtro_fecha_para_nombre(valor: Optional[str]) -> Any:
+    """Parsea una fecha de ``filters`` (``dia``/``desde``/``hasta``) para el
+    sufijo de nombre sugerido, sin invertir mes/día.
+
+    Mismo criterio que ``tz_core.time_filters._parse_filtro_fecha``: con
+    ``dayfirst=True`` incondicional, un valor ISO ya no ambiguo como
+    "2024-01-03" se interpretaba como 3 de enero solo por casualidad (día <
+    12); una fecha como "2020-01-02" se invertía a 2020-02-01. Los
+    ``<input type="date">`` de la capa web entregan ISO."""
+    if not valor:
+        return pd.NaT
+    texto = str(valor).strip()
+    dayfirst = not _FECHA_FILTRO_ISO_RE.match(texto)
+    return pd.to_datetime(texto, dayfirst=dayfirst, errors="coerce")
+
+
 def suggest_case_name(
     *,
     df: Any,
@@ -531,16 +550,16 @@ def suggest_case_name(
         tipo = filters.get("tipo")
         try:
             if tipo == "dia":
-                dia = pd.to_datetime(filters.get("dia"), dayfirst=True, errors="coerce")
+                dia = _parse_filtro_fecha_para_nombre(filters.get("dia"))
                 if pd.notna(dia):
                     suffix = f"__dia_{dia.strftime('%Y-%m-%d')}"
             elif tipo == "rango_dias":
-                d1 = pd.to_datetime(filters.get("desde"), dayfirst=True, errors="coerce")
-                d2 = pd.to_datetime(filters.get("hasta"), dayfirst=True, errors="coerce")
+                d1 = _parse_filtro_fecha_para_nombre(filters.get("desde"))
+                d2 = _parse_filtro_fecha_para_nombre(filters.get("hasta"))
                 if pd.notna(d1) and pd.notna(d2):
                     suffix = f"__rd_{d1.strftime('%Y-%m-%d')}__{d2.strftime('%Y-%m-%d')}"
             elif tipo == "rango_horas_dia":
-                dia = pd.to_datetime(filters.get("dia"), dayfirst=True, errors="coerce")
+                dia = _parse_filtro_fecha_para_nombre(filters.get("dia"))
                 h1 = (filters.get("hora_ini") or "00:00")[:5].replace(":", "-")
                 h2 = (filters.get("hora_fin") or "00:00")[:5].replace(":", "-")
                 if pd.notna(dia) and h1 and h2:

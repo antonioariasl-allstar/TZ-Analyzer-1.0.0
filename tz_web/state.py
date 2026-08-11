@@ -36,6 +36,7 @@ from tz_web.services import (
     CaseFileNotFoundError,
     CaseLoadError,
     CaseResult,
+    FiltroTiempoSinRegistrosError,
     InvalidMappingError,
     OutputDirectoryError,
     SheetNotFoundError,
@@ -72,6 +73,16 @@ STATUS_PENDING = "pending"
 STATUS_RUNNING = "running"
 STATUS_SUCCESS = "success"
 STATUS_FAILED = "failed"
+
+# ---------------------------------------------------------------------------
+# Modo de análisis (sección 1 del microbloque Modo 2) — un único campo, no
+# varios booleanos: "1" = bitácora completa, "2" = bitácora filtrada por
+# tiempo. El motor no conoce este campo; solo distingue qué pantallas
+# recorre la capa web (ver tz_web.routes).
+# ---------------------------------------------------------------------------
+
+MODO_1 = "1"
+MODO_2 = "2"
 
 # ---------------------------------------------------------------------------
 # Carpetas de trabajo — nunca dentro del repositorio (sección 6/11/14).
@@ -142,6 +153,26 @@ def translate_error(exc: BaseException) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Código de error estructural (microajuste Modo 2) — pequeña señal separada
+# del texto visible (``error_message``), para que la navegación de
+# recuperación (p. ej. "Volver a revisar filtro temporal" en Resultados) no
+# dependa de comparar contra un mensaje. No es un sistema general de
+# excepciones: solo distingue los casos que la capa web necesita diferenciar
+# hoy; una excepción de dominio sin código propio no obtiene ninguno (None).
+# ---------------------------------------------------------------------------
+
+ERROR_CODE_FILTRO_SIN_REGISTROS = "filtro_sin_registros"
+
+
+def error_code_for(exc: BaseException) -> Optional[str]:
+    """Código estructural pequeño asociado a ``exc``, o ``None`` si no
+    corresponde a ninguno de los casos distinguidos."""
+    if isinstance(exc, FiltroTiempoSinRegistrosError):
+        return ERROR_CODE_FILTRO_SIN_REGISTROS
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Sesión de trabajo (sección 5) — un identificador aleatorio, estado en
 # memoria, sin base de datos.
 # ---------------------------------------------------------------------------
@@ -152,6 +183,9 @@ class Session:
     id: str
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
+
+    # Modo activo (sección 1 del microbloque Modo 2).
+    modo: str = MODO_1
 
     # Pantalla 1 — archivo
     temp_path: Optional[str] = None
@@ -195,6 +229,9 @@ class Session:
     percent: int = 0
     result: Optional[CaseResult] = None
     error_message: Optional[str] = None
+    # Señal estructural separada de error_message (ver error_code_for más
+    # arriba): None cuando el fallo no tiene un código distinguido.
+    error_code: Optional[str] = None
     task_started: bool = False
     started_at: Optional[float] = None
     finished_at: Optional[float] = None

@@ -214,6 +214,25 @@ def test_suggest_case_name_builds_base_from_identity_and_filters():
     assert "dia_2024-01-03" in suggestion.filter_suffix
 
 
+def test_suggest_case_name_filtro_dia_iso_no_invierte_mes_dia():
+    """Regresión (microbloque Modo 2 parte 2): un valor de filtro en ISO
+    (AAAA-MM-DD, como entregan los <input type="date"> de tz_web) no debe
+    interpretarse con dayfirst=True — 2020-01-02 es 2 de enero, no 2 de
+    febrero."""
+    df = pd.DataFrame({"tel": ["111"], "alias": ["Alias"], "fecha": ["2020-01-01"]})
+    identity = CaseIdentity(mode="TEL", primary_id=None, alias_short="AL", base_name="")
+
+    suggestion = suggest_case_name(
+        df=df,
+        identity=identity,
+        filters={"tipo": "dia", "dia": "2020-01-02"},
+        timestamp_fn=lambda: pd.Timestamp("2024-01-05 10:00"),
+        sanitize_fn=lambda value: value,
+    )
+
+    assert "dia_2020-01-02" in suggestion.filter_suffix
+
+
 def test_suggest_case_name_falls_back_to_alias_part_when_missing_column():
     df = pd.DataFrame(
         {

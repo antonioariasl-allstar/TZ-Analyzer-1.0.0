@@ -861,3 +861,30 @@ table.tz-table th {
     font-size: 11px;
   }
 }
+
+.tz-filtro-option {
+  opacity: 1;
+}
+
+.tz-filtro-option-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.tz-filtro-option-header h3 {
+  margin: 0;
+}
+
+.tz-filtro-option-header input {
+  margin: 0;
+}
+
+.tz-filtro-option.disabled {
+  opacity: 0.55;
+}
+
+.tz-filtro-option.disabled .tz-filtro-option-header {
+  cursor: not-allowed;
+}

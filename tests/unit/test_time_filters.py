@@ -141,6 +141,127 @@ class TestRangoDeHorasGlobal:
         assert set(resultado["antena"]) == {"dentro", "otra_fecha_misma_hora"}
 
 
+class TestValorDeFiltroEnIso:
+    """Caso 7 (microbloque Modo 2 parte 2): el VALOR del filtro (dia/desde/
+    hasta), no solo la columna 'fecha', también puede llegar en ISO —
+    p. ej. desde los <input type="date"> de la capa web (tz_web), que
+    producen AAAA-MM-DD. Antes de este caso, aplicar_filtros_tiempo()
+    parseaba dia/desde/hasta con dayfirst=True incondicional, invirtiendo
+    mes/día para valores ISO no ambiguos (2020-01-02 -> 2020-02-01)."""
+
+    def test_dia_iso_no_se_invierte(self):
+        df = pd.DataFrame(
+            [
+                {"fecha": "2020-01-02 10:00:00", "hora": "10:00:00", "antena": "dentro"},
+                {"fecha": "2020-02-01 10:00:00", "hora": "10:00:00", "antena": "otro_mes"},
+            ]
+        )
+        filtros = {
+            "tipo": "dia",
+            "dia": "2020-01-02",
+            "desde": None,
+            "hasta": None,
+            "hora_ini": None,
+            "hora_fin": None,
+        }
+
+        resultado, _resumen = aplicar_filtros_tiempo(df, filtros)
+
+        assert list(resultado["antena"]) == ["dentro"]
+
+    def test_rango_de_dias_con_extremos_iso_no_se_invierte(self):
+        df = pd.DataFrame(
+            [
+                {"fecha": "2020-01-01 00:00:00", "hora": "10:00:00", "antena": "antes"},
+                {"fecha": "2020-01-02 00:00:00", "hora": "10:00:00", "antena": "dentro"},
+                {"fecha": "2020-01-05 00:00:00", "hora": "10:00:00", "antena": "despues"},
+            ]
+        )
+        filtros = {
+            "tipo": "rango_dias",
+            "dia": None,
+            "desde": "2020-01-01",
+            "hasta": "2020-01-02",
+            "hora_ini": None,
+            "hora_fin": None,
+        }
+
+        resultado, _resumen = aplicar_filtros_tiempo(df, filtros)
+
+        assert set(resultado["antena"]) == {"antes", "dentro"}
+
+    def test_rango_horas_en_dia_con_dia_iso_no_se_invierte(self):
+        df = pd.DataFrame(
+            [
+                {"fecha": "2020-01-02 00:00:00", "hora": "10:00:00", "antena": "dentro"},
+                {"fecha": "2020-02-01 00:00:00", "hora": "10:00:00", "antena": "otro_mes"},
+            ]
+        )
+        filtros = {
+            "tipo": "rango_horas_dia",
+            "dia": "2020-01-02",
+            "desde": None,
+            "hasta": None,
+            "hora_ini": "08:00:00",
+            "hora_fin": "12:00:00",
+        }
+
+        resultado, _resumen = aplicar_filtros_tiempo(df, filtros)
+
+        assert list(resultado["antena"]) == ["dentro"]
+
+
+class TestHoraSinSegundos:
+    """Caso 8 (microbloque Modo 2 parte 2): hora_ini/hora_fin en 'HH:MM' sin
+    segundos — lo que entregan los <input type="time"> de la capa web (sin
+    atributo step). Antes de este caso, pd.to_timedelta('20:00') lanzaba
+    ValueError (capturado), y el filtro quedaba silenciosamente sin aplicar
+    (0 filas descartadas) en vez de fallar ruidosamente o filtrar bien."""
+
+    def test_rango_horas_con_hora_sin_segundos_se_aplica(self):
+        df = pd.DataFrame(
+            [
+                {"fecha": "2020-01-02 00:00:00", "hora": "20:15:00", "antena": "dentro"},
+                {"fecha": "2020-01-02 00:00:00", "hora": "10:00:00", "antena": "fuera"},
+            ]
+        )
+        filtros = {
+            "tipo": "rango_horas",
+            "dia": None,
+            "desde": None,
+            "hasta": None,
+            "hora_ini": "20:00",
+            "hora_fin": "00:00",
+        }
+
+        resultado, resumen = aplicar_filtros_tiempo(df, filtros)
+
+        assert list(resultado["antena"]) == ["dentro"]
+        assert "inválida" not in resumen
+
+    def test_rango_horas_en_dia_con_hora_sin_segundos_se_aplica(self):
+        df = pd.DataFrame(
+            [
+                {"fecha": "2020-01-02 00:00:00", "hora": "20:15:00", "antena": "dentro"},
+                {"fecha": "2020-01-02 00:00:00", "hora": "10:00:00", "antena": "fuera_hora"},
+                {"fecha": "2020-01-03 00:00:00", "hora": "20:15:00", "antena": "otro_dia"},
+            ]
+        )
+        filtros = {
+            "tipo": "rango_horas_dia",
+            "dia": "2020-01-02",
+            "desde": None,
+            "hasta": None,
+            "hora_ini": "20:00",
+            "hora_fin": "21:30",
+        }
+
+        resultado, resumen = aplicar_filtros_tiempo(df, filtros)
+
+        assert list(resultado["antena"]) == ["dentro"]
+        assert "inválida" not in resumen
+
+
 class TestFechaIsoNoSeInvierte:
     """Caso 6: 2026-07-01 debe seguir siendo 1 de julio, no 7 de enero (causa raíz S2)."""
 

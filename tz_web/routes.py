@@ -42,6 +42,8 @@ from tz_core.mapping_wizard import FIELD_CONTEXT
 from tz_core.user_paths import resolve_default_output_dir
 from tz_web import state
 from tz_web.field_catalog import FIELD_DESCRIPTIONS, FIELD_GROUPS, FIELD_LABELS
+from tz_web.filter_catalog import FILTRO_TIEMPO_CATALOG, FILTRO_TIEMPO_ORDER
+from tz_web.scope import describir_alcance, parse_fecha_iso
 from tz_web.services import (
     CaseRequest,
     InvalidMappingError,
@@ -180,10 +182,24 @@ def menu_screen():
 
 @bp.route("/modo/<int:n>", methods=["POST"])
 def mode_pending(n: int):
-    if n not in (2, 3):
+    if n != 3:
         abort(404)
     flash("Modo pendiente de incorporación web.", "error")
     return redirect(url_for("tz_web.menu_screen"))
+
+
+@bp.route("/modo/2", methods=["POST"])
+def mode_2():
+    """Entrada real del Modo 2 (bitácora filtrada por tiempo): inicia o
+    restablece la sesión de análisis y la marca como Modo 2, entrando al
+    mismo flujo de archivo/hoja/vista previa/mapeo que el Modo 1 (sección 2
+    del microbloque). No se duplican pantallas ni rutas: solo cambia
+    ``case.modo``, que ``mapping_confirm`` usa después para decidir si
+    inserta la pantalla de Filtro temporal."""
+    case = _current_session()
+    case.modo = state.MODO_2
+    state.touch(case)
+    return redirect(url_for("tz_web.index"))
 
 
 @bp.route("/analizador", methods=["GET"])
@@ -547,6 +563,9 @@ def mapping_confirm():
     case.mapping_draft = None
     case.mapping_stage = "form"
     state.touch(case)
+
+    if case.modo == state.MODO_2:
+        return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
     return redirect(url_for("tz_web.configure_screen"))
 
 
@@ -562,6 +581,154 @@ def mapping_edit():
         case.mapping_stage = "form"
         state.touch(case)
     return redirect(url_for("tz_web.mapping_screen"))
+
+
+# ---------------------------------------------------------------------------
+# Pantalla 2B (solo Modo 2) — Filtro temporal
+#
+# Se inserta entre "Revisión del mapeo" e "Identificación" (sección 3 del
+# microbloque Modo 2): el Modo 1 nunca la alcanza porque mapping_confirm()
+# solo redirige aquí cuando ``case.modo == state.MODO_2``. Todavía NO aplica
+# el filtro al DataFrame (sección 10, fuera de alcance de este microbloque):
+# solo persiste la selección en ``case.filtro_tiempo``, el mismo campo que ya
+# consume ``CaseRequest`` para la ejecución real (sección 7).
+# ---------------------------------------------------------------------------
+
+# Tipos habilitados según el estado de la capacidad "filtros_temporales" ya
+# calculada por detectar_capacidades() (sección 4): no se recalcula
+# disponibilidad por separado, solo se traduce su "estado" a los tipos de
+# filtro que la pantalla debe ofrecer.
+_FILTRO_TIPOS_SOLO_FECHA: Tuple[str, ...] = ("dia", "rango_dias")
+
+
+def _capacidad_filtros_temporales(case: state.Session) -> Optional[Dict[str, Any]]:
+    if not case.capabilities_preview:
+        return None
+    return case.capabilities_preview.get("capacidades", {}).get("filtros_temporales")
+
+
+def _filtro_tiempo_tipos_habilitados(case: state.Session) -> Tuple[str, ...]:
+    """Tipos de filtro que la pantalla debe ofrecer para ``case``, a partir
+    únicamente de ``case.capabilities_preview`` (sección 4):
+
+    - fecha y hora disponibles (estado "disponible"): los 4 tipos.
+    - solo fecha disponible (estado "parcial"): solo "dia" y "rango_dias".
+    - sin fecha parseable (no disponible): ninguno (pantalla bloqueada).
+    """
+    cap = _capacidad_filtros_temporales(case)
+    if not cap or not cap.get("disponible"):
+        return ()
+    if cap.get("estado") == "parcial":
+        return _FILTRO_TIPOS_SOLO_FECHA
+    return FILTRO_TIEMPO_ORDER
+
+
+def _parse_filtro_tiempo_modo2(
+    tipos_habilitados: Tuple[str, ...],
+) -> Tuple[Optional[Dict[str, Optional[str]]], Optional[str]]:
+    """Como ``_parse_filtro_tiempo()``, pero para el Modo 2: no admite
+    "ninguno" (sección 5, el Modo 2 no ofrece "Sin filtro") y rechaza
+    cualquier tipo que la capacidad de esta bitácora no habilite (defensa
+    adicional a que el HTML ya deshabilite esas opciones)."""
+    tipo = request.form.get("filtro_tipo", "")
+    if tipo not in ("dia", "rango_dias", "rango_horas_dia", "rango_horas"):
+        return None, "Seleccione un tipo de filtro temporal válido."
+    if tipo not in tipos_habilitados:
+        return None, "El tipo de filtro seleccionado no está disponible para esta bitácora."
+
+    def _get(name: str) -> Optional[str]:
+        valor = (request.form.get(name) or "").strip()
+        return valor or None
+
+    if tipo == "dia":
+        dia = _get("filtro_dia")
+        if not dia:
+            return None, "Indique el día para el filtro."
+        return {"tipo": "dia", "dia": dia, "desde": None, "hasta": None, "hora_ini": None, "hora_fin": None}, None
+
+    if tipo == "rango_dias":
+        desde, hasta = _get("filtro_desde"), _get("filtro_hasta")
+        if not desde or not hasta:
+            return None, "Indique el rango de fechas completo (inicial y final)."
+        fecha_desde, fecha_hasta = parse_fecha_iso(desde), parse_fecha_iso(hasta)
+        if fecha_desde is not None and fecha_hasta is not None and fecha_desde > fecha_hasta:
+            return None, "La fecha inicial del rango debe ser anterior o igual a la fecha final."
+        return {
+            "tipo": "rango_dias", "dia": None, "desde": desde, "hasta": hasta,
+            "hora_ini": None, "hora_fin": None,
+        }, None
+
+    if tipo == "rango_horas_dia":
+        dia = _get("filtro_dia")
+        hora_ini, hora_fin = _get("filtro_hora_ini"), _get("filtro_hora_fin")
+        if not dia or not hora_ini or not hora_fin:
+            return None, "Indique el día y el rango de horas completo (inicial y final)."
+        return {
+            "tipo": "rango_horas_dia", "dia": dia, "desde": None, "hasta": None,
+            "hora_ini": hora_ini, "hora_fin": hora_fin,
+        }, None
+
+    hora_ini, hora_fin = _get("filtro_hora_ini"), _get("filtro_hora_fin")
+    if not hora_ini or not hora_fin:
+        return None, "Indique el rango de horas completo (inicial y final)."
+    return {
+        "tipo": "rango_horas", "dia": None, "desde": None, "hasta": None,
+        "hora_ini": hora_ini, "hora_fin": hora_fin,
+    }, None
+
+
+@bp.route("/configure/filtro-tiempo", methods=["GET"])
+def configure_filtro_tiempo_screen():
+    case = _current_session(create=False)
+    if case is None or not case.mapping:
+        flash("Primero confirme el mapeo de columnas.", "error")
+        return redirect(url_for("tz_web.mapping_screen"))
+    if case.modo != state.MODO_2:
+        return redirect(url_for("tz_web.configure_screen"))
+
+    tipos_habilitados = _filtro_tiempo_tipos_habilitados(case)
+    return render_template(
+        "configure_filtro_tiempo.html",
+        case=case,
+        bloqueado=not tipos_habilitados,
+        tipos_habilitados=tipos_habilitados,
+        filtro_catalog=FILTRO_TIEMPO_CATALOG,
+        filtro_orden=FILTRO_TIEMPO_ORDER,
+    )
+
+
+@bp.route("/configure/filtro-tiempo", methods=["POST"])
+def configure_filtro_tiempo_submit():
+    case = _current_session(create=False)
+    if case is None or not case.mapping:
+        flash("Primero confirme el mapeo de columnas.", "error")
+        return redirect(url_for("tz_web.mapping_screen"))
+    if case.modo != state.MODO_2:
+        return redirect(url_for("tz_web.configure_screen"))
+
+    tipos_habilitados = _filtro_tiempo_tipos_habilitados(case)
+    if not tipos_habilitados:
+        flash(
+            "Esta bitácora no dispone de una fecha reconocible para aplicar filtros temporales.",
+            "error",
+        )
+        return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
+
+    filtro, error = _parse_filtro_tiempo_modo2(tipos_habilitados)
+    if error:
+        flash(error, "error")
+        return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
+
+    case.filtro_tiempo = filtro
+    state.touch(case)
+
+    if request.form.get("accion", "siguiente") == "anterior":
+        case.mapping_draft = case.mapping
+        case.mapping_stage = "review"
+        state.touch(case)
+        return redirect(url_for("tz_web.mapping_screen"))
+
+    return redirect(url_for("tz_web.configure_screen"))
 
 
 # ---------------------------------------------------------------------------
@@ -790,6 +957,7 @@ def configure_final_screen():
             mapeo=case.mapping,
             identity_overrides=case.identity_overrides,
             tipo_bitacora=tipo_bitacora_actual,
+            filtro_tiempo=case.filtro_tiempo,
         )
 
     return render_template(
@@ -825,6 +993,7 @@ def configure_final_preview_name():
         mapeo=case.mapping,
         identity_overrides=case.identity_overrides,
         tipo_bitacora=tipo_bitacora,
+        filtro_tiempo=case.filtro_tiempo,
     )
     return jsonify({"suggested_name": suggested_name})
 
@@ -854,8 +1023,13 @@ def configure_final_submit():
     else:
         case.output_base_name = None
 
-    # Modo 1 (sección 4 del microbloque): sin filtro temporal, siempre.
-    case.filtro_tiempo = None
+    # Modo 1: sin filtro temporal, siempre (nunca pasó por Filtro temporal).
+    # Modo 2: se preserva exactamente la selección ya guardada por
+    # configure_filtro_tiempo_submit — no se reconstruye desde este
+    # formulario, que no tiene esos campos (sección 1 del microbloque Modo 2
+    # parte 2).
+    if case.modo != state.MODO_2:
+        case.filtro_tiempo = None
 
     state.touch(case)
 
@@ -887,6 +1061,7 @@ def configure_resumen_screen():
             mapeo=case.mapping,
             identity_overrides=case.identity_overrides,
             tipo_bitacora=case.tipo_bitacora,
+            filtro_tiempo=case.filtro_tiempo,
         )
 
     html_cfg = get_config().get("html", {}) or {}
@@ -900,6 +1075,7 @@ def configure_resumen_screen():
         selected_color_hex=case.color_hex or _default_theme_hex(),
         default_top_antenas=int(html_cfg.get("top_antenas_n", 10)),
         default_top_contactos=int(html_cfg.get("top_contactos_n", 10)),
+        alcance=describir_alcance(case.filtro_tiempo),
     )
 
 
@@ -1109,6 +1285,7 @@ def _start_task(case: state.Session) -> bool:
     case.percent = 0
     case.result = None
     case.error_message = None
+    case.error_code = None
     import time as _time
     case.started_at = _time.time()
 
@@ -1147,6 +1324,7 @@ def _start_task(case: state.Session) -> bool:
         except Exception as exc:  # noqa: BLE001 - frontera del worker: se traduce, nunca se propaga
             state.log_technical_error("process_case", exc)
             case.error_message = state.translate_error(exc)
+            case.error_code = state.error_code_for(exc)
             case.status = state.STATUS_FAILED
         finally:
             case.finished_at = _time.time()
@@ -1194,7 +1372,34 @@ def results_screen():
     if case is None or case.status not in (state.STATUS_SUCCESS, state.STATUS_FAILED):
         flash("Aún no hay resultados disponibles.", "error")
         return redirect(url_for("tz_web.index"))
-    return render_template("results.html", case=case)
+    return render_template(
+        "results.html",
+        case=case,
+        mostrar_volver_filtro=(
+            case.status == state.STATUS_FAILED
+            and case.modo == state.MODO_2
+            and case.error_code == state.ERROR_CODE_FILTRO_SIN_REGISTROS
+        ),
+    )
+
+
+def _reset_terminal_run_state(case: state.Session) -> None:
+    """Limpia el estado terminal de una corrida FAILED (``error_message``/
+    ``error_code``/``result``/``finished_at``/progreso), común a ambas
+    acciones de recuperación desde Resultados (``results_back_to_mapping``/
+    ``results_back_to_filtro_tiempo``) — ninguna toca archivo, hoja, mapeo ni
+    Configuración 3A-3E."""
+    case.status = state.STATUS_PENDING
+    case.error_message = None
+    case.error_code = None
+    case.result = None
+    case.stage = None
+    case.stage_message = ""
+    case.sequence = 0
+    case.percent = 0
+    case.task_started = False
+    case.started_at = None
+    case.finished_at = None
 
 
 @bp.route("/results/back-to-mapping", methods=["POST"])
@@ -1204,9 +1409,7 @@ def results_back_to_mapping():
     ``configure_back_to_mapping``) y regresa a "Revisión del mapeo", sin
     perder archivo, hoja, mapeo ni Configuración 3A-3E (color, productos,
     Top N, unidad de duración, etc. — ningún campo de esas pantallas se
-    toca aquí). Solo se limpia el estado terminal de la corrida fallida
-    (``error_message``/``result``/``finished_at``/progreso), que ya no
-    corresponde a la corrida que viene."""
+    toca aquí). Solo se limpia el estado terminal de la corrida fallida."""
     case = _current_session(create=False)
     if case is None or not case.mapping:
         flash("Primero confirme el mapeo de columnas.", "error")
@@ -1214,18 +1417,27 @@ def results_back_to_mapping():
 
     case.mapping_draft = case.mapping
     case.mapping_stage = "review"
-    case.status = state.STATUS_PENDING
-    case.error_message = None
-    case.result = None
-    case.stage = None
-    case.stage_message = ""
-    case.sequence = 0
-    case.percent = 0
-    case.task_started = False
-    case.started_at = None
-    case.finished_at = None
+    _reset_terminal_run_state(case)
     state.touch(case)
     return redirect(url_for("tz_web.mapping_screen"))
+
+
+@bp.route("/results/back-to-filtro-tiempo", methods=["POST"])
+def results_back_to_filtro_tiempo():
+    """"Volver a revisar filtro temporal" desde un resultado FAILED por
+    filtro temporal sin registros (sección 9 del microbloque Modo 2 parte
+    2): a diferencia de ``results_back_to_mapping``, no repuebla
+    ``mapping_draft`` ni toca la etapa de mapeo — vuelve directo a Filtro
+    temporal para que el usuario corrija solo la selección temporal, sin
+    repetir archivo/mapeo/configuración."""
+    case = _current_session(create=False)
+    if case is None or not case.mapping or case.modo != state.MODO_2:
+        flash("Primero confirme el mapeo de columnas.", "error")
+        return redirect(url_for("tz_web.mapping_screen"))
+
+    _reset_terminal_run_state(case)
+    state.touch(case)
+    return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
 
 
 def _resolve_open_path(case: state.Session, kind: str) -> Optional[str]:

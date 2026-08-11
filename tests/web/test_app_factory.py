@@ -44,11 +44,17 @@ def test_modo_1_abre_la_pantalla_de_carga_de_archivo(client):
     assert b'enctype="multipart/form-data"' in resp.data
 
 
-def test_modos_2_y_3_muestran_mensaje_de_pendiente(client):
-    for n in (2, 3):
-        resp = client.post(f"/modo/{n}", follow_redirects=True)
-        assert resp.status_code == 200
-        assert "Modo pendiente de incorporación web".encode("utf-8") in resp.data
+def test_modo_3_muestra_mensaje_de_pendiente(client):
+    resp = client.post("/modo/3", follow_redirects=True)
+    assert resp.status_code == 200
+    assert "Modo pendiente de incorporación web".encode("utf-8") in resp.data
+
+
+def test_modo_2_ya_no_esta_pendiente(client):
+    resp = client.post("/modo/2", follow_redirects=True)
+    assert resp.status_code == 200
+    assert "Modo pendiente de incorporación web".encode("utf-8") not in resp.data
+    assert b"Cargar archivo" in resp.data
 
 
 def test_pantallas_del_modo_1_incluyen_boton_volver_al_menu(client):

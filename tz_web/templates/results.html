@@ -85,6 +85,11 @@
 
   <div class="tz-card">
     <div class="tz-actions">
+      {% if mostrar_volver_filtro %}
+      <form action="{{ url_for('tz_web.results_back_to_filtro_tiempo') }}" method="post">
+        <button type="submit" class="tz-btn tz-btn-secondary">Volver a revisar filtro temporal</button>
+      </form>
+      {% endif %}
       <form action="{{ url_for('tz_web.results_back_to_mapping') }}" method="post">
         <button type="submit" class="tz-btn tz-btn-secondary">Volver a revisar mapeo</button>
       </form>

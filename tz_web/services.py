@@ -175,6 +175,7 @@ from tz_core.ui_utils import (
 from tz_core.user_paths import default_output_cwd_fn
 from tz_core.utils import sanear_nombre_archivo
 from tz_core.validation_utils import validar_datos
+from tz_web.scope import describir_alcance
 
 __all__ = [
     "CaseRequest",
@@ -188,7 +189,18 @@ __all__ = [
     "InvalidMappingError",
     "OutputDirectoryError",
     "SheetNotFoundError",
+    "FiltroTiempoSinRegistrosError",
+    "MSG_FILTRO_SIN_REGISTROS",
 ]
+
+# Mensaje curado (sección 9 del microbloque Modo 2, parte 2) para cuando un
+# filtro temporal activo deja el DataFrame vacío. Constante compartida (en
+# vez de repetir el literal en tz_web.routes) para que la pantalla de
+# Resultados pueda ofrecer "Volver a revisar filtro temporal" comparando
+# contra esta misma fuente, sin adivinar por subcadenas del mensaje.
+MSG_FILTRO_SIN_REGISTROS = (
+    "No se encontraron registros que coincidan con el filtro temporal seleccionado."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +235,19 @@ class OutputDirectoryError(Exception):
 class AnalysisInProgressError(Exception):
     """Ya hay un análisis en ejecución; TZ Analyzer v1.1 solo permite uno a
     la vez (ver sección 9 del encargo de Fase 1 Web)."""
+
+
+class FiltroTiempoSinRegistrosError(ArchivoNoProcesableError):
+    """``ArchivoNoProcesableError`` específico: el filtro temporal (Modo 2)
+    dejó el DataFrame vacío.
+
+    Subclase mínima — no un sistema general de excepciones — para que la
+    capa web pueda distinguir esta causa de forma estructural
+    (``Session.error_code``, ver ``tz_web.state.error_code_for``) sin
+    acoplar la recuperación al texto visible del mensaje (microajuste
+    estructural previo a prueba manual). Sigue siendo una
+    ``ArchivoNoProcesableError`` para todo el resto del sistema (QC,
+    traducción de errores, etc.), que no necesita distinguirla."""
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +343,23 @@ class CaseResult:
     summary: Dict[str, Any] = field(default_factory=dict)
 
 
+def _nombre_con_filtro(suggestion: Any) -> str:
+    """Combina ``suggestion.base_name`` con ``suggestion.filter_suffix``
+    cuando este último no está vacío (Modo 2 con un tipo de filtro que
+    ``suggest_case_name`` sabe describir en el sufijo, sección 7 del
+    microbloque Modo 2 parte 2).
+
+    ``suggest_case_name`` (``tz_core.ui_utils``) ya calcula ambos campos por
+    separado — su ``base_name`` nunca incluyó el sufijo, y ningún llamador
+    existente lo combinaba, por lo que el nombre sugerido no llegaba a
+    reflejar el filtro pese a que la información ya estaba disponible. No se
+    toca ``suggest_case_name`` ni se recalcula el sufijo aquí: solo se
+    concatenan los dos campos que ya expone."""
+    if suggestion.filter_suffix:
+        return f"{suggestion.base_name}{suggestion.filter_suffix}"
+    return suggestion.base_name
+
+
 def preview_suggested_case_name(
     *,
     ruta_archivo: str,
@@ -325,16 +367,19 @@ def preview_suggested_case_name(
     mapeo: Dict[str, Tuple[str, Any]],
     identity_overrides: Optional[Dict[str, str]],
     tipo_bitacora: str,
+    filtro_tiempo: Optional[FiltroTiempo] = None,
 ) -> Optional[str]:
     """Nombre base que ``process_case()`` sugeriría para este caso, calculado
-    por adelantado (subpantalla 3E) sin ejecutar el análisis completo.
+    por adelantado (subpantalla 3E/Resumen) sin ejecutar el análisis completo.
 
     Usa exactamente las mismas funciones de ``tz_core`` que ``process_case``
     (``prompt_case_identity``/``suggest_case_name``/``sanear_nombre_archivo``)
-    sobre el archivo ya mapeado, pero sin ingesta/QC ni filtros de tiempo
-    (irrelevantes para el nombre sugerido). Es solo una vista previa: nunca
-    escribe nada a disco y cualquier fallo se traduce en ``None`` (la
-    pantalla cae de vuelta a "se sugerirá automáticamente").
+    sobre el archivo ya mapeado, sin ingesta/QC (irrelevante para el nombre
+    sugerido) pero SÍ considerando ``filtro_tiempo`` cuando se provee (Modo 2,
+    sección 7 del microbloque Modo 2 parte 2) — mismo dict que
+    ``CaseRequest.filtro_tiempo``, ``None`` para Modo 1. Es solo una vista
+    previa: nunca escribe nada a disco y cualquier fallo se traduce en
+    ``None`` (la pantalla cae de vuelta a "se sugerirá automáticamente").
     """
     try:
         df, _hoja_real = cargar_excel_con_normalizacion(ruta_archivo, hoja)
@@ -354,11 +399,11 @@ def preview_suggested_case_name(
         suggestion = suggest_case_name(
             df=df,
             identity=identity,
-            filters=None,
+            filters=filtro_tiempo,
             timestamp_fn=datetime.now,
             sanitize_fn=lambda s: sanear_nombre_archivo(s, nombre_base),
         )
-        return suggestion.base_name
+        return _nombre_con_filtro(suggestion)
     except Exception:  # noqa: BLE001 - vista previa best-effort, nunca debe tumbar la pantalla
         return None
 
@@ -656,6 +701,13 @@ def process_case(request: CaseRequest) -> CaseResult:
             )
 
             if df.empty:
+                if ingestion.time_filters.enabled:
+                    # Filtro temporal (Modo 2) activo y sin resultados: mensaje
+                    # específico y accionable (sección 9 del microbloque Modo 2
+                    # parte 2), con una subclase mínima de ArchivoNoProcesableError
+                    # para que tz_web pueda distinguirlo estructuralmente (ver
+                    # error_code) sin cambiar el contrato del motor.
+                    raise FiltroTiempoSinRegistrosError(MSG_FILTRO_SIN_REGISTROS)
                 raise ArchivoNoProcesableError(
                     "No hay registros para procesar después de aplicar filtros."
                 )
@@ -675,6 +727,13 @@ def process_case(request: CaseRequest) -> CaseResult:
 
             nombre_base = os.path.splitext(os.path.basename(ruta))[0]
 
+            # Filtro efectivamente aplicado por la ingesta (idéntico a
+            # request.filtro_tiempo en la práctica, pero se prefiere el que
+            # reporta ingestion.time_filters: es el que realmente corrió).
+            filtro_efectivo = (
+                ingestion.time_filters.filters if ingestion.time_filters.enabled else None
+            )
+
             identity = prompt_case_identity(
                 df=df,
                 input_fn=lambda _msg: request.tipo_bitacora,
@@ -684,11 +743,11 @@ def process_case(request: CaseRequest) -> CaseResult:
             suggestion = suggest_case_name(
                 df=df,
                 identity=identity,
-                filters=ingestion.time_filters.filters if ingestion.time_filters.enabled else None,
+                filters=filtro_efectivo,
                 timestamp_fn=datetime.now,
                 sanitize_fn=lambda s: sanear_nombre_archivo(s, nombre_base),
             )
-            base_auto = suggestion.base_name
+            base_auto = _nombre_con_filtro(suggestion)
 
             try:
                 top_antenas = (
@@ -849,7 +908,7 @@ def process_case(request: CaseRequest) -> CaseResult:
                     else None
                 ),
                 "filtro_tiempo": ingestion.time_filters.summary,
-                "alcance": "Bitácora completa",
+                "alcance": describir_alcance(filtro_efectivo),
                 "top_antenas": top_antenas,
                 "top_contactos": top_contactos,
                 # None cuando no hay CapabilitiesReport (compatibilidad hacia

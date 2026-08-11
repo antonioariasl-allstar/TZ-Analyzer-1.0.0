@@ -8,11 +8,48 @@ cualquier interfaz futura.
 
 from __future__ import annotations
 
+import re
 from typing import Dict, Optional, Tuple
 
 import pandas as pd
 
 FiltroTiempo = Optional[Dict[str, Optional[str]]]
+
+_FECHA_ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+
+
+def _normalizar_hora_filtro(valor: Optional[str]) -> Optional[str]:
+    """Completa 'HH:MM' a 'HH:MM:00' — ``pd.to_timedelta`` exige segundos.
+
+    ``solicitar_filtros_tiempo()`` (CLI) ya hace este relleno sobre su
+    propia entrada; se repite aquí porque ``aplicar_filtros_tiempo()`` no
+    debe depender de que todo llamador lo haya hecho antes. Los
+    ``<input type="time">`` de la capa web (``tz_web``), en particular,
+    entregan HH:MM sin segundos: sin este relleno, ``pd.to_timedelta``
+    lanzaba ``ValueError`` (capturado más abajo) y el filtro quedaba
+    silenciosamente sin aplicar."""
+    if not valor:
+        return valor
+    texto = str(valor).strip()
+    if len(texto) == 5 and texto.count(":") == 1:
+        return texto + ":00"
+    return texto
+
+
+def _parse_filtro_fecha(valor: Optional[str]) -> pd.Timestamp:
+    """Parsea un valor de fecha de ``filtros`` (``dia``/``desde``/``hasta``)
+    sin ambigüedad día/mes.
+
+    ``dayfirst=True`` asume DD/MM/AAAA — el formato que pide
+    ``solicitar_filtros_tiempo()`` (CLI). Si el valor ya viene en ISO
+    (AAAA-MM-DD, como los ``<input type="date">`` de la capa web) se parsea
+    con ``dayfirst=False`` para no invertir mes/día; mismo criterio que ya
+    usa ``_parse_dataframe_dates`` para la columna 'fecha' del DataFrame."""
+    if not valor:
+        return pd.NaT
+    texto = str(valor).strip()
+    dayfirst = not _FECHA_ISO_RE.match(texto)
+    return pd.to_datetime(texto, dayfirst=dayfirst, errors="coerce")
 
 
 def solicitar_filtros_tiempo() -> FiltroTiempo:
@@ -138,15 +175,15 @@ def aplicar_filtros_tiempo(df: pd.DataFrame, filtros: FiltroTiempo) -> Tuple[pd.
 
     if tipo == "dia" and fecha is not None:
         try:
-            dia = pd.to_datetime(filtros.get("dia"), dayfirst=True, errors="coerce").normalize()
+            dia = _parse_filtro_fecha(filtros.get("dia")).normalize()
             mask &= fecha.dt.normalize() == dia
             resumen = f"Día: {filtros.get('dia')}"
         except Exception:
             pass
 
     elif tipo == "rango_dias" and fecha is not None:
-        d1 = pd.to_datetime(filtros.get("desde"), dayfirst=True, errors="coerce")
-        d2 = pd.to_datetime(filtros.get("hasta"), dayfirst=True, errors="coerce")
+        d1 = _parse_filtro_fecha(filtros.get("desde"))
+        d2 = _parse_filtro_fecha(filtros.get("hasta"))
         if pd.notna(d1):
             d1 = d1.normalize()
         if pd.notna(d2):
@@ -158,9 +195,9 @@ def aplicar_filtros_tiempo(df: pd.DataFrame, filtros: FiltroTiempo) -> Tuple[pd.
         resumen = f"Rango de días: {filtros.get('desde')} → {filtros.get('hasta')}"
 
     elif tipo == "rango_horas_dia" and fecha is not None and hora is not None:
-        dia = pd.to_datetime(filtros.get("dia"), dayfirst=True, errors="coerce")
-        h_ini = filtros.get("hora_ini")
-        h_fin = filtros.get("hora_fin")
+        dia = _parse_filtro_fecha(filtros.get("dia"))
+        h_ini = _normalizar_hora_filtro(filtros.get("hora_ini"))
+        h_fin = _normalizar_hora_filtro(filtros.get("hora_fin"))
         if pd.notna(dia) and h_ini and h_fin:
             try:
                 dia = dia.normalize()
@@ -176,8 +213,8 @@ def aplicar_filtros_tiempo(df: pd.DataFrame, filtros: FiltroTiempo) -> Tuple[pd.
                 resumen = "Rango de horas en día (entrada inválida, sin filtrar)"
 
     elif tipo == "rango_horas" and hora is not None:
-        h_ini = filtros.get("hora_ini")
-        h_fin = filtros.get("hora_fin")
+        h_ini = _normalizar_hora_filtro(filtros.get("hora_ini"))
+        h_fin = _normalizar_hora_filtro(filtros.get("hora_fin"))
         if h_ini and h_fin:
             try:
                 t1 = pd.to_timedelta(h_ini)

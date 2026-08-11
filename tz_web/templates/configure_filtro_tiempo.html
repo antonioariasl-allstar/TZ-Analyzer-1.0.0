@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Filtro temporal{% endblock %}
+{% block content %}
+
+{% if bloqueado %}
+
+<div class="tz-card">
+  <h2>Filtro temporal</h2>
+  <div class="tz-banner error">
+    Esta bitácora no dispone de una fecha reconocible para aplicar filtros temporales.
+    Puede procesarse igualmente mediante el Modo 1 (bitácora completa), que no requiere fecha.
+  </div>
+  <div class="tz-actions">
+    <form action="{{ url_for('tz_web.configure_back_to_mapping') }}" method="post">
+      <button type="submit" class="tz-btn tz-btn-secondary">← Volver a la revisión del mapeo</button>
+    </form>
+    <a class="tz-btn tz-btn-secondary" href="{{ url_for('tz_web.menu_screen') }}">Volver al menú principal</a>
+  </div>
+</div>
+
+{% else %}
+
+<div class="tz-card">
+  <h2>Filtro temporal</h2>
+  <p class="tz-help">
+    Seleccione cómo desea acotar la bitácora en el tiempo antes de continuar. Esta
+    selección se aplicará sobre toda la bitácora cargada.
+  </p>
+
+  <form action="{{ url_for('tz_web.configure_filtro_tiempo_submit') }}" method="post" id="filtro_tiempo_form">
+    {% for tipo in filtro_orden %}
+      {% set entry = filtro_catalog[tipo] %}
+      {% set habilitado = tipo in tipos_habilitados %}
+      <div class="tz-mapping-row tz-filtro-option{% if not habilitado %} disabled{% endif %}" data-tipo="{{ tipo }}">
+        <label class="tz-filtro-option-header">
+          <input type="radio" name="filtro_tipo" value="{{ tipo }}"
+                 {% if not habilitado %}disabled{% endif %}
+                 {% if case.filtro_tiempo and case.filtro_tiempo.tipo == tipo %}checked
+                 {% elif not case.filtro_tiempo and tipo == 'dia' %}checked{% endif %}
+                 onchange="tzToggleFiltroModo2()">
+          <h3>{{ entry.label }}</h3>
+        </label>
+        <div class="tz-help">Útil para: {{ entry.utilidad }}</div>
+        <div class="tz-help">Qué hará: {{ entry.hara }}</div>
+        <div class="tz-samples">Ejemplo: {{ entry.ejemplo }}</div>
+        {% if not habilitado %}
+        <div class="tz-help">No disponible: esta bitácora solo permite filtrar por fecha (sin hora detallada).</div>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    <div class="tz-field" id="filtro_wrap_dia">
+      <label for="filtro_dia">Día</label>
+      <input type="date" id="filtro_dia" name="filtro_dia"
+             value="{{ case.filtro_tiempo.dia if case.filtro_tiempo and case.filtro_tiempo.dia else '' }}">
+    </div>
+
+    <div class="tz-inline" id="filtro_wrap_rango_dias">
+      <div class="tz-field">
+        <label for="filtro_desde">Fecha inicial</label>
+        <input type="date" id="filtro_desde" name="filtro_desde"
+               value="{{ case.filtro_tiempo.desde if case.filtro_tiempo and case.filtro_tiempo.desde else '' }}">
+      </div>
+      <div class="tz-field">
+        <label for="filtro_hasta">Fecha final</label>
+        <input type="date" id="filtro_hasta" name="filtro_hasta"
+               value="{{ case.filtro_tiempo.hasta if case.filtro_tiempo and case.filtro_tiempo.hasta else '' }}">
+      </div>
+    </div>
+
+    <div class="tz-inline" id="filtro_wrap_horas">
+      <div class="tz-field">
+        <label for="filtro_hora_ini">Hora inicial</label>
+        <input type="time" id="filtro_hora_ini" name="filtro_hora_ini"
+               value="{{ case.filtro_tiempo.hora_ini if case.filtro_tiempo and case.filtro_tiempo.hora_ini else '' }}">
+      </div>
+      <div class="tz-field">
+        <label for="filtro_hora_fin">Hora final</label>
+        <input type="time" id="filtro_hora_fin" name="filtro_hora_fin"
+               value="{{ case.filtro_tiempo.hora_fin if case.filtro_tiempo and case.filtro_tiempo.hora_fin else '' }}">
+      </div>
+    </div>
+
+    <div class="tz-actions">
+      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Siguiente</button>
+    </div>
+  </form>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if not bloqueado %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>tzToggleFiltroModo2();</script>
+{% endif %}
+{% endblock %}
