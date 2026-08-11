@@ -9,6 +9,16 @@
   {% set result = case.result %}
   <div class="tz-card">
     <h2>Resumen</h2>
+    {% if es_modo3 %}
+    <table class="tz-table">
+      <tbody>
+        <tr><th>Tipo</th><td>{{ 'Antenas/Celdas' if result.summary.get('tipo') == 'antena' else 'Puntos libres' }}</td></tr>
+        <tr><th>Registros procesados</th><td>{{ result.summary.get('registros_totales', '—') }}</td></tr>
+        <tr><th>Coordenadas descartadas</th><td>{{ result.summary.get('coordenadas_descartadas', '—') }}</td></tr>
+        <tr><th>Carpeta de salida</th><td><span class="tz-path">{{ result.output_dir }}</span></td></tr>
+      </tbody>
+    </table>
+    {% else %}
     <table class="tz-table">
       <tbody>
         <tr><th>Filas totales</th><td>{{ result.summary.get('filas_totales', '—') }}</td></tr>
@@ -28,6 +38,7 @@
         <tr><th>Carpeta de salida</th><td><span class="tz-path">{{ result.output_dir }}</span></td></tr>
       </tbody>
     </table>
+    {% endif %}
   </div>
 
   {% if result.warnings %}
@@ -55,9 +66,11 @@
   <div class="tz-card">
     <h2>Productos generados</h2>
     <div class="tz-actions">
+      {% if result.html_path %}
       <form action="{{ url_for('tz_web.open_product', kind='html') }}" method="post">
-        <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.html_path %}disabled{% endif %}>Abrir HTML</button>
+        <button type="submit" class="tz-btn tz-btn-secondary">Abrir HTML</button>
       </form>
+      {% endif %}
       <form action="{{ url_for('tz_web.open_product', kind='kmz') }}" method="post">
         <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.kmz_path %}disabled{% endif %}>Abrir KMZ</button>
       </form>
@@ -90,9 +103,15 @@
         <button type="submit" class="tz-btn tz-btn-secondary">Volver a revisar filtro temporal</button>
       </form>
       {% endif %}
+      {% if mostrar_volver_modo3 %}
+      <form action="{{ url_for('tz_web.modo3_results_back') }}" method="post">
+        <button type="submit" class="tz-btn tz-btn-secondary">Volver a preparar salida</button>
+      </form>
+      {% else %}
       <form action="{{ url_for('tz_web.results_back_to_mapping') }}" method="post">
         <button type="submit" class="tz-btn tz-btn-secondary">Volver a revisar mapeo</button>
       </form>
+      {% endif %}
       <form action="{{ url_for('tz_web.new_case') }}" method="post">
         <button type="submit" class="tz-btn tz-btn-primary">Iniciar nuevo análisis</button>
       </form>

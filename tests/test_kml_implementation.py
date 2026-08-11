@@ -118,6 +118,94 @@ def test_ordenamiento_fecha_valida_sin_hora_al_final_de_su_dia(tmp_path):
     assert pos_sin < pos_d2,  "Registro sin hora del día 1 debe aparecer antes que cualquier activación del día 2"
 
 
+# ── PUNTOS LIBRES — BURBUJA SIN "None"/"nan" ────────────────────────────────
+
+def _generar_y_leer_kml_puntos_libres(df, tmp_path, config=None):
+    """Helper: genera KMZ de puntos libres y devuelve el contenido del doc.kml."""
+    from tz_core.kml_generator import generar_kml_puntos_libres
+    out = str(tmp_path / "test_libres.kml")
+    kmz_path, descartadas = generar_kml_puntos_libres(df, out, config or _CONFIG_KMZ)
+    assert kmz_path is not None, "KMZ de puntos libres no generado"
+    with zipfile.ZipFile(kmz_path, "r") as z:
+        with z.open("doc.kml") as f:
+            return f.read().decode("utf-8")
+
+
+def test_puntos_libres_sin_direccion_ni_detalle_no_muestra_none(tmp_path):
+    """Sin dirección ni detalle (None/NaN) → sin 'None'/'nan', solo el nombre."""
+    df = pd.DataFrame({
+        "lat": [13.7],
+        "long": [-89.2],
+        "antena": ["Punto Sin Datos"],
+        "detalle": [None],
+        "direccion": [float("nan")],
+    })
+    kml_content = _generar_y_leer_kml_puntos_libres(df, tmp_path)
+    assert "None" not in kml_content
+    assert "nan" not in kml_content
+    assert "Punto Sin Datos" in kml_content
+
+
+def test_puntos_libres_solo_direccion(tmp_path):
+    """Solo dirección con contenido → aparece únicamente la dirección."""
+    df = pd.DataFrame({
+        "lat": [13.7],
+        "long": [-89.2],
+        "antena": ["Punto Con Direccion"],
+        "detalle": [None],
+        "direccion": ["Calle Falsa 123"],
+    })
+    kml_content = _generar_y_leer_kml_puntos_libres(df, tmp_path)
+    assert "Calle Falsa 123" in kml_content
+    assert "None" not in kml_content
+    assert "nan" not in kml_content
+
+
+def test_puntos_libres_solo_detalle(tmp_path):
+    """Solo detalle con contenido → aparece únicamente el detalle."""
+    df = pd.DataFrame({
+        "lat": [13.7],
+        "long": [-89.2],
+        "antena": ["Punto Con Detalle"],
+        "detalle": ["Casa esquinera"],
+        "direccion": [None],
+    })
+    kml_content = _generar_y_leer_kml_puntos_libres(df, tmp_path)
+    assert "Casa esquinera" in kml_content
+    assert "None" not in kml_content
+    assert "nan" not in kml_content
+
+
+def test_puntos_libres_ambos_datos_aparecen(tmp_path):
+    """Dirección y detalle con contenido → ambos aparecen en la burbuja."""
+    df = pd.DataFrame({
+        "lat": [13.7],
+        "long": [-89.2],
+        "antena": ["Punto Completo"],
+        "detalle": ["Casa esquinera"],
+        "direccion": ["Calle Falsa 123"],
+    })
+    kml_content = _generar_y_leer_kml_puntos_libres(df, tmp_path)
+    assert "Casa esquinera" in kml_content
+    assert "Calle Falsa 123" in kml_content
+    assert "None" not in kml_content
+    assert "nan" not in kml_content
+
+
+def test_puntos_libres_nombre_siempre_aparece(tmp_path):
+    """El nombre del punto siempre aparece, con o sin dirección/detalle."""
+    df = pd.DataFrame({
+        "lat": [13.7, 13.8],
+        "long": [-89.2, -89.3],
+        "antena": ["Punto A", "Punto B"],
+        "detalle": [None, "Info B"],
+        "direccion": [None, "Calle B"],
+    })
+    kml_content = _generar_y_leer_kml_puntos_libres(df, tmp_path)
+    assert "Punto A" in kml_content
+    assert "Punto B" in kml_content
+
+
 # ── _CREAR_FEATURE_KML ──────────────────────────────────────────────────────
 
 _CFG = {

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% set layout_width = 'wide' %}
+{% block title %}TZ Analyzer — Modo 3: resumen{% endblock %}
+{% block content %}
+
+{% set es_antena = case.modo3_tipo == 'antena' %}
+
+<div class="tz-card">
+  <h2>Resumen del mapeo manual</h2>
+
+  <form action="{{ url_for('tz_web.modo3_resumen_submit') }}" method="post" id="modo3_resumen_form">
+
+    <div class="tz-summary-block">
+      <h3>General</h3>
+      <dl>
+        <dt>Modo</dt><dd>Mapeo manual</dd>
+        <dt>Tipo</dt><dd>{{ 'Antenas/Celdas' if es_antena else 'Puntos libres' }}</dd>
+        <dt>Registros</dt><dd>{{ case.modo3_registros|length }}</dd>
+      </dl>
+    </div>
+
+    <div class="tz-summary-block">
+      <h3>Productos</h3>
+      <dl>
+        <dt>Mapa KMZ</dt><dd>Incluido</dd>
+        <dt>Archivo KML</dt>
+        <dd>
+          {% if not es_antena %}No aplica (solo KMZ)
+          {% elif case.kml_opcional %}Solicitado
+          {% else %}No solicitado{% endif %}
+        </dd>
+        <dt>Hashes SHA-256</dt><dd>Incluido</dd>
+        <dt>Log de ejecución</dt><dd>Incluido</dd>
+      </dl>
+    </div>
+
+    <div class="tz-summary-block">
+      <h3>Color</h3>
+      <div class="tz-color-sample">
+        <span class="tz-color-chip" style="background-color: {{ selected_color_hex }}"></span>
+        <span>{{ color_name or selected_color_hex }}</span>
+        <span class="tz-help">{{ selected_color_hex }}</span>
+      </div>
+    </div>
+
+    <div class="tz-summary-block">
+      <h3>Salida</h3>
+      <dl>
+        <dt>Nombre base</dt><dd>{{ case.output_base_name or suggested_name or 'Se sugerirá automáticamente' }}</dd>
+        <dt>Carpeta base</dt><dd class="tz-path">{{ carpeta_salida }}</dd>
+      </dl>
+    </div>
+
+    <div class="tz-summary-block">
+      <h3>{{ 'Antenas/Celdas cargadas' if es_antena else 'Puntos libres cargados' }}</h3>
+      <div class="tz-scroll-x">
+        <table class="tz-table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Coordenadas</th>
+              {% if es_antena %}
+                <th>Azimut</th>
+                <th>Celda</th>
+              {% else %}
+                <th>Dirección</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in case.modo3_registros[:10] %}
+            <tr>
+              <td>{{ r.nombre }}</td>
+              <td>{{ r.lat }}, {{ r.lon }}</td>
+              {% if es_antena %}
+                <td>{{ r.azimut if r.azimut is not none else '—' }}</td>
+                <td>{{ r.celda or '—' }}</td>
+              {% else %}
+                <td>{{ r.direccion or '—' }}</td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if case.modo3_registros|length > 10 %}
+      <p class="tz-help">Mostrando los primeros 10 de {{ case.modo3_registros|length }} registros.</p>
+      {% endif %}
+    </div>
+
+    <div class="tz-actions">
+      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Generar análisis</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Modo 3: productos{% endblock %}
+{% block content %}
+
+{% set es_antena = case.modo3_tipo == 'antena' %}
+
+<div class="tz-card">
+  <h2>Productos de salida</h2>
+  <p class="tz-help">Mapeo manual — {{ 'Antenas/Celdas' if es_antena else 'Puntos libres' }}</p>
+
+  <div class="tz-product-row">
+    <span class="tz-badge disponible">INCLUIDO</span>
+    <div>
+      <strong>Mapa KMZ</strong>
+      <p class="tz-help">Mapa comprimido para Google Earth con los registros cargados.</p>
+    </div>
+  </div>
+  <div class="tz-product-row">
+    <span class="tz-badge disponible">INCLUIDO</span>
+    <div>
+      <strong>Hashes SHA-256</strong>
+      <p class="tz-help">Archivo para verificar la integridad de los productos generados.</p>
+    </div>
+  </div>
+  <div class="tz-product-row">
+    <span class="tz-badge disponible">INCLUIDO</span>
+    <div>
+      <strong>Log de ejecución</strong>
+      <p class="tz-help">Registro mínimo de esta ejecución: tipo, cantidad de registros, color, productos generados y resultado.</p>
+    </div>
+  </div>
+
+  <h3>Producto opcional</h3>
+  <form action="{{ url_for('tz_web.modo3_productos_submit') }}" method="post">
+    <div class="tz-checkbox">
+      <input type="checkbox" id="kml_opcional" name="kml_opcional"
+             {% if case.kml_opcional %}checked{% endif %}
+             {% if not es_antena %}disabled{% endif %}>
+      <label for="kml_opcional" style="margin:0">Generar también archivo KML</label>
+    </div>
+    {% if es_antena %}
+      <p class="tz-help">
+        Versión sin comprimir del mapa. El KMZ contiene la misma
+        representación cartográfica y normalmente es suficiente para
+        Google Earth.
+      </p>
+    {% else %}
+      <p class="tz-help">
+        No aplica a Puntos libres: este tipo de registro solo genera KMZ.
+      </p>
+    {% endif %}
+
+    <div class="tz-actions">
+      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Siguiente</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Modo 3: tipo de registros{% endblock %}
+{% block content %}
+
+<a class="tz-menu-back" href="{{ url_for('tz_web.menu_screen') }}">&larr; Volver al menú principal</a>
+
+<div class="tz-card">
+  <h2>¿Qué tipo de registros desea agregar?</h2>
+  <p class="tz-help">
+    Una sesión de Modo 3 trabaja con un único tipo de registro. Si ya cargó
+    registros, deberá eliminarlos antes de cambiar de tipo.
+  </p>
+
+  <form action="{{ url_for('tz_web.modo3_tipo_submit') }}" method="post">
+    <div class="tz-mapping-row">
+      <label class="tz-filtro-option-header">
+        <input type="radio" name="tipo" value="antena"
+               {% if case.modo3_tipo == 'antena' or not case.modo3_tipo %}checked{% endif %}>
+        <h3>Antenas/Celdas</h3>
+      </label>
+      <div class="tz-help">
+        Permite ingresar antenas o celdas mediante coordenadas y, cuando esté
+        disponible, su azimut y datos de ubicación.
+      </div>
+    </div>
+
+    <div class="tz-mapping-row">
+      <label class="tz-filtro-option-header">
+        <input type="radio" name="tipo" value="punto_libre"
+               {% if case.modo3_tipo == 'punto_libre' %}checked{% endif %}>
+        <h3>Puntos libres</h3>
+      </label>
+      <div class="tz-help">
+        Permite mapear ubicaciones, direcciones o lugares relacionados con el
+        caso que no necesariamente corresponden a antenas.
+      </div>
+      <div class="tz-samples">
+        Ejemplos: domicilios, escenas, establecimientos, lugares de interés,
+        otros puntos del caso.
+      </div>
+    </div>
+
+    {% if case.modo3_registros %}
+    <div class="tz-banner warning">
+      Hay {{ case.modo3_registros|length }} registro(s) cargado(s) del tipo
+      actual ({{ 'Antenas/Celdas' if case.modo3_tipo == 'antena' else 'Puntos libres' }}).
+      Para cambiar de tipo, elimínelos primero desde la pantalla de ingreso.
+    </div>
+    {% endif %}
+
+    <div class="tz-actions">
+      <button type="submit" class="tz-btn tz-btn-primary">Continuar al ingreso manual</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

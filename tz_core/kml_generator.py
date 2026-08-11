@@ -50,6 +50,7 @@ from tz_core.bitacora_normalization import (
     es_valor_significativo,
 )
 from tz_core.site_inference import construir_identificador_sitio
+from tz_core.validation_utils import tiene_valor
 
 # Separador HTML compacto (usado en descripciones)
 HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
@@ -1078,9 +1079,9 @@ def generar_kml_puntos_libres(df, archivo_salida_kml, config):
 
         # Crear punto KML
         pnt = kml.newpoint(name=nombre, coords=[(lon, lat)])
-        desc = f"{detalle}\n{direccion}".strip()
-        if desc:
-            pnt.description = desc
+        lineas_desc = [str(v).strip() for v in (detalle, direccion) if tiene_valor(v)]
+        if lineas_desc:
+            pnt.description = "\n".join(lineas_desc)
             
         # Estilo: ícono blanco y color solo para la etiqueta
         pnt.style.iconstyle.icon.href = icon_url

@@ -37,15 +37,14 @@
 <div class="tz-card tz-menu-card">
   <div class="tz-menu-badge">3</div>
   <div class="tz-menu-body">
-    <h2>Ingresar antenas manualmente (sin bitácora)</h2>
+    <h2>Mapear antenas y ubicaciones manualmente</h2>
     <ul>
-      <li>Permite mapear ubicaciones en Google Earth.</li>
-      <li>Utiliza coordenadas ingresadas manualmente, sin cargar una bitácora.</li>
+      <li>Permite agregar manualmente antenas/celdas y otras ubicaciones o direcciones relacionadas con el caso, mediante coordenadas, sin cargar una bitácora.</li>
     </ul>
   </div>
   <div class="tz-actions">
-    <form action="{{ url_for('tz_web.mode_pending', n=3) }}" method="post">
-      <button type="submit" class="tz-btn tz-btn-secondary">Seleccionar</button>
+    <form action="{{ url_for('tz_web.mode_3') }}" method="post">
+      <button type="submit" class="tz-btn tz-btn-primary">Seleccionar</button>
     </form>
   </div>
 </div>

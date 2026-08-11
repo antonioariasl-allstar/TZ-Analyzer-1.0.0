@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% set layout_width = 'wide' %}
+{% block title %}TZ Analyzer — Modo 3: ingreso manual{% endblock %}
+{% block content %}
+
+{% set es_antena = case.modo3_tipo == 'antena' %}
+
+<a class="tz-menu-back" href="{{ url_for('tz_web.menu_screen') }}">&larr; Volver al menú principal</a>
+
+<div class="tz-card">
+  <h2>{{ 'Antenas/Celdas' if es_antena else 'Puntos libres' }}</h2>
+  <p class="tz-help">
+    {% if es_antena %}
+      Ingrese cada antena o celda con sus coordenadas. El azimut, la celda,
+      la dirección y el detalle son opcionales.
+    {% else %}
+      Ingrese cada ubicación, dirección o lugar relacionado con el caso. La
+      dirección y el detalle/descripción son opcionales.
+    {% endif %}
+  </p>
+
+  <form action="{{ url_for('tz_web.modo3_registro_guardar') }}" method="post">
+    {% if registro_editar %}
+      <input type="hidden" name="registro_id" value="{{ registro_editar.id }}">
+      <div class="tz-banner warning">Editando registro «{{ registro_editar.nombre }}». Guarde para aplicar los cambios.</div>
+    {% endif %}
+
+    <div class="tz-field">
+      <label for="nombre">{{ 'Nombre / identificador' if es_antena else 'Nombre del lugar' }}</label>
+      <input type="text" id="nombre" name="nombre" maxlength="{{ 120 if es_antena else 160 }}"
+             value="{{ registro_editar.nombre if registro_editar else '' }}" required>
+      <p class="tz-help">
+        {% if es_antena %}
+          Identificador o nombre de la antena, torre o sitio (Site ID).
+        {% else %}
+          Nombre descriptivo del lugar.
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="tz-inline">
+      <div class="tz-field">
+        <label for="lat">Latitud</label>
+        <input type="text" id="lat" name="lat" inputmode="decimal"
+               value="{{ registro_editar.lat if registro_editar is not none and registro_editar.lat is not none else '' }}" required>
+      </div>
+      <div class="tz-field">
+        <label for="lon">Longitud</label>
+        <input type="text" id="lon" name="lon" inputmode="decimal"
+               value="{{ registro_editar.lon if registro_editar is not none and registro_editar.lon is not none else '' }}" required>
+      </div>
+      {% if es_antena %}
+      <div class="tz-field">
+        <label for="azimut">Azimut (opcional)</label>
+        <input type="text" id="azimut" name="azimut" inputmode="decimal"
+               value="{{ registro_editar.azimut if registro_editar and registro_editar.azimut is not none else '' }}">
+        <p class="tz-help">Orientación de cobertura de la antena (0 a 360, sin incluir 360).</p>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if es_antena %}
+    <div class="tz-field">
+      <label for="celda">Celda (opcional)</label>
+      <input type="text" id="celda" name="celda" maxlength="50"
+             value="{{ registro_editar.celda if registro_editar and registro_editar.celda else '' }}">
+    </div>
+    {% endif %}
+
+    <div class="tz-field">
+      <label for="direccion">Dirección (opcional)</label>
+      <input type="text" id="direccion" name="direccion" maxlength="{{ 500 if es_antena else 500 }}"
+             value="{{ registro_editar.direccion if registro_editar and registro_editar.direccion else '' }}">
+      {% if es_antena %}
+      <p class="tz-help">Dirección física, ubicación o dirección de cobertura asociada a la antena.</p>
+      {% endif %}
+    </div>
+
+    <div class="tz-field">
+      <label for="detalle">{{ 'Detalle / observaciones (opcional)' if es_antena else 'Detalle / descripción (opcional)' }}</label>
+      <textarea id="detalle" name="detalle" maxlength="{{ 500 if es_antena else 800 }}" rows="3">{{ registro_editar.detalle if registro_editar and registro_editar.detalle else '' }}</textarea>
+    </div>
+
+    <div class="tz-actions">
+      {% if registro_editar %}
+        <a class="tz-btn tz-btn-secondary" href="{{ url_for('tz_web.modo3_registros_screen') }}">Cancelar edición</a>
+        <button type="submit" class="tz-btn tz-btn-primary">Guardar cambios</button>
+      {% else %}
+        <button type="submit" class="tz-btn tz-btn-primary">Agregar registro</button>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="tz-card">
+  <h2>Registros agregados ({{ case.modo3_registros|length }})</h2>
+
+  {% if not case.modo3_registros %}
+    <p class="tz-help">Todavía no agregó ningún registro.</p>
+  {% else %}
+    <div class="tz-scroll-x">
+      <table class="tz-table">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Latitud</th>
+            <th>Longitud</th>
+            {% if es_antena %}
+              <th>Azimut</th>
+              <th>Celda</th>
+            {% endif %}
+            <th>Dirección</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in case.modo3_registros %}
+          <tr>
+            <td>{{ r.nombre }}</td>
+            <td>{{ r.lat }}</td>
+            <td>{{ r.lon }}</td>
+            {% if es_antena %}
+              <td>{{ r.azimut if r.azimut is not none else '—' }}</td>
+              <td>{{ r.celda or '—' }}</td>
+            {% endif %}
+            <td>{{ r.direccion or '—' }}</td>
+            <td>
+              <a class="tz-btn tz-btn-secondary" href="{{ url_for('tz_web.modo3_registros_screen', editar=r.id) }}">Editar</a>
+              <form action="{{ url_for('tz_web.modo3_registro_eliminar', registro_id=r.id) }}" method="post" style="display:inline">
+                <button type="submit" class="tz-btn tz-btn-secondary">Eliminar</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  <div class="tz-actions">
+    <a class="tz-btn tz-btn-secondary" href="{{ url_for('tz_web.modo3_tipo_screen') }}">← Volver a selección de tipo</a>
+    <a class="tz-btn tz-btn-primary" href="{{ url_for('tz_web.modo3_productos_screen') }}">Continuar</a>
+  </div>
+</div>
+
+{% endblock %}

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import threading
+import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -40,8 +41,17 @@ from tz_core.config_loader import get_config
 from tz_core.field_roles import WIZARD_ORDER_PRIMARY, WIZARD_ORDER_SECONDARY
 from tz_core.mapping_wizard import FIELD_CONTEXT
 from tz_core.user_paths import resolve_default_output_dir
+from tz_web import manual_validators as mv
 from tz_web import state
 from tz_web.field_catalog import FIELD_DESCRIPTIONS, FIELD_GROUPS, FIELD_LABELS
+from tz_web.services_modo3 import (
+    MODO3_TIPO_ANTENA,
+    MODO3_TIPO_PUNTO_LIBRE,
+    MODO3_TIPOS_VALIDOS,
+    Modo3Request,
+    process_case_modo3,
+    sugerir_nombre_modo3,
+)
 from tz_web.filter_catalog import FILTRO_TIEMPO_CATALOG, FILTRO_TIEMPO_ORDER
 from tz_web.scope import describir_alcance, parse_fecha_iso
 from tz_web.services import (
@@ -180,14 +190,6 @@ def menu_screen():
     return render_template("menu.html", show_nav=False)
 
 
-@bp.route("/modo/<int:n>", methods=["POST"])
-def mode_pending(n: int):
-    if n != 3:
-        abort(404)
-    flash("Modo pendiente de incorporación web.", "error")
-    return redirect(url_for("tz_web.menu_screen"))
-
-
 @bp.route("/modo/2", methods=["POST"])
 def mode_2():
     """Entrada real del Modo 2 (bitácora filtrada por tiempo): inicia o
@@ -200,6 +202,19 @@ def mode_2():
     case.modo = state.MODO_2
     state.touch(case)
     return redirect(url_for("tz_web.index"))
+
+
+@bp.route("/modo/3", methods=["POST"])
+def mode_3():
+    """Entrada real del Modo 3 (mapeo manual de antenas/ubicaciones): inicia
+    o restablece la sesión de análisis y la marca como Modo 3. A diferencia
+    de los Modos 1/2, no entra al flujo de archivo/hoja/mapeo de bitácoras:
+    va directo a la selección del tipo de registro (sección 1 del
+    microbloque Modo 3)."""
+    case = _current_session()
+    case.modo = state.MODO_3
+    state.touch(case)
+    return redirect(url_for("tz_web.modo3_tipo_screen"))
 
 
 @bp.route("/analizador", methods=["GET"])
@@ -894,6 +909,7 @@ def configure_color_screen():
         case=case,
         palette=_theme_palette(),
         selected_color=selected_color,
+        color_action_url=url_for("tz_web.configure_color_submit"),
     )
 
 
@@ -1265,6 +1281,469 @@ def _es_color_hex_valido(valor: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Modo 3 — Mapeo manual de antenas/ubicaciones (microbloque 1)
+#
+# Flujo propio, independiente del de archivo/hoja/mapeo de bitácoras (Modos
+# 1/2): selección de tipo -> alta/listado/edición/eliminación de registros.
+# Todo el estado vive en case.modo3_tipo/case.modo3_registros (sección 3);
+# no se genera KMZ/KML/hashes/log todavía (eso queda para el siguiente
+# microbloque, ver modo3_continuar_screen).
+# ---------------------------------------------------------------------------
+
+def _modo3_guard(case: Optional[state.Session]) -> bool:
+    """True si ``case`` corresponde a una sesión de Modo 3 activa."""
+    return case is not None and case.modo == state.MODO_3
+
+
+@bp.route("/modo3/tipo", methods=["GET"])
+def modo3_tipo_screen():
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    return render_template("modo3_tipo.html", case=case, show_nav=False)
+
+
+@bp.route("/modo3/tipo", methods=["POST"])
+def modo3_tipo_submit():
+    """Guarda el tipo de registro elegido (sección 2). Si ya hay registros
+    cargados de un tipo distinto al elegido, bloquea el cambio (sección 8):
+    no se descartan registros silenciosamente, el usuario debe eliminarlos
+    primero."""
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+
+    tipo = request.form.get("tipo", "")
+    if tipo not in MODO3_TIPOS_VALIDOS:
+        flash("Seleccione un tipo de registro válido.", "error")
+        return redirect(url_for("tz_web.modo3_tipo_screen"))
+
+    if case.modo3_registros and case.modo3_tipo != tipo:
+        flash(
+            "Ya hay registros cargados del tipo actual. Elimínelos antes de "
+            "cambiar entre Antenas/Celdas y Puntos libres.",
+            "error",
+        )
+        return redirect(url_for("tz_web.modo3_tipo_screen"))
+
+    case.modo3_tipo = tipo
+    state.touch(case)
+    return redirect(url_for("tz_web.modo3_registros_screen"))
+
+
+def _modo3_parse_antena(form) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    nombre, error = mv.parse_nombre(form.get("nombre"), mv.MAX_NOMBRE_ANTENA, "El nombre/identificador")
+    if error:
+        return None, error
+    lat, lon, error = mv.parse_lat_lon(form.get("lat"), form.get("lon"), permitir_cero_cero=False)
+    if error:
+        return None, error
+    azimut, error = mv.parse_azimut(form.get("azimut"))
+    if error:
+        return None, error
+    celda, error = mv.parse_texto_opcional(form.get("celda"), mv.MAX_CELDA, "La celda")
+    if error:
+        return None, error
+    direccion, error = mv.parse_texto_opcional(form.get("direccion"), mv.MAX_DIRECCION_ANTENA, "La dirección")
+    if error:
+        return None, error
+    detalle, error = mv.parse_texto_opcional(form.get("detalle"), mv.MAX_DETALLE_ANTENA, "El detalle/observaciones")
+    if error:
+        return None, error
+    return {
+        "nombre": nombre, "lat": lat, "lon": lon, "azimut": azimut,
+        "celda": celda, "direccion": direccion, "detalle": detalle,
+    }, None
+
+
+def _modo3_parse_punto_libre(form) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    nombre, error = mv.parse_nombre(form.get("nombre"), mv.MAX_NOMBRE_PUNTO, "El nombre del lugar")
+    if error:
+        return None, error
+    lat, lon, error = mv.parse_lat_lon(form.get("lat"), form.get("lon"), permitir_cero_cero=True)
+    if error:
+        return None, error
+    direccion, error = mv.parse_texto_opcional(form.get("direccion"), mv.MAX_DIRECCION_PUNTO, "La dirección")
+    if error:
+        return None, error
+    detalle, error = mv.parse_texto_opcional(form.get("detalle"), mv.MAX_DETALLE_PUNTO, "El detalle/descripción")
+    if error:
+        return None, error
+    return {"nombre": nombre, "lat": lat, "lon": lon, "direccion": direccion, "detalle": detalle}, None
+
+
+@bp.route("/modo3/registros", methods=["GET"])
+def modo3_registros_screen():
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    if not case.modo3_tipo:
+        flash("Seleccione primero el tipo de registros a agregar.", "error")
+        return redirect(url_for("tz_web.modo3_tipo_screen"))
+
+    editar_id = request.args.get("editar")
+    registro_editar = None
+    if editar_id:
+        registro_editar = next((r for r in case.modo3_registros if r["id"] == editar_id), None)
+
+    return render_template(
+        "modo3_registros.html",
+        case=case,
+        registro_editar=registro_editar,
+        show_nav=False,
+    )
+
+
+@bp.route("/modo3/registros", methods=["POST"])
+def modo3_registro_guardar():
+    """Alta o edición de un registro (sección 4/5/7): si el formulario trae
+    ``registro_id`` de un registro existente, se reemplaza en el mismo lugar
+    de la lista (no se duplica); si no, se agrega uno nuevo. El formulario
+    se limpia (nueva alta) al volver a la pantalla, mientras que la lista ya
+    cargada se conserva."""
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    if not case.modo3_tipo:
+        flash("Seleccione primero el tipo de registros a agregar.", "error")
+        return redirect(url_for("tz_web.modo3_tipo_screen"))
+
+    if case.modo3_tipo == MODO3_TIPO_ANTENA:
+        datos, error = _modo3_parse_antena(request.form)
+    else:
+        datos, error = _modo3_parse_punto_libre(request.form)
+
+    registro_id = (request.form.get("registro_id") or "").strip()
+
+    if error:
+        flash(error, "error")
+        if registro_id:
+            return redirect(url_for("tz_web.modo3_registros_screen", editar=registro_id))
+        return redirect(url_for("tz_web.modo3_registros_screen"))
+
+    if registro_id:
+        existente = next((r for r in case.modo3_registros if r["id"] == registro_id), None)
+        if existente is None:
+            flash("El registro que intenta editar ya no existe.", "error")
+            return redirect(url_for("tz_web.modo3_registros_screen"))
+        datos["id"] = registro_id
+        case.modo3_registros = [datos if r["id"] == registro_id else r for r in case.modo3_registros]
+    else:
+        datos["id"] = uuid.uuid4().hex[:10]
+        case.modo3_registros.append(datos)
+
+    state.touch(case)
+    return redirect(url_for("tz_web.modo3_registros_screen"))
+
+
+@bp.route("/modo3/registros/<registro_id>/eliminar", methods=["POST"])
+def modo3_registro_eliminar(registro_id: str):
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+
+    antes = len(case.modo3_registros)
+    case.modo3_registros = [r for r in case.modo3_registros if r["id"] != registro_id]
+    if len(case.modo3_registros) == antes:
+        flash("El registro indicado ya no existe.", "error")
+    state.touch(case)
+    return redirect(url_for("tz_web.modo3_registros_screen"))
+
+
+def _modo3_require_registros(case: state.Session) -> bool:
+    """True si ``case`` tiene registros — condición común a todas las
+    pantallas posteriores a Ingreso manual (Productos/Color/Preparar/
+    Resumen), que nunca deben alcanzarse sin al menos un registro (sección
+    13: "Debe impedir continuar si no hay registros")."""
+    return bool(case.modo3_registros)
+
+
+@bp.route("/modo3/productos", methods=["GET"])
+def modo3_productos_screen():
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    if not _modo3_require_registros(case):
+        flash("Agregue al menos un registro antes de continuar.", "error")
+        return redirect(url_for("tz_web.modo3_registros_screen"))
+    return render_template("modo3_productos.html", case=case, show_nav=False)
+
+
+@bp.route("/modo3/productos", methods=["POST"])
+def modo3_productos_submit():
+    """Guarda el producto opcional (KML suelto). Reutiliza case.kml_opcional/
+    case.solo_kmz — los mismos campos que ya usa Configuración de Modo 1/2
+    (sección 9: no duplicar estado). Para Puntos libres se fuerza a False:
+    generar_kml_puntos_libres() solo produce KMZ (ver services_modo3), así
+    que ofrecer la casilla ahí sería prometer algo que el generador no
+    hace."""
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    if not _modo3_require_registros(case):
+        flash("Agregue al menos un registro antes de continuar.", "error")
+        return redirect(url_for("tz_web.modo3_registros_screen"))
+
+    if case.modo3_tipo == MODO3_TIPO_ANTENA:
+        case.kml_opcional = request.form.get("kml_opcional") == "on"
+    else:
+        case.kml_opcional = False
+    case.solo_kmz = not case.kml_opcional
+    state.touch(case)
+
+    if request.form.get("accion", "siguiente") == "anterior":
+        return redirect(url_for("tz_web.modo3_registros_screen"))
+    return redirect(url_for("tz_web.modo3_color_screen"))
+
+
+@bp.route("/modo3/color", methods=["GET"])
+def modo3_color_screen():
+    """Reutiliza el mismo template/selector de color que Modo 1/2
+    (``configure_color.html``, paleta de ``config.json`` -> ``style.palette``)
+    con guardas y navegación propias de Modo 3 en vez de las de
+    Configuración (sección 2: no tocar la semántica gráfica del core)."""
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    if not _modo3_require_registros(case):
+        flash("Agregue al menos un registro antes de continuar.", "error")
+        return redirect(url_for("tz_web.modo3_registros_screen"))
+
+    selected_color = case.color_hex or _default_theme_hex()
+    return render_template(
+        "configure_color.html",
+        case=case,
+        palette=_theme_palette(),
+        selected_color=selected_color,
+        color_action_url=url_for("tz_web.modo3_color_submit"),
+        heading="Modo 3 — Color del mapa",
+        step_label="Seleccione el color que se aplicará al mapa generado.",
+        es_modo3=True,
+        show_nav=False,
+    )
+
+
+@bp.route("/modo3/color", methods=["POST"])
+def modo3_color_submit():
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    if not _modo3_require_registros(case):
+        flash("Agregue al menos un registro antes de continuar.", "error")
+        return redirect(url_for("tz_web.modo3_registros_screen"))
+
+    if request.form.get("accion", "siguiente") == "anterior":
+        return redirect(url_for("tz_web.modo3_productos_screen"))
+
+    color_hex = (request.form.get("color_hex") or "").strip()
+    paleta_hex = {hex_valor.lower() for _, hex_valor in _theme_palette()}
+    if not color_hex or color_hex.lower() not in paleta_hex:
+        flash("Elija uno de los colores disponibles en la paleta.", "error")
+        return redirect(url_for("tz_web.modo3_color_screen"))
+
+    case.color_hex = color_hex
+    state.touch(case)
+    return redirect(url_for("tz_web.modo3_preparar_screen"))
+
+
+@bp.route("/modo3/preparar", methods=["GET"])
+def modo3_preparar_screen():
+    """Equivalente a "Preparar análisis" (configure_final.html) pero sin
+    tipo de bitácora, filtro temporal, Top N ni identidad telefónica
+    (sección 3): solo tipo, cantidad, nombre de salida y carpeta base."""
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    if not _modo3_require_registros(case):
+        flash("Agregue al menos un registro antes de continuar.", "error")
+        return redirect(url_for("tz_web.modo3_registros_screen"))
+
+    carpeta_salida = case.carpeta_salida or resolve_default_output_dir(warn=lambda _msg: None)
+    suggested_name = None
+    if not case.output_base_name:
+        suggested_name = sugerir_nombre_modo3(case.modo3_tipo, case.modo3_registros)
+
+    return render_template(
+        "modo3_preparar.html",
+        case=case,
+        carpeta_salida=carpeta_salida,
+        suggested_name=suggested_name,
+        show_nav=False,
+    )
+
+
+@bp.route("/modo3/preparar", methods=["POST"])
+def modo3_preparar_submit():
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    if not _modo3_require_registros(case):
+        flash("Agregue al menos un registro antes de continuar.", "error")
+        return redirect(url_for("tz_web.modo3_registros_screen"))
+
+    if request.form.get("nombre_modo") == "manual":
+        nombre_manual = (request.form.get("output_base_name") or "").strip()
+        case.output_base_name = nombre_manual or None
+    else:
+        case.output_base_name = None
+    state.touch(case)
+
+    if request.form.get("accion", "siguiente") == "anterior":
+        return redirect(url_for("tz_web.modo3_color_screen"))
+    return redirect(url_for("tz_web.modo3_resumen_screen"))
+
+
+@bp.route("/modo3/resumen", methods=["GET"])
+def modo3_resumen_screen():
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    if not _modo3_require_registros(case):
+        flash("Agregue al menos un registro antes de continuar.", "error")
+        return redirect(url_for("tz_web.modo3_registros_screen"))
+
+    carpeta_salida = case.carpeta_salida or resolve_default_output_dir(warn=lambda _msg: None)
+    suggested_name = None
+    if not case.output_base_name:
+        suggested_name = sugerir_nombre_modo3(case.modo3_tipo, case.modo3_registros)
+
+    return render_template(
+        "modo3_resumen.html",
+        case=case,
+        carpeta_salida=carpeta_salida,
+        suggested_name=suggested_name,
+        color_name=_color_name_for_hex(case.color_hex) or _color_name_for_hex(_default_theme_hex()),
+        selected_color_hex=case.color_hex or _default_theme_hex(),
+        show_nav=False,
+    )
+
+
+def _start_task_modo3(case: state.Session) -> bool:
+    """Arranca el análisis de Modo 3 en segundo plano. Mismo mecanismo de
+    exclusión y de progreso que ``_start_task`` (sección 10): una sola
+    sesión activa a la vez a nivel web (``state.try_start_run``), y el mismo
+    ``case.status``/``stage``/``percent``/``/status`` — no se inventa un
+    segundo sistema de progreso."""
+    if case.status == state.STATUS_RUNNING:
+        return True
+    if not state.try_start_run(case.id):
+        return False
+
+    case.status = state.STATUS_RUNNING
+    case.task_started = True
+    case.stage = None
+    case.stage_message = "En cola"
+    case.sequence = 0
+    case.percent = 0
+    case.result = None
+    case.error_message = None
+    case.error_code = None
+    import time as _time
+    case.started_at = _time.time()
+
+    def _on_progress(update: ProgressUpdate) -> None:
+        case.stage = update.stage
+        case.stage_message = update.message
+        case.sequence = update.sequence
+        case.percent = state.STAGE_PERCENT.get(update.stage, case.percent)
+        state.touch(case)
+
+    request_obj = Modo3Request(
+        tipo=case.modo3_tipo,
+        registros=[dict(r) for r in case.modo3_registros],
+        carpeta_salida=case.carpeta_salida,
+        color_hex=case.color_hex,
+        kml_opcional=case.kml_opcional,
+        output_base_name=case.output_base_name,
+        on_progress=_on_progress,
+    )
+
+    def _worker() -> None:
+        import time as _time
+        try:
+            result = process_case_modo3(request_obj)
+            case.result = result
+            case.status = state.STATUS_SUCCESS
+        except Exception as exc:  # noqa: BLE001 - frontera del worker: se traduce, nunca se propaga
+            state.log_technical_error("process_case_modo3", exc)
+            case.error_message = state.translate_error(exc)
+            case.error_code = state.error_code_for(exc)
+            case.status = state.STATUS_FAILED
+        finally:
+            case.finished_at = _time.time()
+            state.finish_run(case.id)
+            state.touch(case)
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return True
+
+
+@bp.route("/modo3/resumen", methods=["POST"])
+def modo3_resumen_submit():
+    """"Anterior" regresa a Preparar salida; "Generar análisis" valida la
+    carpeta de salida (misma validación ya existente, ``state.
+    ensure_writable_dir``) e inicia el análisis — único punto de arranque de
+    la tarea, igual que ``configure_resumen_submit`` para Modo 1/2."""
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    if not _modo3_require_registros(case):
+        flash("Agregue al menos un registro antes de continuar.", "error")
+        return redirect(url_for("tz_web.modo3_registros_screen"))
+
+    if request.form.get("accion", "siguiente") == "anterior":
+        return redirect(url_for("tz_web.modo3_preparar_screen"))
+
+    carpeta_resuelta = case.carpeta_salida or resolve_default_output_dir(warn=lambda _msg: None)
+    try:
+        carpeta_salida_abs = state.ensure_writable_dir(carpeta_resuelta)
+    except OSError as exc:
+        state.log_technical_error("modo3_resumen_submit.ensure_dir", exc)
+        flash("No se pudo preparar la carpeta de salida segura del sistema.", "error")
+        return redirect(url_for("tz_web.modo3_resumen_screen"))
+
+    case.carpeta_salida = carpeta_salida_abs
+    state.touch(case)
+
+    started = _start_task_modo3(case)
+    if not started:
+        flash(state.MSG_ANALYSIS_IN_PROGRESS, "error")
+        return redirect(url_for("tz_web.modo3_resumen_screen"))
+
+    return redirect(url_for("tz_web.processing_screen"))
+
+
+@bp.route("/modo3/results/back", methods=["POST"])
+def modo3_results_back():
+    """"Volver a preparar salida" desde un resultado FAILED de Modo 3
+    (sección 12): los registros manuales viven en ``case.modo3_registros`` y
+    nunca se tocan durante el pipeline ni aquí — solo se limpia el estado
+    terminal de la corrida fallida (mismo ``_reset_terminal_run_state`` que
+    usan las recuperaciones de Modo 1/2), sin repetir el ingreso."""
+    case = _current_session(create=False)
+    if not _modo3_guard(case):
+        flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+
+    _reset_terminal_run_state(case)
+    state.touch(case)
+    return redirect(url_for("tz_web.modo3_preparar_screen"))
+
+
+# ---------------------------------------------------------------------------
 # Pantalla 4 — Procesamiento
 # ---------------------------------------------------------------------------
 
@@ -1375,11 +1854,13 @@ def results_screen():
     return render_template(
         "results.html",
         case=case,
+        es_modo3=(case.modo == state.MODO_3),
         mostrar_volver_filtro=(
             case.status == state.STATUS_FAILED
             and case.modo == state.MODO_2
             and case.error_code == state.ERROR_CODE_FILTRO_SIN_REGISTROS
         ),
+        mostrar_volver_modo3=(case.status == state.STATUS_FAILED and case.modo == state.MODO_3),
     )
 
 

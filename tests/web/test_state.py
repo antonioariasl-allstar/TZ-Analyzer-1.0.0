@@ -21,12 +21,30 @@ from tz_web.services import (
 def test_stage_percent_cubre_las_8_etapas_reales_de_process_case():
     from tz_web.services import _PROGRESS_STAGES
 
-    assert set(tz_web_state.STAGE_PERCENT.keys()) == set(_PROGRESS_STAGES)
+    # STAGE_PERCENT/STAGE_LABELS son compartidos por /status para todos los
+    # modos (sección 10 del microbloque 2 de Modo 3): deben cubrir las 8
+    # etapas de bitácora, más las propias de Modo 3 (ver
+    # test_stage_percent_cubre_las_etapas_de_modo3), sin pisarse entre sí.
+    assert set(_PROGRESS_STAGES) <= set(tz_web_state.STAGE_PERCENT.keys())
     assert tz_web_state.STAGE_PERCENT["finalizado"] == 100
     # Estrictamente creciente: nunca retrocede ni repite valor entre etapas.
     valores = [tz_web_state.STAGE_PERCENT[e] for e in _PROGRESS_STAGES]
     assert valores == sorted(valores)
     assert len(set(valores)) == len(valores)
+
+
+def test_stage_percent_cubre_las_etapas_de_modo3():
+    etapas_modo3 = ("preparando", "generando_cartografia", "generando_hashes", "finalizando", "completado")
+    assert set(etapas_modo3) <= set(tz_web_state.STAGE_PERCENT.keys())
+    assert set(etapas_modo3) <= set(tz_web_state.STAGE_LABELS.keys())
+    assert tz_web_state.STAGE_PERCENT["completado"] == 100
+    valores = [tz_web_state.STAGE_PERCENT[e] for e in etapas_modo3]
+    assert valores == sorted(valores)
+    assert len(set(valores)) == len(valores)
+    # Las etapas de Modo 3 no colisionan con las 8 de bitácora.
+    from tz_web.services import _PROGRESS_STAGES
+
+    assert set(etapas_modo3).isdisjoint(set(_PROGRESS_STAGES))
 
 
 @pytest.mark.parametrize("exc_type,mensaje", [

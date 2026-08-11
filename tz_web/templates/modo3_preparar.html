@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Modo 3: preparar salida{% endblock %}
+{% block content %}
+
+{% set es_antena = case.modo3_tipo == 'antena' %}
+
+<div class="tz-card">
+  <h2>Preparar salida</h2>
+  <p class="tz-help">Revise los datos antes de generar el mapa.</p>
+
+  <div class="tz-summary-block">
+    <dl>
+      <dt>Tipo</dt><dd>{{ 'Antenas/Celdas' if es_antena else 'Puntos libres' }}</dd>
+      <dt>Cantidad de registros</dt><dd>{{ case.modo3_registros|length }}</dd>
+    </dl>
+  </div>
+
+  <form action="{{ url_for('tz_web.modo3_preparar_submit') }}" method="post" id="modo3_preparar_form"
+        onkeydown="return event.key !== 'Enter';">
+    <h3>Nombre de salida</h3>
+    <input type="hidden" name="nombre_modo" id="nombre_modo" value="{{ 'manual' if case.output_base_name else 'sugerido' }}">
+
+    <div id="nombre_modo_sugerido" {% if case.output_base_name %}style="display:none"{% endif %}>
+      <div class="tz-output-name-display">
+        <span class="tz-path" id="nombre_sugerido_texto">{{ suggested_name or 'Se generará automáticamente al ejecutar el análisis' }}</span>
+        <button type="button" class="tz-btn tz-btn-secondary" onclick="tzM3UsarNombreManual()">CAMBIAR NOMBRE</button>
+      </div>
+    </div>
+
+    <div id="nombre_modo_manual" {% if not case.output_base_name %}style="display:none"{% endif %}>
+      <div class="tz-field">
+        <label for="output_base_name">Nombre de salida</label>
+        <input type="text" id="output_base_name" name="output_base_name"
+               value="{{ case.output_base_name or suggested_name or '' }}">
+      </div>
+      <button type="button" class="tz-btn tz-btn-secondary" onclick="tzM3UsarNombreSugerido()">USAR NOMBRE SUGERIDO</button>
+    </div>
+
+    <p class="tz-help">
+      El sistema añadirá automáticamente un identificador de ejecución para
+      evitar sobrescribir análisis anteriores.
+    </p>
+
+    <h3>Carpeta base de salida</h3>
+    <p class="tz-help">Los resultados se guardarán en:</p>
+    <p class="tz-path">{{ carpeta_salida }}</p>
+    <p class="tz-help">El sistema creará automáticamente una carpeta independiente para este análisis.</p>
+
+    <div class="tz-actions">
+      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Continuar al resumen</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  function tzM3UsarNombreManual() {
+    document.getElementById("nombre_modo").value = "manual";
+    document.getElementById("nombre_modo_sugerido").style.display = "none";
+    document.getElementById("nombre_modo_manual").style.display = "";
+    document.getElementById("output_base_name").focus();
+  }
+  function tzM3UsarNombreSugerido() {
+    document.getElementById("nombre_modo").value = "sugerido";
+    document.getElementById("nombre_modo_manual").style.display = "none";
+    document.getElementById("nombre_modo_sugerido").style.display = "";
+  }
+</script>
+
+{% endblock %}

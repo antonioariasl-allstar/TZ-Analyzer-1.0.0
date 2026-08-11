@@ -56,6 +56,15 @@ STAGE_PERCENT: Dict[str, int] = {
     "generando_productos": 80,
     "verificando_resultados": 95,
     "finalizado": 100,
+    # Modo 3 — mapeo manual (microbloque 2): etapas propias, más simples que
+    # las 8 de bitácora (sin mapeo/QC/filtros); comparten el mismo mapeo fijo
+    # etapa -> porcentaje y el mismo /status genérico, sin nombres en común
+    # con las etapas de arriba.
+    "preparando": 10,
+    "generando_cartografia": 55,
+    "generando_hashes": 80,
+    "finalizando": 95,
+    "completado": 100,
 }
 
 STAGE_LABELS: Dict[str, str] = {
@@ -67,6 +76,11 @@ STAGE_LABELS: Dict[str, str] = {
     "generando_productos": "Generando HTML, KMZ y hashes",
     "verificando_resultados": "Verificando resultados generados",
     "finalizado": "Análisis finalizado",
+    "preparando": "Preparando registros y carpeta de salida",
+    "generando_cartografia": "Generando cartografía (KMZ/KML)",
+    "generando_hashes": "Calculando hashes de integridad",
+    "finalizando": "Escribiendo log de ejecución",
+    "completado": "Mapeo manual finalizado",
 }
 
 STATUS_PENDING = "pending"
@@ -77,12 +91,14 @@ STATUS_FAILED = "failed"
 # ---------------------------------------------------------------------------
 # Modo de análisis (sección 1 del microbloque Modo 2) — un único campo, no
 # varios booleanos: "1" = bitácora completa, "2" = bitácora filtrada por
-# tiempo. El motor no conoce este campo; solo distingue qué pantallas
-# recorre la capa web (ver tz_web.routes).
+# tiempo, "3" = mapeo manual de antenas/ubicaciones (sin bitácora). El motor
+# no conoce este campo; solo distingue qué pantallas recorre la capa web
+# (ver tz_web.routes).
 # ---------------------------------------------------------------------------
 
 MODO_1 = "1"
 MODO_2 = "2"
+MODO_3 = "3"
 
 # ---------------------------------------------------------------------------
 # Carpetas de trabajo — nunca dentro del repositorio (sección 6/11/14).
@@ -220,6 +236,16 @@ class Session:
     date_order_decision: str = "1"
     duration_unit_decision: str = "desconocida"
     qc_bloqueante_decision: str = "S"
+
+    # Modo 3 — mapeo manual de antenas/ubicaciones (sin bitácora). Una
+    # sesión de Modo 3 trabaja con un único tipo elegido ("antena" o
+    # "punto_libre", ver tz_web.routes.MODO3_TIPOS_VALIDOS); modo3_registros
+    # es la única fuente de verdad de los registros cargados — no se
+    # duplica en ninguna otra estructura, y persiste durante toda la sesión
+    # de análisis (sobrevive navegación atrás/adelante y edición) hasta que
+    # se inicia deliberadamente un nuevo análisis (ver discard_session).
+    modo3_tipo: Optional[str] = None
+    modo3_registros: List[Dict[str, Any]] = field(default_factory=list)
 
     # Pantalla 4/5 — progreso y resultado
     status: str = STATUS_PENDING
