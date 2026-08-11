@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Configuración{% endblock %}
+{% block content %}
+
+<div class="tz-card">
+  <h2>3. Configuración</h2>
+  <p class="tz-help">Configuración 4 de 5 — Color de la bitácora</p>
+
+  <h3>Color de la bitácora</h3>
+  <p class="tz-help">
+    El color seleccionado se aplicará por defecto a los elementos visuales
+    de esta bitácora en el informe HTML y en el mapa KML/KMZ, incluidos
+    pines, etiquetas, líneas de azimut y sectores de cobertura.
+  </p>
+  <p class="tz-help">
+    Cuando se procesen varias bitácoras, se recomienda asignar un color
+    diferente a cada número analizado para facilitar su identificación y
+    visualización conjunta en Google Earth.
+  </p>
+
+  <form action="{{ url_for('tz_web.configure_color_submit') }}" method="post" id="configure_color_form">
+    <div class="tz-color-grid" role="radiogroup" aria-label="Color de la bitácora">
+      {% for nombre, hex_valor in palette %}
+        <label class="tz-color-swatch{% if hex_valor|lower == selected_color|lower %} selected{% endif %}">
+          <input type="radio" name="color_hex" value="{{ hex_valor }}"
+                 {% if hex_valor|lower == selected_color|lower %}checked{% endif %}>
+          <span class="tz-color-chip" style="background-color: {{ hex_valor }}"></span>
+          <span class="tz-color-name">{{ nombre }}</span>
+          <span class="tz-color-check" aria-hidden="true">✓</span>
+          <span class="tz-color-selected-label">Seleccionado</span>
+        </label>
+      {% endfor %}
+    </div>
+
+    <div class="tz-actions">
+      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Siguiente</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  (function () {
+    var grid = document.querySelector(".tz-color-grid");
+    if (!grid) return;
+    var swatches = grid.querySelectorAll(".tz-color-swatch");
+    grid.addEventListener("change", function (event) {
+      if (event.target && event.target.name === "color_hex") {
+        swatches.forEach(function (swatch) {
+          var input = swatch.querySelector("input[type=radio]");
+          swatch.classList.toggle("selected", !!(input && input.checked));
+        });
+      }
+    });
+  })();
+</script>
+
+{% endblock %}

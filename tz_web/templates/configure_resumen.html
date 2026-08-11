@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Resumen del análisis{% endblock %}
+{% block content %}
+
+<div class="tz-card">
+  <h2>3. Configuración</h2>
+  <p class="tz-help">Resumen del análisis</p>
+
+  <form action="{{ url_for('tz_web.configure_resumen_submit') }}" method="post" id="configure_resumen_form">
+
+    <div class="tz-summary-block">
+      <h3>Identificación</h3>
+      {% set alias = case.identity_overrides.get('alias', '') %}
+      {% set nombre_usuario = case.identity_overrides.get('nombre_usuario', '') %}
+      {% set abonado = case.identity_overrides.get('abonado', '') %}
+      <dl>
+        <dt>Alias</dt><dd>{{ alias or 'No especificado' }}</dd>
+        <dt>Nombre de usuario</dt><dd>{{ nombre_usuario or 'No especificado' }}</dd>
+        <dt>Abonado</dt><dd>{{ abonado or 'No especificado' }}</dd>
+      </dl>
+    </div>
+
+    {% set _cap_contactos = case.capabilities_preview.capacidades.contactos if case.capabilities_preview else none %}
+    {% set _contactos_disponible = _cap_contactos.disponible if _cap_contactos is not none else none %}
+    <div class="tz-summary-block">
+      <h3>Análisis</h3>
+      <dl>
+        <dt>Alcance</dt><dd>Bitácora completa</dd>
+        <dt>Top de antenas</dt><dd>{{ case.top_antenas or (default_top_antenas ~ ' (valor por defecto)') }}</dd>
+        <dt>Top de contactos</dt>
+        <dd>
+          {% if _contactos_disponible == False %}
+            No disponible para esta bitácora
+          {% else %}
+            {{ case.top_contactos or (default_top_contactos ~ ' (valor por defecto)') }}
+          {% endif %}
+        </dd>
+      </dl>
+    </div>
+
+    <div class="tz-summary-block">
+      <h3>Productos</h3>
+      <dl>
+        <dt>Informe HTML</dt><dd>Incluido</dd>
+        <dt>Mapa KMZ</dt><dd>Incluido</dd>
+        <dt>Hashes SHA-256</dt><dd>Incluido</dd>
+        <dt>Archivo KML</dt><dd>{{ 'Solicitado' if case.kml_opcional else 'No solicitado' }}</dd>
+      </dl>
+    </div>
+
+    <div class="tz-summary-block">
+      <h3>Color</h3>
+      <div class="tz-color-sample">
+        <span class="tz-color-chip" style="background-color: {{ selected_color_hex }}"></span>
+        <span>{{ color_name or selected_color_hex }}</span>
+        <span class="tz-help">{{ selected_color_hex }}</span>
+      </div>
+    </div>
+
+    <div class="tz-summary-block">
+      <h3>Salida</h3>
+      <dl>
+        <dt>Nombre base</dt><dd id="resumen_nombre_salida">{{ case.output_base_name or suggested_name or 'Se sugerirá automáticamente' }}</dd>
+        <dt>Carpeta base</dt><dd class="tz-path">{{ carpeta_salida }}</dd>
+      </dl>
+    </div>
+
+    <div class="tz-actions">
+      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Generar análisis</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

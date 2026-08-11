@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Configuración{% endblock %}
+{% block content %}
+
+<div class="tz-card">
+  <h2>3. Configuración</h2>
+  <p class="tz-help">Configuración 2 de 5 — Opciones del análisis</p>
+
+  <h3>Top de elementos en los análisis</h3>
+  <p class="tz-help">
+    Estos valores determinan cuántos elementos principales se mostrarán en
+    los análisis generados.
+  </p>
+
+  <form action="{{ url_for('tz_web.configure_options_submit') }}" method="post" id="configure_options_form">
+    <div class="tz-inline">
+      <div class="tz-field">
+        <label for="top_antenas">Top de antenas</label>
+        <input type="number" id="top_antenas" name="top_antenas" min="1" value="{{ case.top_antenas or '' }}" placeholder="10 (valor por defecto)">
+        <p class="tz-help">Cantidad de antenas principales que se mostrarán en el análisis.</p>
+      </div>
+      <div class="tz-field">
+        <label for="top_contactos">Top de contactos</label>
+        <input type="number" id="top_contactos" name="top_contactos" min="1" value="{{ case.top_contactos or '' }}" placeholder="10 (valor por defecto)">
+        <p class="tz-help">Cantidad de contactos principales que se mostrarán en el análisis.</p>
+      </div>
+    </div>
+
+    <div class="tz-actions">
+      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Siguiente</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

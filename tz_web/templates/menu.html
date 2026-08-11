@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Menú principal{% endblock %}
+{% block content %}
+
+<a class="tz-menu-back" href="{{ url_for('tz_web.cover_screen') }}">&larr; Volver a la portada</a>
+
+<div class="tz-card tz-menu-card">
+  <div class="tz-menu-badge">1</div>
+  <div class="tz-menu-body">
+    <h2>Procesar bitácora completa</h2>
+    <ul>
+      <li>Genera informe HTML y mapa KML/KMZ.</li>
+      <li>Procesa todos los registros de la bitácora.</li>
+    </ul>
+  </div>
+  <div class="tz-actions">
+    <a class="tz-btn tz-btn-primary" href="{{ url_for('tz_web.index') }}">Seleccionar</a>
+  </div>
+</div>
+
+<div class="tz-card tz-menu-card">
+  <div class="tz-menu-badge">2</div>
+  <div class="tz-menu-body">
+    <h2>Procesar bitácora filtrada por tiempo</h2>
+    <ul>
+      <li>Permite analizar un día, rango de días o rango de horas.</li>
+      <li>Enfoca el análisis en una ventana temporal determinada.</li>
+    </ul>
+  </div>
+  <div class="tz-actions">
+    <form action="{{ url_for('tz_web.mode_pending', n=2) }}" method="post">
+      <button type="submit" class="tz-btn tz-btn-secondary">Seleccionar</button>
+    </form>
+  </div>
+</div>
+
+<div class="tz-card tz-menu-card">
+  <div class="tz-menu-badge">3</div>
+  <div class="tz-menu-body">
+    <h2>Ingresar antenas manualmente (sin bitácora)</h2>
+    <ul>
+      <li>Permite mapear ubicaciones en Google Earth.</li>
+      <li>Utiliza coordenadas ingresadas manualmente, sin cargar una bitácora.</li>
+    </ul>
+  </div>
+  <div class="tz-actions">
+    <form action="{{ url_for('tz_web.mode_pending', n=3) }}" method="post">
+      <button type="submit" class="tz-btn tz-btn-secondary">Seleccionar</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

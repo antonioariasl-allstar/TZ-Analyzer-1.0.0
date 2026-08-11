@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% set layout_width = 'wide' %}
+{% block title %}TZ Analyzer — Resultados{% endblock %}
+{% block content %}
+
+{% if case.status == 'success' %}
+  <div class="tz-banner success">Análisis finalizado correctamente.</div>
+
+  {% set result = case.result %}
+  <div class="tz-card">
+    <h2>Resumen</h2>
+    <table class="tz-table">
+      <tbody>
+        <tr><th>Filas totales</th><td>{{ result.summary.get('filas_totales', '—') }}</td></tr>
+        <tr><th>Coordenadas descartadas</th><td>{{ result.summary.get('coordenadas_descartadas', '—') }}</td></tr>
+        <tr><th>Alcance</th><td>{{ result.summary.get('alcance') or 'Bitácora completa' }}</td></tr>
+        <tr><th>Top antenas</th><td>{{ result.summary.get('top_antenas', '—') }}</td></tr>
+        <tr>
+          <th>Top contactos</th>
+          <td>
+            {% if result.summary.get('contactos_disponible') == False %}
+              No disponible
+            {% else %}
+              {{ result.summary.get('top_contactos', '—') }}
+            {% endif %}
+          </td>
+        </tr>
+        <tr><th>Carpeta de salida</th><td><span class="tz-path">{{ result.output_dir }}</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  {% if result.warnings %}
+  <div class="tz-card">
+    <h2>Advertencias</h2>
+    <div class="tz-banner warning">
+      <ul style="margin:0;padding-left:18px">
+        {% for w in result.warnings %}<li>{{ w }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if result.errors %}
+  <div class="tz-card">
+    <h2>Errores parciales</h2>
+    <div class="tz-banner error">
+      <ul style="margin:0;padding-left:18px">
+        {% for e in result.errors %}<li>{{ e }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="tz-card">
+    <h2>Productos generados</h2>
+    <div class="tz-actions">
+      <form action="{{ url_for('tz_web.open_product', kind='html') }}" method="post">
+        <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.html_path %}disabled{% endif %}>Abrir HTML</button>
+      </form>
+      <form action="{{ url_for('tz_web.open_product', kind='kmz') }}" method="post">
+        <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.kmz_path %}disabled{% endif %}>Abrir KMZ</button>
+      </form>
+      {% if result.kml_path %}
+      <form action="{{ url_for('tz_web.open_product', kind='kml') }}" method="post">
+        <button type="submit" class="tz-btn tz-btn-secondary">Abrir KML</button>
+      </form>
+      {% endif %}
+      <form action="{{ url_for('tz_web.open_product', kind='hashes') }}" method="post">
+        <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.hashes_path %}disabled{% endif %}>Abrir hashes</button>
+      </form>
+      <form action="{{ url_for('tz_web.open_product', kind='log') }}" method="post">
+        <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.log_path %}disabled{% endif %}>Abrir log</button>
+      </form>
+      <form action="{{ url_for('tz_web.open_product', kind='folder') }}" method="post">
+        <button type="submit" class="tz-btn tz-btn-secondary">Abrir carpeta</button>
+      </form>
+    </div>
+  </div>
+
+{% else %}
+  <div class="tz-banner error">
+    El análisis no pudo completarse: {{ case.error_message }}
+  </div>
+
+  <div class="tz-card">
+    <div class="tz-actions">
+      <form action="{{ url_for('tz_web.results_back_to_mapping') }}" method="post">
+        <button type="submit" class="tz-btn tz-btn-secondary">Volver a revisar mapeo</button>
+      </form>
+      <form action="{{ url_for('tz_web.new_case') }}" method="post">
+        <button type="submit" class="tz-btn tz-btn-primary">Iniciar nuevo análisis</button>
+      </form>
+    </div>
+  </div>
+{% endif %}
+
+{% if case.status == 'success' %}
+<div class="tz-card">
+  <form action="{{ url_for('tz_web.new_case') }}" method="post">
+    <button type="submit" class="tz-btn tz-btn-primary">Iniciar nuevo análisis</button>
+  </form>
+</div>
+{% endif %}
+
+{% endblock %}

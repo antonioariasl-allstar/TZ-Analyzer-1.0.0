@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Archivo{% endblock %}
+{% block content %}
+
+{% if case and case.original_filename %}
+
+<div class="tz-card">
+  <h2>Paso 1: Archivo</h2>
+
+  <p class="tz-help">Archivo cargado:</p>
+  <p class="tz-file-name">{{ case.original_filename }}</p>
+
+  <form action="{{ url_for('tz_web.select_sheet') }}" method="post" id="form_hoja">
+    <div class="tz-field">
+      <label for="hoja">Hoja a analizar</label>
+      <select id="hoja" name="hoja" required>
+        <option value="" disabled {% if not case.sheet %}selected{% endif %}>-- Seleccione una hoja --</option>
+        {% for hoja in case.available_sheets %}
+          <option value="{{ hoja }}" {% if case.sheet == hoja %}selected{% endif %}>{{ hoja }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <div class="tz-actions">
+    <form action="{{ url_for('tz_web.change_file') }}" method="post">
+      <button type="submit" class="tz-btn tz-btn-secondary">Cambiar archivo</button>
+    </form>
+    <button type="submit" form="form_hoja" class="tz-btn tz-btn-primary">Continuar</button>
+  </div>
+</div>
+
+{% else %}
+
+<div class="tz-card">
+  <h2>Paso 1: Cargar archivo</h2>
+  <p class="tz-help">
+    Seleccione la bitácora en formato Excel (.xlsx o .xls). Límite de tamaño:
+    {{ 200 }} MB. El archivo se guarda temporalmente en este equipo con un
+    nombre seguro; el nombre original solo se muestra como referencia.
+  </p>
+  <form action="{{ url_for('tz_web.upload') }}" method="post" enctype="multipart/form-data">
+    <div class="tz-field">
+      <label for="archivo">Archivo Excel</label>
+      <input type="file" id="archivo" name="archivo" accept=".xlsx,.xls" required
+             class="tz-visually-hidden tz-file-input" onchange="tzHandleFileSelect(this)">
+      <label for="archivo" class="tz-btn tz-btn-secondary tz-file-label">Seleccionar archivo</label>
+      <div id="archivo_seleccionado" class="tz-file-selected" hidden>
+        <strong>Archivo seleccionado:</strong>
+        <span id="archivo_nombre" class="tz-file-name"></span>
+      </div>
+    </div>
+    <p class="tz-help">Las hojas disponibles se mostrarán después de cargar el archivo.</p>
+    <div class="tz-actions">
+      <button type="submit" id="btn_cargar" class="tz-btn tz-btn-primary" disabled>CARGAR Y CONTINUAR</button>
+    </div>
+  </form>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>
+  {% if not (case and case.original_filename) %}
+  tzHandleFileSelect(document.getElementById("archivo"));
+  {% endif %}
+</script>
+{% endblock %}

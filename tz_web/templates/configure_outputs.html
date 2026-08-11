@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Configuración{% endblock %}
+{% block content %}
+
+<div class="tz-card">
+  <h2>3. Configuración</h2>
+  <p class="tz-help">Configuración 3 de 5 — Productos de salida</p>
+
+  <div class="tz-product-row">
+    <span class="tz-badge disponible">INCLUIDO</span>
+    <div>
+      <strong>Informe HTML</strong>
+      <p class="tz-help">Informe principal con los resultados y análisis del caso.</p>
+    </div>
+  </div>
+  <div class="tz-product-row">
+    <span class="tz-badge disponible">INCLUIDO</span>
+    <div>
+      <strong>Mapa KMZ</strong>
+      <p class="tz-help">Mapa comprimido para Google Earth con los elementos cartográficos de la bitácora.</p>
+    </div>
+  </div>
+  <div class="tz-product-row">
+    <span class="tz-badge disponible">INCLUIDO</span>
+    <div>
+      <strong>Hashes SHA-256</strong>
+      <p class="tz-help">Archivo para verificar la integridad de los principales productos generados.</p>
+    </div>
+  </div>
+
+  <h3>Producto opcional</h3>
+  <form action="{{ url_for('tz_web.configure_outputs_submit') }}" method="post" id="configure_outputs_form">
+    <div class="tz-checkbox">
+      <input type="checkbox" id="kml_opcional" name="kml_opcional" {% if case.kml_opcional %}checked{% endif %}>
+      <label for="kml_opcional" style="margin:0">Generar también archivo KML</label>
+    </div>
+    <p class="tz-help">Versión sin comprimir del mapa.</p>
+    <p class="tz-help">
+      El KMZ contiene la misma representación cartográfica y normalmente es
+      suficiente para trabajar en Google Earth. El KML puede ocupar más
+      espacio y se recomienda únicamente cuando se necesite específicamente
+      ese formato.
+    </p>
+
+    <div class="tz-actions">
+      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Siguiente</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

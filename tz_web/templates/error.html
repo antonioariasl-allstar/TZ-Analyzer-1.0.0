@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Error{% endblock %}
+{% block content %}
+
+<div class="tz-card">
+  <h2>No se pudo continuar</h2>
+  <div class="tz-banner error">
+    {{ message or "Ocurrió un error inesperado." }}
+  </div>
+  <div class="tz-actions">
+    <a class="tz-btn tz-btn-primary" href="{{ url_for('tz_web.index') }}">Volver al inicio</a>
+  </div>
+</div>
+
+{% endblock %}

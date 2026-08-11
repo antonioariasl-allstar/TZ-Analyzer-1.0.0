@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% set layout_width = 'wide' %}
+{% block title %}TZ Analyzer — Vista previa del archivo{% endblock %}
+{% block content %}
+
+<div class="tz-card">
+  <h2>Vista previa del archivo</h2>
+  <p class="tz-help">
+    Vista previa del contenido reconocido en el archivo cargado.
+    Se muestran hasta tres registros de muestra para ayudar a identificar
+    cada columna.
+  </p>
+  <p class="tz-help">Desplácese horizontalmente para consultar todas las columnas detectadas.</p>
+
+  <div class="tz-scroll-x">
+    <table class="tz-table tz-preview-table">
+      <thead>
+        <tr>
+          {% for col in case.columns %}
+            <th>{{ col }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in range(3) %}
+        <tr>
+          {% for col in case.columns %}
+            {% set valores = case.samples.get(col, []) %}
+            <td>{{ valores[i] if i < valores|length else "—" }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tz-actions">
+    <form action="{{ url_for('tz_web.change_sheet') }}" method="post">
+      <button type="submit" class="tz-btn tz-btn-secondary">Cambiar hoja</button>
+    </form>
+    <a href="{{ url_for('tz_web.mapping_screen') }}" class="tz-btn tz-btn-primary">Continuar al mapeo</a>
+  </div>
+</div>
+
+{% endblock %}

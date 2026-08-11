@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Procesando{% endblock %}
+{% block content %}
+
+<div class="tz-card">
+  <h2>Procesando análisis</h2>
+  <p class="tz-help">El análisis se ejecuta en segundo plano. Esta página se actualiza sola; no cierre la pestaña.</p>
+
+  <div class="tz-progress-track">
+    <div class="tz-progress-fill" id="tz-progress-fill" style="width: {{ case.percent }}%"></div>
+  </div>
+  <p id="tz-progress-label" style="margin-top:8px;font-weight:600;color:var(--tz-navy)">
+    {{ case.percent }}% — {{ case.stage_message or 'En cola' }}
+  </p>
+
+  <ol class="tz-stage-list" id="tz-stage-list">
+    <li data-stage="validando_entrada">Validando archivo, hoja y carpeta de salida</li>
+    <li data-stage="cargando_archivo">Cargando archivo</li>
+    <li data-stage="aplicando_mapeo">Aplicando mapeo de columnas</li>
+    <li data-stage="normalizando_y_qc">Normalizando fecha/hora y ejecutando control de calidad</li>
+    <li data-stage="aplicando_filtros">Aplicando filtros temporales</li>
+    <li data-stage="generando_productos">Generando HTML, KMZ y hashes</li>
+    <li data-stage="verificando_resultados">Verificando resultados generados</li>
+    <li data-stage="finalizado">Análisis finalizado</li>
+  </ol>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>
+  tzStartPolling("{{ url_for('tz_web.status_json') }}", "{{ url_for('tz_web.results_screen') }}");
+</script>
+{% endblock %}

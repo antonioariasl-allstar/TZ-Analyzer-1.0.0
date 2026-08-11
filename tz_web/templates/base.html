@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}TZ Analyzer{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <header class="tz-header">
+    <div class="tz-header-inner tz-width-{{ layout_width|default('normal') }}">
+      <img class="tz-logo" src="{{ url_for('tz_web.logo_asset') }}" alt="TZ Analyzer">
+      <div>
+        <div class="tz-title">TZ Analyzer</div>
+        <div class="tz-subtitle">Versión 1.1 — Aplicación local</div>
+      </div>
+      {% if show_nav|default(true) %}
+        <a class="tz-btn tz-btn-secondary tz-btn-menu" href="{{ url_for('tz_web.menu_screen') }}">Volver al menú principal</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="tz-main tz-width-{{ layout_width|default('normal') }}">
+    {% if show_nav|default(true) %}
+    {% set steps = [
+      ('tz_web.index', 'Archivo'),
+      ('tz_web.mapping_screen', 'Mapeo'),
+      ('tz_web.configure_screen', 'Configuración'),
+      ('tz_web.processing_screen', 'Procesamiento'),
+      ('tz_web.results_screen', 'Resultados'),
+    ] %}
+    {% set ns = namespace(current_index=0) %}
+    {% for endpoint, _label in steps %}
+      {% if request.endpoint == endpoint %}{% set ns.current_index = loop.index0 %}{% endif %}
+    {% endfor %}
+    {% if request.endpoint and request.endpoint.startswith('tz_web.configure') %}
+      {% set ns.current_index = 2 %}
+    {% endif %}
+    <ol class="tz-steps">
+      {% for endpoint, label in steps %}
+        <li class="{% if loop.index0 == ns.current_index %}active{% elif loop.index0 < ns.current_index %}done{% endif %}">
+          {{ loop.index }}. {{ label }}
+        </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="tz-banner {{ 'error' if category == 'error' else ('warning' if category == 'warning' else 'success') }}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="tz-footer">
+    <div>TZ Analyzer — Procesamiento local</div>
+    <div>Desarrollado por Omar Arias (Tony Zero)</div>
+    <div class="tz-footer-note">Los datos y archivos permanecen en este equipo.</div>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

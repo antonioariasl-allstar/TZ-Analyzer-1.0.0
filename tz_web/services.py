@@ -17,11 +17,26 @@ se omite por ser UI de consola):
                                                        y color_hex se aplica
                                                        directo a una copia
                                                        de config, sin prompt.
-    gather_dataset_metadata(select_file=              REPLICADO tal cual —
-      seleccionar_archivo, select_sheet=               select_file/select_sheet
-      seleccionar_hoja_visible, ...)                   son funciones que
-                                                        devuelven el valor ya
-                                                        decidido en CaseRequest.
+    gather_dataset_metadata(select_file=              NO REPLICADO tal cual:
+      seleccionar_archivo, select_sheet=               se llama directo a
+      seleccionar_hoja_visible, ...)                   cargar_excel_con_normaliz
+                                                        ación(ruta, hoja) — misma
+                                                        función que ya usa la
+                                                        pantalla de mapeo web
+                                                        (tz_web.routes) para
+                                                        mostrar/validar
+                                                        columnas. Se evita el
+                                                        paso extra de
+                                                        gather_dataset_metadata
+                                                        que renombra encabezados
+                                                        (minúsculas, sin
+                                                        acentos, '_') para el
+                                                        wizard interactivo: acá
+                                                        rompía la
+                                                        correspondencia con los
+                                                        nombres de columna ya
+                                                        elegidos en
+                                                        CaseRequest.mapeo.
     _pick_color / solicitar_color_tema               OMITIDO — reemplazado
                                                        por mutación directa de
                                                        config["style"]["theme_hex"].
@@ -153,7 +168,6 @@ from tz_core.output_pipeline import produce_case_outputs
 from tz_core.schema_utils import prep_meta_unicos
 from tz_core.time_filters import FiltroTiempo, aplicar_filtros_tiempo
 from tz_core.ui_utils import (
-    gather_dataset_metadata,
     prompt_case_identity,
     prompt_output_routing,
     suggest_case_name,
@@ -295,12 +309,58 @@ class CaseResult:
     output_dir: Optional[str] = None
     html_path: Optional[str] = None
     kmz_path: Optional[str] = None
+    kml_path: Optional[str] = None
     hashes_path: Optional[str] = None
     log_path: Optional[str] = None
     logs: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     summary: Dict[str, Any] = field(default_factory=dict)
+
+
+def preview_suggested_case_name(
+    *,
+    ruta_archivo: str,
+    hoja: Optional[str],
+    mapeo: Dict[str, Tuple[str, Any]],
+    identity_overrides: Optional[Dict[str, str]],
+    tipo_bitacora: str,
+) -> Optional[str]:
+    """Nombre base que ``process_case()`` sugeriría para este caso, calculado
+    por adelantado (subpantalla 3E) sin ejecutar el análisis completo.
+
+    Usa exactamente las mismas funciones de ``tz_core`` que ``process_case``
+    (``prompt_case_identity``/``suggest_case_name``/``sanear_nombre_archivo``)
+    sobre el archivo ya mapeado, pero sin ingesta/QC ni filtros de tiempo
+    (irrelevantes para el nombre sugerido). Es solo una vista previa: nunca
+    escribe nada a disco y cualquier fallo se traduce en ``None`` (la
+    pantalla cae de vuelta a "se sugerirá automáticamente").
+    """
+    try:
+        df, _hoja_real = cargar_excel_con_normalizacion(ruta_archivo, hoja)
+        df = _apply_mapeo(df, mapeo, output_fn=lambda _msg: None)
+        if identity_overrides:
+            for campo, valor in identity_overrides.items():
+                if campo in _IDENTITY_FIELDS and valor:
+                    df[campo] = valor
+
+        nombre_base = os.path.splitext(os.path.basename(ruta_archivo))[0]
+        identity = prompt_case_identity(
+            df=df,
+            input_fn=lambda _msg: tipo_bitacora,
+            output_fn=lambda _msg: None,
+            now_fn=datetime.now,
+        )
+        suggestion = suggest_case_name(
+            df=df,
+            identity=identity,
+            filters=None,
+            timestamp_fn=datetime.now,
+            sanitize_fn=lambda s: sanear_nombre_archivo(s, nombre_base),
+        )
+        return suggestion.base_name
+    except Exception:  # noqa: BLE001 - vista previa best-effort, nunca debe tumbar la pantalla
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -524,22 +584,31 @@ def process_case(request: CaseRequest) -> CaseResult:
             # ---- 2. cargando_archivo -------------------------------------
             _emit("cargando_archivo", f"Cargando '{os.path.basename(ruta)}'")
 
-            dataset = gather_dataset_metadata(
-                log_fn=_log,
-                select_file=lambda: ruta,
-                select_sheet=lambda _archivo: request.hoja,
-                load_dataframe=cargar_excel_con_normalizacion,
-                output_fn=_log,
-            )
-            if dataset is None:
+            # Se carga con la MISMA función que usa la pantalla de mapeo
+            # (tz_web.routes.select_sheet / mapping_submit), en vez de
+            # gather_dataset_metadata: esa función aplica una normalización
+            # de encabezados adicional (minúsculas, sin acentos, espacios ->
+            # '_') pensada para el wizard interactivo, que aquí rompía la
+            # correspondencia entre los nombres de columna que el usuario vio
+            # y eligió en request.mapeo y los nombres reales del DataFrame
+            # que _validate_mapeo()/_apply_mapeo() comparan. request.mapeo ya
+            # trae decisiones tomadas de forma no interactiva (mismo motivo
+            # por el que run_ingestion_pipeline recibe manual_qc_mapping=True
+            # más abajo), así que no hay wizard que dependa de esa forma
+            # normalizada.
+            _log(f"Iniciando carga de datos desde {ruta}...")
+            try:
+                df, hoja_usada = cargar_excel_con_normalizacion(ruta, request.hoja)
+                _log(f"Excel cargado exitosamente: {len(df)} filas, hoja usada: {hoja_usada}")
+            except Exception as exc:  # noqa: BLE001 - traducido a excepción de dominio
+                _log(f"ERROR CRÍTICO al cargar Excel: {type(exc).__name__}: {exc}")
                 raise CaseLoadError(
                     f"No se pudo cargar el archivo Excel: {request.ruta_archivo!r} "
                     "(ver logs para el detalle)."
-                )
+                ) from exc
 
-            df = dataset.dataframe
-            hoja = dataset.hoja
-            cols_originales = list(dataset.columnas)
+            hoja = request.hoja
+            cols_originales = list(df.columns)
             log_dataset_stats("carga_inicial", df, logger=_log)
 
             # ---- 3. aplicando_mapeo ---------------------------------------
@@ -745,6 +814,13 @@ def process_case(request: CaseRequest) -> CaseResult:
             kmz_path = _verify(outputs.kmz_path, "KMZ")
             hashes_path = _verify(outputs.hashes_path, "hashes")
 
+            # El KML suelto es un producto opcional (ver solo_kmz): cuando no
+            # se pidió, generar_kml() ya lo elimina tras comprimirlo en el
+            # KMZ, así que su ausencia aquí no es un fallo — no se reporta en
+            # warnings/errors, a diferencia de los productos siempre
+            # esperados verificados arriba.
+            kml_path = archivo_kml if archivo_kml and os.path.isfile(archivo_kml) else None
+
             for line in logs:
                 if "[ERROR]" in line:
                     errors_list.append(line)
@@ -755,6 +831,15 @@ def process_case(request: CaseRequest) -> CaseResult:
 
             _emit("finalizado", "Análisis finalizado")
 
+            contactos_cap = (
+                ingestion.capabilities_report.capacidad("contactos")
+                if ingestion.capabilities_report is not None
+                else None
+            )
+            contactos_disponible = (
+                contactos_cap.disponible if contactos_cap is not None else None
+            )
+
             summary = {
                 "filas_totales": int(len(df)),
                 "coordenadas_descartadas": int(desc_coords),
@@ -764,8 +849,17 @@ def process_case(request: CaseRequest) -> CaseResult:
                     else None
                 ),
                 "filtro_tiempo": ingestion.time_filters.summary,
+                "alcance": "Bitácora completa",
                 "top_antenas": top_antenas,
                 "top_contactos": top_contactos,
+                # None cuando no hay CapabilitiesReport (compatibilidad hacia
+                # atrás: se asume disponible, como antes de esta capacidad).
+                # False cuando la capacidad "contactos" no está disponible
+                # (p.ej. campo `contacto` no mapeado) — en ese caso
+                # `top_contactos` es un valor de configuración que nunca se
+                # usó para producir resultados reales y no debe mostrarse
+                # como si lo fuera (ver results.html).
+                "contactos_disponible": contactos_disponible,
             }
 
             return CaseResult(
@@ -773,6 +867,7 @@ def process_case(request: CaseRequest) -> CaseResult:
                 output_dir=carpeta_salida_caso,
                 html_path=html_path,
                 kmz_path=kmz_path,
+                kml_path=kml_path,
                 hashes_path=hashes_path,
                 log_path=log_path,
                 logs=list(logs),

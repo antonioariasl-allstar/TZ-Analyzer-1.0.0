@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% set layout_width = 'wide' %}
+{% block title %}TZ Analyzer — Configuración{% endblock %}
+{% block content %}
+
+<form action="{{ url_for('tz_web.configure_legacy_submit') }}" method="post">
+
+  <div class="tz-card">
+    <h2>Identidad y caso</h2>
+    <div class="tz-inline">
+      <div class="tz-field">
+        <label for="tipo_bitacora">Tipo de bitácora</label>
+        <select id="tipo_bitacora" name="tipo_bitacora">
+          {% for valor, etiqueta in tipo_bitacora_labels.items() %}
+            <option value="{{ valor }}" {% if case.tipo_bitacora == valor %}selected{% endif %}>{{ etiqueta }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="tz-field">
+        <label for="output_base_name">Nombre de salida (opcional)</label>
+        <input type="text" id="output_base_name" name="output_base_name" value="{{ case.output_base_name or '' }}" placeholder="Se sugiere uno automáticamente si se deja vacío">
+      </div>
+    </div>
+    <div class="tz-inline">
+      <div class="tz-field">
+        <label for="identidad_alias">Alias (opcional)</label>
+        <input type="text" id="identidad_alias" name="identidad_alias" value="{{ case.identity_overrides.get('alias', '') }}">
+      </div>
+      <div class="tz-field">
+        <label for="identidad_nombre_usuario">Nombre de usuario (opcional)</label>
+        <input type="text" id="identidad_nombre_usuario" name="identidad_nombre_usuario" value="{{ case.identity_overrides.get('nombre_usuario', '') }}">
+      </div>
+      <div class="tz-field">
+        <label for="identidad_abonado">Abonado (opcional)</label>
+        <input type="text" id="identidad_abonado" name="identidad_abonado" value="{{ case.identity_overrides.get('abonado', '') }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="tz-card">
+    <h2>Opciones de análisis</h2>
+    <div class="tz-inline">
+      <div class="tz-field">
+        <label for="top_antenas">Top de antenas</label>
+        <input type="number" id="top_antenas" name="top_antenas" min="1" value="{{ case.top_antenas or '' }}" placeholder="10 (valor por defecto)">
+      </div>
+      <div class="tz-field">
+        <label for="top_contactos">Top de contactos</label>
+        <input type="number" id="top_contactos" name="top_contactos" min="1" value="{{ case.top_contactos or '' }}" placeholder="5 (valor por defecto)">
+      </div>
+      <div class="tz-field">
+        <label for="color_hex">Color del tema</label>
+        <input type="color" id="color_hex" name="color_hex" value="{{ case.color_hex or '#76ff03' }}">
+      </div>
+    </div>
+    <div class="tz-checkbox">
+      <input type="checkbox" id="solo_kmz" name="solo_kmz" {% if case.solo_kmz is none or case.solo_kmz %}checked{% endif %}>
+      <label for="solo_kmz" style="margin:0">Generar solo KMZ (sin dejar el KML suelto)</label>
+    </div>
+  </div>
+
+  <div class="tz-card">
+    <h2>Filtro temporal</h2>
+    <div class="tz-field">
+      <label for="filtro_tipo">Tipo de filtro</label>
+      <select id="filtro_tipo" name="filtro_tipo" onchange="tzToggleFiltro()">
+        {% for valor, etiqueta in filtro_tipo_labels.items() %}
+          <option value="{{ valor }}" {% if (case.filtro_tiempo and case.filtro_tiempo.tipo == valor) or (not case.filtro_tiempo and valor == 'ninguno') %}selected{% endif %}>{{ etiqueta }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="tz-inline" id="filtro_wrap_dia">
+      <div class="tz-field">
+        <label for="filtro_dia">Día</label>
+        <input type="date" id="filtro_dia" name="filtro_dia">
+      </div>
+    </div>
+    <div class="tz-inline" id="filtro_wrap_rango_dias">
+      <div class="tz-field">
+        <label for="filtro_desde">Desde</label>
+        <input type="date" id="filtro_desde" name="filtro_desde">
+      </div>
+      <div class="tz-field">
+        <label for="filtro_hasta">Hasta</label>
+        <input type="date" id="filtro_hasta" name="filtro_hasta">
+      </div>
+    </div>
+    <div class="tz-inline" id="filtro_wrap_horas">
+      <div class="tz-field">
+        <label for="filtro_hora_ini">Hora inicio</label>
+        <input type="time" id="filtro_hora_ini" name="filtro_hora_ini">
+      </div>
+      <div class="tz-field">
+        <label for="filtro_hora_fin">Hora fin</label>
+        <input type="time" id="filtro_hora_fin" name="filtro_hora_fin">
+      </div>
+    </div>
+    <p class="tz-help">Deje las horas vacías para usar los presets horarios configurados en el sistema.</p>
+  </div>
+
+  <div class="tz-card">
+    <h2>Decisiones de control de calidad</h2>
+    <div class="tz-inline">
+      <div class="tz-field">
+        <label for="date_order_decision">Orden de fecha (si es ambiguo)</label>
+        <select id="date_order_decision" name="date_order_decision">
+          {% for valor, etiqueta in date_order_labels.items() %}
+            <option value="{{ valor }}" {% if case.date_order_decision == valor %}selected{% endif %}>{{ etiqueta }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="tz-field">
+        {# TODO (próximo bloque): 'duracion' ya se decide en Mapeo cuando se
+           mapea como columna (ver mapping.html). Este selector se mantiene
+           por compatibilidad y precarga case.duration_unit_decision, por lo
+           que un envío sin cambios no pisa la decisión tomada en Mapeo.
+           El ajuste mínimo pendiente es puramente visual: ocultar/anotar
+           este campo aquí cuando ya exista una unidad válida elegida en
+           Mapeo, para eliminar la duplicación del selector en pantalla. #}
+        <label for="duration_unit_decision">Unidad de duración (si es ambigua)</label>
+        <select id="duration_unit_decision" name="duration_unit_decision">
+          {% for valor, etiqueta in duration_unit_labels.items() %}
+            <option value="{{ valor }}" {% if case.duration_unit_decision == valor %}selected{% endif %}>{{ etiqueta }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="tz-field">
+        <label for="qc_bloqueante_decision">Ante una advertencia QC bloqueante</label>
+        <select id="qc_bloqueante_decision" name="qc_bloqueante_decision">
+          <option value="S" {% if case.qc_bloqueante_decision == 'S' %}selected{% endif %}>Continuar de todas formas</option>
+          <option value="N" {% if case.qc_bloqueante_decision == 'N' %}selected{% endif %}>Cancelar el análisis</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="tz-card">
+    <h2>Carpeta de salida</h2>
+    <p class="tz-help">
+      Por defecto se usa <span class="tz-path">{{ default_output }}</span>.
+      Puede editar la ruta; se validará que se pueda crear y escribir antes
+      de iniciar el análisis. El selector nativo de carpetas de Windows
+      queda diferido hasta el empaquetado de la aplicación.
+    </p>
+    <div class="tz-field">
+      <label for="carpeta_salida">Ruta absoluta</label>
+      <input type="text" id="carpeta_salida" name="carpeta_salida" value="{{ case.carpeta_salida or default_output }}" required>
+    </div>
+  </div>
+
+  <div class="tz-actions">
+    <button type="submit" class="tz-btn tz-btn-primary" id="tz-start-btn" onclick="return tzGuardStartButton(this)">Ejecutar análisis</button>
+  </div>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>tzToggleFiltro();</script>
+{% endblock %}

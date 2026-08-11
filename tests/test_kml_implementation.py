@@ -5,6 +5,8 @@ import pytest
 import pandas as pd
 from xml.etree import ElementTree as ET
 
+from tz_core.color_utils import hex_to_kml_color
+
 
 # ── GEO_UTILS ──────────────────────────────────────────────────────────────
 
@@ -175,6 +177,96 @@ def test_con_azimut_genera_todo():
     assert g["points"]      == 1, "Esperado 1 pin"
     assert g["linestrings"] == 1, "Esperado 1 línea de azimut"
     assert g["polygons"]    == 2, "Esperado 2 polígonos (círculo + cono)"
+
+
+def test_circulo_sin_relleno_fill_desactivado():
+    """El círculo de referencia debe tener PolyStyle/fill=0 (sin relleno interior)."""
+    import simplekml
+    _crear = _reset_and_import()
+    kml_obj = simplekml.Kml()
+    _crear(kml_obj, "Test", -89.2, 13.7, None, None, _CFG)
+    root = ET.fromstring(kml_obj.kml())
+    poligonos = root.findall(".//{*}Polygon/..")
+    circulo = next(pm for pm in poligonos if pm.find("{*}name").text == "Radio de referencia")
+    style_id = circulo.find("{*}styleUrl").text.lstrip("#")
+    estilo = next(s for s in root.findall(".//{*}Style") if s.get("id") == style_id)
+    fill = estilo.find("{*}PolyStyle/{*}fill")
+    assert fill is not None and fill.text == "0", \
+        "El círculo debe tener fill=0 (sin relleno interior)"
+
+
+def test_circulo_contorno_visible():
+    """El círculo conserva LineStyle visible (contorno) pese a fill=0."""
+    import simplekml
+    _crear = _reset_and_import()
+    kml_obj = simplekml.Kml()
+    _crear(kml_obj, "Test", -89.2, 13.7, None, None, _CFG)
+    root = ET.fromstring(kml_obj.kml())
+    poligonos = root.findall(".//{*}Polygon/..")
+    circulo = next(pm for pm in poligonos if pm.find("{*}name").text == "Radio de referencia")
+    style_id = circulo.find("{*}styleUrl").text.lstrip("#")
+    estilo = next(s for s in root.findall(".//{*}Style") if s.get("id") == style_id)
+    line_color = estilo.find("{*}LineStyle/{*}color")
+    assert line_color is not None and line_color.text, \
+        "El círculo debe conservar un LineStyle con color visible"
+
+
+def test_cono_conserva_relleno_y_transparencia():
+    """El cono/sector conserva fill=1 y su opacidad configurada — no afectado por el fix del círculo."""
+    import simplekml
+    _crear = _reset_and_import()
+    kml_obj = simplekml.Kml()
+    _crear(kml_obj, "Test", -89.2, 13.7, None, 90.0, _CFG)
+    root = ET.fromstring(kml_obj.kml())
+    poligonos = root.findall(".//{*}Polygon/..")
+    cono = next(pm for pm in poligonos if pm.find("{*}name").text.startswith("Cono Azimut"))
+    style_id = cono.find("{*}styleUrl").text.lstrip("#")
+    estilo = next(s for s in root.findall(".//{*}Style") if s.get("id") == style_id)
+    fill = estilo.find("{*}PolyStyle/{*}fill")
+    color = estilo.find("{*}PolyStyle/{*}color")
+    assert fill is not None and fill.text == "1", "El cono debe conservar fill=1"
+    esperado = hex_to_kml_color("#ff0000", int(0.4 * 255))
+    assert color is not None and color.text.lower() == esperado, \
+        "La opacidad del cono no debe cambiar por el fix del círculo"
+
+
+def test_circulo_y_cono_estilos_independientes():
+    """Círculo y cono deben usar estilos distintos (fix de uno no debe afectar al otro)."""
+    import simplekml
+    _crear = _reset_and_import()
+    kml_obj = simplekml.Kml()
+    _crear(kml_obj, "Test", -89.2, 13.7, None, 90.0, _CFG)
+    root = ET.fromstring(kml_obj.kml())
+    poligonos = root.findall(".//{*}Polygon/..")
+    circulo = next(pm for pm in poligonos if pm.find("{*}name").text == "Radio de referencia")
+    cono = next(pm for pm in poligonos if pm.find("{*}name").text.startswith("Cono Azimut"))
+    style_circulo = circulo.find("{*}styleUrl").text.lstrip("#")
+    style_cono = cono.find("{*}styleUrl").text.lstrip("#")
+    assert style_circulo != style_cono, \
+        "Círculo y cono no deben compartir el mismo estilo KML"
+
+
+def test_multiples_activaciones_no_acumulan_relleno_circulo(tmp_path):
+    """Varias activaciones sobre la misma antena: todos los círculos generados usan fill=0."""
+    df = pd.DataFrame({
+        "fecha":  ["10/01/2026", "10/01/2026", "10/01/2026"],
+        "hora":   ["09:00:00",   "09:05:00",   "09:10:00"],
+        "lat":    [13.7,         13.7,         13.7],
+        "long":   [-89.2,        -89.2,        -89.2],
+        "antena": ["MISMA_ANTENA", "MISMA_ANTENA", "MISMA_ANTENA"],
+        "azimut": [90,           90,           90],
+    })
+    kml_content = _generar_y_leer_kml(df, tmp_path)
+    root = ET.fromstring(kml_content)
+    poligonos = root.findall(".//{*}Polygon/..")
+    circulos = [pm for pm in poligonos if pm.find("{*}name").text == "Radio de referencia"]
+    assert len(circulos) >= 3, "Se esperaban al menos 3 círculos (uno por activación)"
+    for circulo in circulos:
+        style_id = circulo.find("{*}styleUrl").text.lstrip("#")
+        estilo = next(s for s in root.findall(".//{*}Style") if s.get("id") == style_id)
+        fill = estilo.find("{*}PolyStyle/{*}fill")
+        assert fill is not None and fill.text == "0", \
+            "Todos los círculos deben tener fill=0, incluso con activaciones repetidas"
 
 
 def test_registro_sin_fecha_aparece_en_kmz(tmp_path):

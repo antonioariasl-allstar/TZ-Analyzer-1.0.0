@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% set layout_width = 'narrow' %}
+{% block title %}TZ Analyzer{% endblock %}
+{% block content %}
+
+<div class="tz-cover">
+  <img class="tz-cover-logo" src="{{ url_for('tz_web.logo_asset') }}" alt="TZ Analyzer">
+  <h1>TZ ANALYZER</h1>
+  <p class="tz-cover-tagline">Bitácoras &rarr; KML/KMZ + Informe HTML</p>
+  <p class="tz-cover-version">Versión 1.1 · Aplicación local</p>
+  <a class="tz-btn tz-btn-primary" href="{{ url_for('tz_web.menu_screen') }}">ENTRAR AL ANALIZADOR</a>
+</div>
+
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Configuración{% endblock %}
+{% block content %}
+
+<div class="tz-card">
+  <h2>3. Configuración</h2>
+  <p class="tz-help">Configuración 5 de 5 — Preparar análisis</p>
+
+  <form action="{{ url_for('tz_web.configure_final_submit') }}" method="post" id="configure_final_form"
+        onkeydown="return event.key !== 'Enter';">
+
+    <h3>Tipo de bitácora</h3>
+    <div class="tz-field">
+      <label for="tipo_bitacora">Tipo de bitácora</label>
+      <select id="tipo_bitacora" name="tipo_bitacora" onchange="tzActualizarNombreSugerido()">
+        {% for valor, etiqueta in tipo_bitacora_labels.items() %}
+          <option value="{{ valor }}" {% if case.tipo_bitacora == valor %}selected{% endif %}>{{ etiqueta }}</option>
+        {% endfor %}
+      </select>
+      <p class="tz-help">Normalmente no es necesario modificar esta opción.</p>
+    </div>
+
+    <h3>Nombre de salida</h3>
+    <input type="hidden" name="nombre_modo" id="nombre_modo" value="{{ 'manual' if case.output_base_name else 'sugerido' }}">
+
+    <div id="nombre_modo_sugerido" {% if case.output_base_name %}style="display:none"{% endif %}>
+      <div class="tz-output-name-display">
+        <span class="tz-path" id="nombre_sugerido_texto">{{ suggested_name or 'Se generará automáticamente al ejecutar el análisis' }}</span>
+        <button type="button" class="tz-btn tz-btn-secondary" onclick="tzUsarNombreManual()">CAMBIAR NOMBRE</button>
+      </div>
+    </div>
+
+    <div id="nombre_modo_manual" {% if not case.output_base_name %}style="display:none"{% endif %}>
+      <div class="tz-field">
+        <label for="output_base_name">Nombre de salida</label>
+        <input type="text" id="output_base_name" name="output_base_name"
+               value="{{ case.output_base_name or suggested_name or '' }}">
+      </div>
+      <button type="button" class="tz-btn tz-btn-secondary" onclick="tzUsarNombreSugerido()">USAR NOMBRE SUGERIDO</button>
+    </div>
+
+    <p class="tz-help">
+      El sistema añadirá automáticamente un identificador de ejecución para
+      evitar sobrescribir análisis anteriores.
+    </p>
+
+    <h3>Ubicación de salida</h3>
+    <p class="tz-help">Los resultados se guardarán en:</p>
+    <p class="tz-path">{{ carpeta_salida }}</p>
+    <p class="tz-help">El sistema creará automáticamente una carpeta independiente para este análisis.</p>
+
+    <div class="tz-actions">
+      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Continuar al resumen</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  function tzUsarNombreManual() {
+    document.getElementById("nombre_modo").value = "manual";
+    document.getElementById("nombre_modo_sugerido").style.display = "none";
+    document.getElementById("nombre_modo_manual").style.display = "";
+    document.getElementById("output_base_name").focus();
+  }
+  function tzUsarNombreSugerido() {
+    document.getElementById("nombre_modo").value = "sugerido";
+    document.getElementById("nombre_modo_manual").style.display = "none";
+    document.getElementById("nombre_modo_sugerido").style.display = "";
+    tzActualizarNombreSugerido();
+  }
+
+  function tzActualizarNombreSugerido() {
+    var modoInput = document.getElementById("nombre_modo");
+    var textoEl = document.getElementById("nombre_sugerido_texto");
+    var tipoSelect = document.getElementById("tipo_bitacora");
+    if (!modoInput || modoInput.value === "manual" || !textoEl || !tipoSelect) {
+      return;
+    }
+    var body = new URLSearchParams();
+    body.set("tipo_bitacora", tipoSelect.value);
+    fetch("{{ url_for('tz_web.configure_final_preview_name') }}", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    })
+      .then(function (resp) { return resp.ok ? resp.json() : null; })
+      .then(function (data) {
+        if (data) {
+          textoEl.textContent = data.suggested_name || "Se generará automáticamente al ejecutar el análisis";
+        }
+      })
+      .catch(function () {});
+  }
+</script>
+
+{% endblock %}

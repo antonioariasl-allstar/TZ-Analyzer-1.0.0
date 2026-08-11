@@ -246,8 +246,12 @@ def _crear_feature_kml(
         s_cone.polystyle.outline = 1
 
         s_circle = sk.Style()
-        s_circle.polystyle.color = hex_to_kml_color(theme_hex, 30)
-        s_circle.polystyle.fill = 1
+        # Círculo de referencia: solo contorno, sin relleno interior (diseño
+        # aprobado — evita relleno tenue acumulado con múltiples activaciones
+        # superpuestas sobre la misma antena). fill=0 en lugar de depender
+        # solo de alpha 00, para que la intención quede explícita en el KML.
+        s_circle.polystyle.color = hex_to_kml_color(theme_hex, 0)
+        s_circle.polystyle.fill = 0
         s_circle.polystyle.outline = 1
         s_circle.linestyle.color = hex_to_kml_color(theme_hex, 200)
         s_circle.linestyle.width = 1.5

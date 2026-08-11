@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% set layout_width = 'wide' %}
+{% block title %}TZ Analyzer — Mapeo de columnas{% endblock %}
+{% block content %}
+
+{% if case.mapping_draft and case.mapping_stage == 'review' %}
+
+<div class="tz-card">
+  <h2>Revisión del mapeo</h2>
+  <p class="tz-help">Desplácese horizontalmente para consultar todos los campos.</p>
+  <div class="tz-scroll-x">
+    <table class="tz-table tz-review-table">
+      <thead>
+        <tr>
+          <th>Campo</th>
+          {% for fila in mapping_review %}<th>{{ field_labels.get(fila.campo, fila.campo) }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Columna asignada</td>
+          {% for fila in mapping_review %}
+            <td data-campo="{{ fila.campo }}">
+              {% if fila.tipo == 'col' %}<strong>{{ fila.valor }}</strong>
+              {% elif fila.tipo == 'fijo' %}Valor asignado: <strong>{{ fila.valor }}</strong>
+              {% else %}<em>Omitido</em>{% endif %}
+            </td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>Muestra</td>
+          {% for fila in mapping_review %}
+            <td data-campo="{{ fila.campo }}">{{ fila.muestra }}</td>
+          {% endfor %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tz-card">
+  <h3>Análisis que podrá generar el sistema</h3>
+  {% if case.capabilities_preview %}
+    {% if not case.capabilities_preview.procesable %}
+      <div class="tz-banner error">
+        El mapeo actual no deja datos procesables: {{ case.capabilities_preview.bloqueos_globales|join(', ') }}
+      </div>
+    {% endif %}
+    <p class="tz-help">Desplácese horizontalmente para consultar todas las capacidades.</p>
+    <div class="tz-scroll-x">
+      <table class="tz-table tz-capabilities-table">
+        <thead>
+          <tr>
+            {% for nombre, cap in case.capabilities_preview.capacidades.items() %}
+              <th data-capacidad="{{ nombre }}">{{ capability_labels.get(nombre, nombre) }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            {% for nombre, cap in case.capabilities_preview.capacidades.items() %}
+              <td data-capacidad="{{ nombre }}">
+                {% if nombre == 'duracion' and duracion_estado_web %}
+                <span class="tz-badge {{ duracion_estado_web[0] }}">{{ duracion_estado_web[1] }}</span>
+                {% else %}
+                <span class="tz-badge {{ cap.estado }}">{{ cap.estado }}</span>
+                {% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="tz-help">No se pudo calcular una vista previa de capacidades para este mapeo.</p>
+  {% endif %}
+</div>
+
+<div class="tz-actions">
+  <form action="{{ url_for('tz_web.mapping_edit') }}" method="post">
+    <button type="submit" class="tz-btn tz-btn-secondary">Volver a editar</button>
+  </form>
+  <form action="{{ url_for('tz_web.mapping_confirm') }}" method="post">
+    <button type="submit" class="tz-btn tz-btn-primary">Confirmar mapeo</button>
+  </form>
+</div>
+
+{% else %}
+
+<div class="tz-card">
+  <h2>Mapeo de columnas</h2>
+  <p class="tz-help" id="mapping_group_label">
+    Grupo 1 de {{ field_groups|length }} — {{ field_groups[0][0] }}
+  </p>
+
+  <form action="{{ url_for('tz_web.mapping_submit') }}" method="post" id="mapping_form">
+    {% for group_name, group_fields in field_groups %}
+    <div class="tz-mapping-group" data-group-index="{{ loop.index0 }}" {% if not loop.first %}hidden{% endif %}>
+      {% for campo in group_fields %}
+        {% set ctx = field_context.get(campo, {}) %}
+        {% set draft_tipo, draft_valor = (case.mapping_draft.get(campo, ('omitido', None)) if case.mapping_draft else ('omitido', None)) %}
+        <div class="tz-mapping-row" data-campo="{{ campo }}">
+          <h3>{{ field_labels.get(campo, campo) }}</h3>
+          {% if field_descriptions.get(campo) %}<div class="tz-help">{{ field_descriptions.get(campo) }}</div>{% endif %}
+          {% if ctx.get('desc') %}<div class="tz-help">{{ ctx.get('desc') }}</div>{% endif %}
+          {% if ctx.get('hint') %}<div class="tz-samples">{{ ctx.get('hint') }}</div>{% endif %}
+
+          <div class="tz-assign-toggle" role="group" aria-label="Asignación de {{ campo }}">
+            <label class="tz-assign-option" for="tipo_col_{{ campo }}">
+              <input type="radio" name="tipo_{{ campo }}" value="col" id="tipo_col_{{ campo }}"
+                     {% if draft_tipo == 'col' %}checked{% endif %}
+                     onchange="tzToggleMappingRow('{{ campo }}')">
+              <span>Usar columna</span>
+            </label>
+            <label class="tz-assign-option" for="tipo_omit_{{ campo }}">
+              <input type="radio" name="tipo_{{ campo }}" value="omitido" id="tipo_omit_{{ campo }}"
+                     {% if draft_tipo != 'col' %}checked{% endif %}
+                     onchange="tzToggleMappingRow('{{ campo }}')">
+              <span>Omitir</span>
+            </label>
+          </div>
+
+          <div class="tz-field" id="col_wrap_{{ campo }}" style="display:none">
+            <label>Columna</label>
+            <select name="col_{{ campo }}">
+              <option value="">-- Seleccione --</option>
+              {% for col in case.columns %}
+                <option value="{{ col }}" {% if draft_tipo == 'col' and draft_valor == col %}selected{% endif %}>{{ col }}</option>
+              {% endfor %}
+            </select>
+
+            {% if campo == 'duracion' %}
+            <div class="tz-field" style="margin-top:10px">
+              <label for="duration_unit_decision">Unidad de duración</label>
+              <select id="duration_unit_decision" name="duration_unit_decision">
+                {% for valor, etiqueta in duration_unit_labels.items() %}
+                  <option value="{{ valor }}" {% if case.duration_unit_decision == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                {% endfor %}
+              </select>
+              <div class="tz-help">Seleccione la unidad utilizada por los valores de esta columna.</div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+
+    <div class="tz-actions">
+      <button type="button" id="mapping_btn_prev" class="tz-btn tz-btn-secondary" hidden onclick="tzMappingPrev()">Anterior</button>
+      <button type="button" id="mapping_btn_next" class="tz-btn tz-btn-primary" onclick="tzMappingNext()">Siguiente</button>
+      <button type="submit" id="mapping_btn_submit" class="tz-btn tz-btn-primary" hidden>Continuar a revisión</button>
+    </div>
+  </form>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>
+  {% if not (case.mapping_draft and case.mapping_stage == 'review') %}
+  document.querySelectorAll('.tz-mapping-row').forEach(function (row) {
+    var campo = row.getAttribute('data-campo');
+    if (campo) tzToggleMappingRow(campo);
+  });
+  tzMappingInit({{ field_groups|map(attribute=0)|list|tojson }});
+  {% endif %}
+</script>
+{% endblock %}

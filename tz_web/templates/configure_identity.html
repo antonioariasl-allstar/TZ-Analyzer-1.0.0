@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Configuración{% endblock %}
+{% block content %}
+
+<div class="tz-card">
+  <h2>3. Configuración</h2>
+  <p class="tz-help">Configuración 1 de 5 — Identificación</p>
+
+  <h3>Identificación de la bitácora</h3>
+  <p class="tz-help">
+    Estos datos son opcionales y se aplicarán a todos los registros de la
+    bitácora.
+  </p>
+
+  <form action="{{ url_for('tz_web.configure_identity_submit') }}" method="post" id="configure_identity_form">
+    <div class="tz-field">
+      <label for="identidad_alias">Alias</label>
+      <input type="text" id="identidad_alias" name="identidad_alias" value="{{ case.identity_overrides.get('alias', '') }}">
+    </div>
+    <div class="tz-field">
+      <label for="identidad_nombre_usuario">Nombre de usuario</label>
+      <input type="text" id="identidad_nombre_usuario" name="identidad_nombre_usuario" value="{{ case.identity_overrides.get('nombre_usuario', '') }}">
+    </div>
+    <div class="tz-field">
+      <label for="identidad_abonado">Abonado</label>
+      <input type="text" id="identidad_abonado" name="identidad_abonado" value="{{ case.identity_overrides.get('abonado', '') }}">
+    </div>
+
+    <div class="tz-actions">
+      <button type="submit" form="configure_back_form" class="tz-btn tz-btn-secondary">← Volver al mapeo</button>
+      <button type="submit" name="accion" value="omitir" class="tz-btn tz-btn-secondary">Omitir</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Siguiente</button>
+    </div>
+  </form>
+
+  <form action="{{ url_for('tz_web.configure_back_to_mapping') }}" method="post" id="configure_back_form"></form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var alias = document.getElementById("identidad_alias");
+    var usuario = document.getElementById("identidad_nombre_usuario");
+    var abonado = document.getElementById("identidad_abonado");
+
+    function noSubmitAdvanceTo(nextEl) {
+      return function (evt) {
+        if (evt.key === "Enter") {
+          evt.preventDefault();
+          if (nextEl) {
+            nextEl.focus();
+          }
+        }
+      };
+    }
+
+    if (alias) alias.addEventListener("keydown", noSubmitAdvanceTo(usuario));
+    if (usuario) usuario.addEventListener("keydown", noSubmitAdvanceTo(abonado));
+    if (abonado) abonado.addEventListener("keydown", noSubmitAdvanceTo(null));
+  });
+</script>
+{% endblock %}
