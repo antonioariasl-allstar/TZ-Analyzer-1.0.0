@@ -125,6 +125,9 @@ function tzStartPolling(statusUrl, resultsUrl) {
   var fill = document.getElementById("tz-progress-fill");
   var label = document.getElementById("tz-progress-label");
   var stageItems = document.querySelectorAll("#tz-stage-list li");
+  var stageOrder = Array.prototype.map.call(stageItems, function (li) {
+    return li.getAttribute("data-stage");
+  });
 
   function applyState(data) {
     if (fill) {
@@ -133,8 +136,11 @@ function tzStartPolling(statusUrl, resultsUrl) {
     if (label) {
       label.textContent = data.percent + "% — " + (data.stage_label || data.message || "Procesando");
     }
-    stageItems.forEach(function (li) {
-      li.classList.toggle("current", li.getAttribute("data-stage") === data.stage);
+    var currentIndex = stageOrder.indexOf(data.stage);
+    stageItems.forEach(function (li, index) {
+      var isCurrent = li.getAttribute("data-stage") === data.stage;
+      li.classList.toggle("current", isCurrent);
+      li.classList.toggle("done", !isCurrent && currentIndex > -1 && index < currentIndex);
     });
   }
 

@@ -4,7 +4,7 @@
 
 <div class="tz-card">
   <h2>{{ heading|default('3. Configuración') }}</h2>
-  <p class="tz-help">{{ step_label|default('Configuración 4 de 5 — Color de la bitácora') }}</p>
+  <p class="tz-help">{{ step_label|default('Paso 4 de 5 · Color') }}</p>
 
   <h3>Color{{ ' del mapa' if es_modo3|default(false) else ' de la bitácora' }}</h3>
   {% if es_modo3|default(false) %}
@@ -26,16 +26,23 @@
   {% endif %}
 
   <form action="{{ color_action_url }}" method="post" id="configure_color_form">
-    <div class="tz-color-grid" role="radiogroup" aria-label="Color de la bitácora">
-      {% for nombre, hex_valor in palette %}
-        <label class="tz-color-swatch{% if hex_valor|lower == selected_color|lower %} selected{% endif %}">
-          <input type="radio" name="color_hex" value="{{ hex_valor }}"
-                 {% if hex_valor|lower == selected_color|lower %}checked{% endif %}>
-          <span class="tz-color-chip" style="background-color: {{ hex_valor }}"></span>
-          <span class="tz-color-name">{{ nombre }}</span>
-          <span class="tz-color-check" aria-hidden="true">✓</span>
-          <span class="tz-color-selected-label">Seleccionado</span>
-        </label>
+    <div class="tz-color-groups" role="radiogroup" aria-label="Color de la bitácora">
+      {% for group_name, colors in palette_groups %}
+        <fieldset class="tz-color-group">
+          <legend>{{ group_name }}</legend>
+          <div class="tz-color-grid">
+            {% for nombre, hex_valor in colors %}
+              <label class="tz-color-swatch{% if hex_valor|lower == selected_color|lower %} selected{% endif %}">
+                <input type="radio" name="color_hex" value="{{ hex_valor }}"
+                       {% if hex_valor|lower == selected_color|lower %}checked{% endif %}>
+                <span class="tz-color-chip" style="background-color: {{ hex_valor }}"></span>
+                <span class="tz-color-name">{{ nombre }}</span>
+                <span class="tz-color-check" aria-hidden="true">✓</span>
+                <span class="tz-color-selected-label">Seleccionado</span>
+              </label>
+            {% endfor %}
+          </div>
+        </fieldset>
       {% endfor %}
     </div>
 
@@ -48,10 +55,10 @@
 
 <script>
   (function () {
-    var grid = document.querySelector(".tz-color-grid");
-    if (!grid) return;
-    var swatches = grid.querySelectorAll(".tz-color-swatch");
-    grid.addEventListener("change", function (event) {
+    var groups = document.querySelector(".tz-color-groups");
+    if (!groups) return;
+    var swatches = groups.querySelectorAll(".tz-color-swatch");
+    groups.addEventListener("change", function (event) {
       if (event.target && event.target.name === "color_hex") {
         swatches.forEach(function (swatch) {
           var input = swatch.querySelector("input[type=radio]");

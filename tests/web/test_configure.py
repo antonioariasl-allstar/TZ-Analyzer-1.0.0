@@ -38,7 +38,7 @@ def test_confirmar_mapeo_lleva_a_3a(client):
     assert resp.status_code == 200
     assert "3. Configuración".encode("utf-8") in resp.data
     assert "Identificación de la bitácora".encode("utf-8") in resp.data
-    assert "Configuración 1 de 5".encode("utf-8") in resp.data
+    assert "Paso 1 de 5".encode("utf-8") in resp.data
 
 
 def test_3a_muestra_unicamente_alias_usuario_abonado(client):
@@ -138,7 +138,7 @@ def test_omitir_y_siguiente_avanzan_a_3b_sin_configuracion_antigua(client):
     resp = client.post("/configure", data={"accion": "omitir"}, follow_redirects=True)
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    assert "Configuración 2 de 5".encode("utf-8") in resp.data
+    assert "Paso 2 de 5".encode("utf-8") in resp.data
     assert "Opciones del análisis" in html
     for etiqueta in ("Tipo de bitácora", "Carpeta de salida", "Ejecutar análisis", "Color del tema"):
         assert etiqueta not in html
@@ -174,7 +174,7 @@ def test_3b_muestra_opciones_del_analisis(client):
     resp = client.get("/configure/opciones")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    assert "Configuración 2 de 5" in html
+    assert "Paso 2 de 5" in html
     assert "Top de antenas" in html
     assert "Top de contactos" in html
 
@@ -186,7 +186,7 @@ def test_3b_anterior_regresa_a_3a(client):
         "accion": "anterior", "top_antenas": "", "top_contactos": "",
     }, follow_redirects=True)
     assert resp.status_code == 200
-    assert "Configuración 1 de 5".encode("utf-8") in resp.data
+    assert "Paso 1 de 5".encode("utf-8") in resp.data
 
 
 def test_3b_siguiente_avanza_a_3c(client):
@@ -196,7 +196,7 @@ def test_3b_siguiente_avanza_a_3c(client):
         "accion": "siguiente", "top_antenas": "7", "top_contactos": "3",
     }, follow_redirects=True)
     assert resp.status_code == 200
-    assert "Configuración 3 de 5".encode("utf-8") in resp.data
+    assert "Paso 3 de 5".encode("utf-8") in resp.data
 
 
 def test_3b_valida_top_antenas_no_numerico(client):
@@ -295,7 +295,7 @@ def test_3c_anterior_regresa_a_3b(client):
     _advance_to_3c(client)
     resp = client.post("/configure/productos", data={"accion": "anterior"}, follow_redirects=True)
     assert resp.status_code == 200
-    assert "Configuración 2 de 5".encode("utf-8") in resp.data
+    assert "Paso 2 de 5".encode("utf-8") in resp.data
 
 
 # ---------------------------------------------------------------------------
@@ -313,7 +313,7 @@ def test_3d_muestra_paleta_real_y_color_por_defecto_seleccionado(client):
     resp = client.get("/configure/color")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    assert "Configuración 4 de 5" in html
+    assert "Paso 4 de 5" in html
     assert "Color de la bitácora" in html
     # La paleta real (config.json -> style.palette) debe estar presente,
     # incluido el nombre del color por defecto (theme_hex = #76ff03).
@@ -391,7 +391,7 @@ def test_3d_anterior_regresa_a_3c(client):
     _advance_to_3d(client)
     resp = client.post("/configure/color", data={"accion": "anterior"}, follow_redirects=True)
     assert resp.status_code == 200
-    assert "Configuración 3 de 5".encode("utf-8") in resp.data
+    assert "Paso 3 de 5".encode("utf-8") in resp.data
 
 
 def test_3d_siguiente_conduce_a_3e(client):
@@ -400,7 +400,7 @@ def test_3d_siguiente_conduce_a_3e(client):
         "accion": "siguiente", "color_hex": "#76ff03",
     }, follow_redirects=True)
     assert resp.status_code == 200
-    assert "Configuración 5 de 5".encode("utf-8") in resp.data
+    assert "Paso 5 de 5".encode("utf-8") in resp.data
     assert "Preparar análisis".encode("utf-8") in resp.data
 
 
@@ -517,7 +517,7 @@ def test_3e_anterior_regresa_a_3d_conservando_estado(client):
     _advance_to_3e(client)
     resp = client.post("/configure/final", data={"accion": "anterior"}, follow_redirects=True)
     assert resp.status_code == 200
-    assert "Configuración 4 de 5".encode("utf-8") in resp.data
+    assert "Paso 4 de 5".encode("utf-8") in resp.data
 
 
 def test_3e_siguiente_no_inicia_tarea_y_lleva_a_resumen(client):
@@ -608,7 +608,7 @@ def test_resumen_anterior_regresa_a_preparar_analisis(client):
     _advance_to_resumen(client)
     resp = client.post("/configure/resumen", data={"accion": "anterior"}, follow_redirects=True)
     assert resp.status_code == 200
-    assert "Configuración 5 de 5".encode("utf-8") in resp.data
+    assert "Paso 5 de 5".encode("utf-8") in resp.data
     assert "Preparar análisis".encode("utf-8") in resp.data
 
 

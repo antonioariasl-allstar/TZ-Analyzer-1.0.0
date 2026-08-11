@@ -14,6 +14,7 @@ un identificador cerrado (``kind``) y resuelven la ruta real desde el
 
 from __future__ import annotations
 
+import colorsys
 import os
 import threading
 import uuid
@@ -887,6 +888,47 @@ def _theme_palette() -> List[Tuple[str, str]]:
     return [(nombre, hex_valor) for nombre, hex_valor in (style.get("palette") or [])]
 
 
+_PALETTE_GROUP_ORDER = ("Principales", "Azules/Cian", "Verdes", "Rojos/Rosas", "Amarillos/Naranjas", "Morados")
+_PALETTE_PRINCIPALES_COUNT = 8
+
+
+def _palette_hue_group(hex_valor: str) -> str:
+    """Clasifica un color por matiz (HSV) en una de las categorías visuales
+    de ``_PALETTE_GROUP_ORDER``. Solo agrupa la presentación en pantalla
+    (sección 11 del encargo estético); no modifica valores hex ni nombres
+    de la paleta real del motor."""
+    h = hex_valor.lstrip("#")
+    r, g, b = int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255
+    hue, _sat, _val = colorsys.rgb_to_hsv(r, g, b)
+    hue_deg = hue * 360
+    if hue_deg < 20 or hue_deg >= 330:
+        return "Rojos/Rosas"
+    if hue_deg < 70:
+        return "Amarillos/Naranjas"
+    if hue_deg < 170:
+        return "Verdes"
+    if hue_deg < 255:
+        return "Azules/Cian"
+    return "Morados"
+
+
+def _grouped_palette() -> List[Tuple[str, List[Tuple[str, str]]]]:
+    """Reorganiza ``_theme_palette()`` en grupos visuales (sección 11:
+    demasiados colores presentados al mismo nivel). No cambia el orden
+    interno de cada grupo, ni los valores hex/nombres — solo agrupa la
+    presentación para que la pantalla de selección de color sea más legible."""
+    paleta = _theme_palette()
+    principales = paleta[:_PALETTE_PRINCIPALES_COUNT]
+    resto = paleta[_PALETTE_PRINCIPALES_COUNT:]
+
+    grupos: Dict[str, List[Tuple[str, str]]] = {nombre: [] for nombre in _PALETTE_GROUP_ORDER}
+    grupos["Principales"] = list(principales)
+    for nombre, hex_valor in resto:
+        grupos[_palette_hue_group(hex_valor)].append((nombre, hex_valor))
+
+    return [(nombre, grupos[nombre]) for nombre in _PALETTE_GROUP_ORDER if grupos[nombre]]
+
+
 def _default_theme_hex() -> str:
     style = get_config().get("style", {}) or {}
     return style.get("theme_hex", "#76ff03")
@@ -908,6 +950,7 @@ def configure_color_screen():
         "configure_color.html",
         case=case,
         palette=_theme_palette(),
+        palette_groups=_grouped_palette(),
         selected_color=selected_color,
         color_action_url=url_for("tz_web.configure_color_submit"),
     )
@@ -1522,6 +1565,7 @@ def modo3_color_screen():
         "configure_color.html",
         case=case,
         palette=_theme_palette(),
+        palette_groups=_grouped_palette(),
         selected_color=selected_color,
         color_action_url=url_for("tz_web.modo3_color_submit"),
         heading="Modo 3 — Color del mapa",

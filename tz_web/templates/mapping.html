@@ -47,6 +47,7 @@
       </div>
     {% endif %}
     <p class="tz-help">Desplácese horizontalmente para consultar todas las capacidades.</p>
+    {% set estado_labels = {'disponible': 'Disponible', 'parcial': 'Parcial', 'no_disponible': 'No disponible'} %}
     <div class="tz-scroll-x">
       <table class="tz-table tz-capabilities-table">
         <thead>
@@ -63,7 +64,7 @@
                 {% if nombre == 'duracion' and duracion_estado_web %}
                 <span class="tz-badge {{ duracion_estado_web[0] }}">{{ duracion_estado_web[1] }}</span>
                 {% else %}
-                <span class="tz-badge {{ cap.estado }}">{{ cap.estado }}</span>
+                <span class="tz-badge {{ cap.estado }}">{{ estado_labels.get(cap.estado, cap.estado) }}</span>
                 {% endif %}
               </td>
             {% endfor %}

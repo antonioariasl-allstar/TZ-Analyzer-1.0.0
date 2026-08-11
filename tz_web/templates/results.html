@@ -65,29 +65,53 @@
 
   <div class="tz-card">
     <h2>Productos generados</h2>
-    <div class="tz-actions">
+    <div class="tz-result-grid">
       {% if result.html_path %}
-      <form action="{{ url_for('tz_web.open_product', kind='html') }}" method="post">
-        <button type="submit" class="tz-btn tz-btn-secondary">Abrir HTML</button>
-      </form>
+      <div class="tz-result-card">
+        <strong>Informe HTML</strong>
+        <p>Resultados y análisis</p>
+        <form action="{{ url_for('tz_web.open_product', kind='html') }}" method="post">
+          <button type="submit" class="tz-btn tz-btn-secondary">Abrir HTML</button>
+        </form>
+      </div>
       {% endif %}
-      <form action="{{ url_for('tz_web.open_product', kind='kmz') }}" method="post">
-        <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.kmz_path %}disabled{% endif %}>Abrir KMZ</button>
-      </form>
+      <div class="tz-result-card">
+        <strong>Mapa KMZ</strong>
+        <p>Mapa para Google Earth</p>
+        <form action="{{ url_for('tz_web.open_product', kind='kmz') }}" method="post">
+          <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.kmz_path %}disabled{% endif %}>Abrir KMZ</button>
+        </form>
+      </div>
       {% if result.kml_path %}
-      <form action="{{ url_for('tz_web.open_product', kind='kml') }}" method="post">
-        <button type="submit" class="tz-btn tz-btn-secondary">Abrir KML</button>
-      </form>
+      <div class="tz-result-card">
+        <strong>Archivo KML</strong>
+        <p>Versión sin comprimir del mapa</p>
+        <form action="{{ url_for('tz_web.open_product', kind='kml') }}" method="post">
+          <button type="submit" class="tz-btn tz-btn-secondary">Abrir KML</button>
+        </form>
+      </div>
       {% endif %}
-      <form action="{{ url_for('tz_web.open_product', kind='hashes') }}" method="post">
-        <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.hashes_path %}disabled{% endif %}>Abrir hashes</button>
-      </form>
-      <form action="{{ url_for('tz_web.open_product', kind='log') }}" method="post">
-        <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.log_path %}disabled{% endif %}>Abrir log</button>
-      </form>
-      <form action="{{ url_for('tz_web.open_product', kind='folder') }}" method="post">
-        <button type="submit" class="tz-btn tz-btn-secondary">Abrir carpeta</button>
-      </form>
+      <div class="tz-result-card">
+        <strong>Hashes SHA-256</strong>
+        <p>Verificación de integridad</p>
+        <form action="{{ url_for('tz_web.open_product', kind='hashes') }}" method="post">
+          <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.hashes_path %}disabled{% endif %}>Abrir hashes</button>
+        </form>
+      </div>
+      <div class="tz-result-card">
+        <strong>Log de ejecución</strong>
+        <p>Registro técnico</p>
+        <form action="{{ url_for('tz_web.open_product', kind='log') }}" method="post">
+          <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.log_path %}disabled{% endif %}>Abrir log</button>
+        </form>
+      </div>
+      <div class="tz-result-card">
+        <strong>Carpeta de salida</strong>
+        <p>Archivos generados</p>
+        <form action="{{ url_for('tz_web.open_product', kind='folder') }}" method="post">
+          <button type="submit" class="tz-btn tz-btn-secondary">Abrir carpeta</button>
+        </form>
+      </div>
     </div>
   </div>
 
