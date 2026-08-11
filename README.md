@@ -19,7 +19,7 @@ El proyecto pasó por un proceso de consolidación y modularización que transfo
 La generación HTML fue descompuesta en submódulos dedicados dentro de `tz_core/html/`: assembler, kpi, contacts, antennas, metadata y header.
 
 **Resultado:**
-- **427 tests** pasando (unitarios + integración + E2E), 2 skipped
+- **Suite automatizada** unitaria, de integración y E2E; criterio de release: 0 fallos
 - **0 regresiones** durante todo el proceso
 - Monolito reducido un **65%** (de 2,344 a ~825 líneas)
 - Metodología atómica: analizar → planificar → ejecutar → test → commit
@@ -55,7 +55,7 @@ La confiabilidad del sistema está validada para **bitácoras del formato salvad
   - Rangos horarios personalizables.
   - Branding (logo, marca de agua, pie legal).
 
-- **Suite de pruebas**: 427 tests (unitarios, integración, E2E con golden files) que validan estructura KMZ, generación HTML e integridad del pipeline completo.
+- **Suite de pruebas**: pruebas unitarias, de integración y E2E con golden files que validan estructura KMZ, generación HTML e integridad del pipeline completo.
 
 ---
 
@@ -128,7 +128,7 @@ TZ-Analyzer/
 │   └── commands/
 │       └── info_backup.py
 │
-├── tests/                                   # Suite de pruebas (427 tests)
+├── tests/                                   # Suite de pruebas unitaria, integración y E2E
 │   ├── integration/                         # Tests E2E y de integración
 │   │   ├── test_e2e_regresion.py            # Regresión E2E con golden files
 │   │   ├── test_hour_ranges_flow.py         # Flujo de rangos horarios
@@ -187,26 +187,48 @@ script_principal (orquestador)
 
 ### Requisitos
 
-- **Python 3.12.8** (versión oficial del proyecto)
-- **Dependencias**: Ver `requirements.txt`
+- **CPython 3.12.8 x64 exacto** (contrato de desarrollo y build de v1)
+- **Entrada Excel soportada**: `.xlsx`
+- **Dependencias runtime**: `requirements.txt`
+- **Dependencias de pruebas**: `requirements-test.txt`
+
+El usuario de la aplicación empaquetada no tendrá que instalar Python. Este
+contrato aplica únicamente al desarrollo, las pruebas y la construcción de la
+release.
 
 ### Instalación
 
 ```powershell
-# Crear entorno virtual
-python -m venv .venv312
+# Opción recomendada: valida versión/arquitectura y prepara .venv312
+.\setup.ps1
+```
+
+Preparación manual equivalente:
+
+```powershell
+# Validar implementación, versión y plataforma antes de continuar
+py -3.12-64 -c "import platform, struct, sys, sysconfig; assert platform.python_implementation() == 'CPython' and sys.version_info[:3] == (3, 12, 8) and struct.calcsize('P') * 8 == 64 and sysconfig.get_platform() == 'win-amd64'"
+if ($LASTEXITCODE -ne 0) { throw "Se requiere CPython 3.12.8 x64 (win-amd64)" }
+
+# La recreación debe partir de una ruta nueva; no se borra ningún entorno automáticamente
+if (Test-Path -LiteralPath '.\.venv312') { throw "Retire manualmente .venv312 antes de recrear el entorno" }
+
+# Crear entorno virtual limpio con el intérprete canónico
+py -3.12-64 -m venv .venv312
 
 # Activar entorno virtual (Windows PowerShell)
-.venv312\Scripts\activate
+.\.venv312\Scripts\Activate.ps1
 
-# Instalar dependencias
-pip install -r requirements.txt
+# Instalar runtime y tooling de pruebas con versiones exactas
+.\.venv312\Scripts\python.exe -m pip install --upgrade pip==24.3.1
+.\.venv312\Scripts\python.exe -m pip install -r requirements-test.txt
+.\.venv312\Scripts\python.exe -m pip check
 ```
 
 ### Ejecución
 
 ```powershell
-python script_principal_bitacoras_refactory.py
+.\.venv312\Scripts\python.exe script_principal_bitacoras_refactory.py
 ```
 
 1. **Seleccionar color tema** (opcional) — Paleta sugerida o HEX manual.
@@ -218,21 +240,20 @@ python script_principal_bitacoras_refactory.py
 ### Pruebas
 
 ```powershell
-# Activar PYTHONPATH antes de correr pytest
-$env:PYTHONPATH = (Get-Location).Path
+# Suite web
+.\.venv312\Scripts\python.exe -m pytest tests/web -q
 
-# Suite completa (427 tests)
-python -m pytest
-
-# Solo tests unitarios
-python -m pytest tests/unit/
-
-# Solo tests de integración
-python -m pytest tests/integration/
+# Suite completa: criterio de release = 0 fallos
+.\.venv312\Scripts\python.exe -m pytest -q
 
 # Test E2E con golden files
-python -m pytest tests/integration/test_e2e_regresion.py
+.\.venv312\Scripts\python.exe -m pytest tests/integration/test_e2e_regresion.py -q
 ```
+
+El detalle del contrato reproducible está en
+[`docs/RELEASE_ENVIRONMENT.md`](docs/RELEASE_ENVIRONMENT.md). El golden KML se
+compara por semántica XML canónica, no por diferencias léxicas equivalentes de
+serialización.
 
 ---
 

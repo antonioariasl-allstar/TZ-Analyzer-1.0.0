@@ -1,6 +1,7 @@
 """FASE 2 WEB — Pantalla 1: carga de archivo y listado de hojas."""
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 
@@ -27,15 +28,21 @@ def test_upload_guarda_archivo_con_nombre_seguro_fuera_del_original(client):
     assert "/" not in os.path.basename(case.temp_path) and "\\" not in os.path.basename(case.temp_path)
     # El nombre original se conserva solo como metadato visible.
     assert case.original_filename == "../../evil name??.xlsx"
+    with open(case.temp_path, "rb") as accepted:
+        assert case.upload_sha256 == hashlib.sha256(accepted.read()).hexdigest()
+    assert case.input_snapshot_path is None
+    assert case.input_snapshot_sha256 is None
 
 
 def test_upload_sin_archivo_muestra_error(client):
+    client.post("/modo/1")
     resp = client.post("/upload", data={}, content_type="multipart/form-data", follow_redirects=True)
     assert resp.status_code == 200
     assert b"Seleccione un archivo" in resp.data
 
 
 def test_extension_invalida_es_rechazada(client):
+    client.post("/modo/1")
     data = {"archivo": (io.BytesIO(b"contenido cualquiera"), "documento.txt")}
     resp = client.post("/upload", data=data, content_type="multipart/form-data", follow_redirects=True)
     assert resp.status_code == 200
@@ -46,13 +53,54 @@ def test_extension_invalida_es_rechazada(client):
     assert case.temp_path is None
 
 
+def test_extension_xls_legacy_es_rechazada_y_la_ui_declara_solo_xlsx(client):
+    client.post("/modo/1")
+    data = {"archivo": (io.BytesIO(b"contenido BIFF simulado"), "bitacora.xls")}
+    resp = client.post("/upload", data=data, content_type="multipart/form-data", follow_redirects=True)
+
+    assert resp.status_code == 200
+    assert "Formato no soportado".encode("utf-8") in resp.data
+    assert b'accept=".xlsx"' in resp.data
+    assert b".xls," not in resp.data
+
+    with client.session_transaction() as flask_sess:
+        case_id = flask_sess.get("case_id")
+    case = tz_web_state.get_session(case_id)
+    assert case.temp_path is None
+
+
 def test_archivo_demasiado_grande_es_rechazado(app, client, monkeypatch):
+    client.post("/modo/1")
     monkeypatch.setattr(tz_web_state, "MAX_UPLOAD_BYTES", 100)
     app.config["MAX_CONTENT_LENGTH"] = 100
     data = {"archivo": (io.BytesIO(b"x" * 1000), "grande.xlsx")}
     resp = client.post("/upload", data=data, content_type="multipart/form-data", follow_redirects=True)
     assert resp.status_code == 200
     assert "supera el límite permitido".encode("utf-8") in resp.data
+
+
+def test_reemplazo_invalido_no_deja_ruta_digest_o_mapeo_obsoletos(client):
+    upload_real_file(client)
+    with client.session_transaction() as browser_session:
+        case = tz_web_state.get_session(browser_session["case_id"])
+    previous_path = case.temp_path
+    case.mapping = {"fecha": ("col", "FECHA_INICIAL")}
+
+    response = client.post(
+        "/upload",
+        data={"archivo": (io.BytesIO(b"no es un xlsx"), "reemplazo.xlsx")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert not os.path.exists(previous_path)
+    assert not os.path.isdir(os.path.dirname(previous_path))
+    assert case.temp_path is None
+    assert case.original_filename is None
+    assert case.upload_dir is None
+    assert case.upload_sha256 is None
+    assert case.mapping is None
 
 
 def test_listado_de_hojas_via_seleccion_carga_columnas_y_muestras(client):
@@ -76,6 +124,7 @@ def test_hoja_no_disponible_es_rechazada(client):
 
 
 def test_seleccionar_hoja_sin_archivo_previo_redirige_a_inicio(client):
+    client.post("/modo/1")
     resp = client.post("/sheet", data={"hoja": SHEET_NAME}, follow_redirects=True)
     assert resp.status_code == 200
     assert b"Cargar archivo" in resp.data
@@ -112,6 +161,9 @@ def test_cambiar_archivo_limpia_estado_y_elimina_temporal(client):
     assert case is not None
     assert case.temp_path is None
     assert case.original_filename is None
+    assert case.upload_sha256 is None
+    assert case.input_snapshot_path is None
+    assert case.input_snapshot_sha256 is None
     assert case.available_sheets == []
     assert case.sheet is None
     assert case.columns == []

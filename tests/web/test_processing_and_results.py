@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import os
 import threading
+import zipfile
 
 import pytest
 
@@ -89,32 +90,55 @@ def test_resultado_exitoso_con_fixture_real(client, tmp_path):
 
 
 def test_resultado_parcial_muestra_advertencias_y_errores(client, monkeypatch, tmp_path):
-    """Un CaseResult con success=True pero con un producto faltante debe
-    mostrarse como éxito parcial (advertencias/errores), no como fallo."""
+    """KML solicitado ausente es PARTIAL con los obligatorios disponibles."""
     advance_to_configure(client)
+
+    output_dir = tmp_path / "salida_parcial"
+    output_dir.mkdir()
+    html_path = output_dir / "informe.html"
+    html_path.write_text("<html>resultado disponible</html>", encoding="utf-8")
+    kmz_path = output_dir / "mapa.kmz"
+    with zipfile.ZipFile(kmz_path, "w") as kmz:
+        kmz.writestr("doc.kml", "<?xml version='1.0'?><kml/>")
+    hashes_path = output_dir / "caso_hashes.txt"
+    hashes_path.write_text("TZ_ANALYZER_MANIFEST_V1\n", encoding="utf-8")
 
     resultado_parcial = CaseResult(
         success=True,
-        output_dir=str(tmp_path / "salida_parcial"),
-        html_path=None,
-        kmz_path=None,
-        hashes_path=None,
+        output_dir=str(output_dir),
+        html_path=str(html_path),
+        kmz_path=str(kmz_path),
+        hashes_path=str(hashes_path),
         log_path=None,
-        warnings=["No se generó el producto: KMZ."],
-        errors=["El producto informe HTML fue reportado pero no existe físicamente."],
+        warnings=["No se generó el producto opcional solicitado: kml."],
+        errors=[],
         summary={"filas_totales": 10},
+        status="partial",
     )
-    os.makedirs(resultado_parcial.output_dir, exist_ok=True)
+    assert resultado_parcial.success is False
 
     monkeypatch.setattr(tz_web_routes, "process_case", lambda _req: resultado_parcial)
     _submit_configure(client, tmp_path, carpeta_salida=resultado_parcial.output_dir)
     status = wait_for_terminal_status(client)
-    assert status["status"] == "success"
+    assert status["status"] == "partial"
 
     resp = client.get("/results")
     assert resp.status_code == 200
-    assert "No se generó el producto: KMZ".encode("utf-8") in resp.data
-    assert "reportado pero no existe físicamente".encode("utf-8") in resp.data
+    assert b"finalizado parcialmente" in resp.data
+    assert b"finalizado correctamente" not in resp.data
+    assert b"Volver a configurar productos" in resp.data
+
+    with client.session_transaction() as flask_sess:
+        case = tz_web_state.get_session(flask_sess["case_id"])
+    snapshot_path = case.input_snapshot_path
+    snapshot_sha256 = case.input_snapshot_sha256
+
+    back = client.post("/results/back-to-products", follow_redirects=True)
+    assert back.request.path == "/configure/productos"
+    assert case.status == tz_web_state.STATUS_PENDING
+    assert case.input_snapshot_path == snapshot_path
+    assert case.input_snapshot_sha256 == snapshot_sha256
+    assert "No se generó el producto opcional solicitado: kml".encode("utf-8") in resp.data
 
 
 def _advance_to_configure_sin_contacto(client):
@@ -302,11 +326,14 @@ def test_bloqueo_de_segunda_tarea_simultanea(app, tmp_path):
     routes_mod.process_case = _slow_process
     try:
         advance_to_configure(client_a)
+        # La segunda sesión se configura antes de reservar la ejecución. Una
+        # vez activa la primera, incluso sus POST de configuración quedan
+        # sujetos a la guarda central y no pueden iniciar otro worker.
+        advance_to_configure(client_b)
         os.makedirs(tmp_path / "a", exist_ok=True)
         resp_a = _submit_configure(client_a, tmp_path, carpeta_salida=str(tmp_path / "a"))
         assert "Procesando análisis".encode("utf-8") in resp_a.data
 
-        advance_to_configure(client_b)
         resp_b = _submit_configure(client_b, tmp_path, carpeta_salida=str(tmp_path / "b"))
         assert tz_web_state.MSG_ANALYSIS_IN_PROGRESS.encode("utf-8") in resp_b.data
         assert "Carpeta de salida".encode("utf-8") in resp_b.data  # se quedó en /configure/legacy

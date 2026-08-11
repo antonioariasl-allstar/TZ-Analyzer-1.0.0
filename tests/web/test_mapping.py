@@ -13,6 +13,7 @@ def _reach_mapping_screen(client):
 
 
 def test_mapping_screen_sin_hoja_redirige_a_inicio(client):
+    client.post("/modo/1")
     resp = client.get("/mapping", follow_redirects=True)
     assert resp.status_code == 200
     assert b"Cargar archivo" in resp.data

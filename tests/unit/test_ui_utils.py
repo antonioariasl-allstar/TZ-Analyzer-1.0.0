@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import itertools
+import sys
+import types
 
 import pandas as pd
 
+from tz_core import ui_utils as ui_utils_module
 from tz_core.ui_utils import (
     CaseIdentity,
     collect_manual_mode_context,
@@ -14,6 +17,41 @@ from tz_core.ui_utils import (
     summarize_outputs,
     suggest_case_name,
 )
+
+
+def test_selector_excel_declara_unicamente_xlsx():
+    assert ui_utils_module._EXCEL_FILETYPES == [
+        ("Excel files", "*.xlsx"),
+        ("All files", "*.*"),
+    ]
+
+
+def test_selector_excel_acepta_extension_xlsx_sin_importar_mayusculas(tmp_path):
+    archivo = tmp_path / "BITACORA.XLSX"
+    archivo.write_bytes(b"xlsx simulado")
+
+    assert ui_utils_module._is_supported_excel_path(str(archivo)) is True
+
+
+def test_selector_excel_gui_rechaza_xls_aunque_se_elija_con_all_files(tmp_path, monkeypatch, capsys):
+    archivo = tmp_path / "bitacora.xls"
+    archivo.write_bytes(b"BIFF simulado")
+
+    class FakeRoot:
+        def withdraw(self):
+            pass
+
+        def destroy(self):
+            pass
+
+    fake_tkinter = types.ModuleType("tkinter")
+    fake_tkinter.Tk = FakeRoot
+    fake_tkinter.filedialog = types.SimpleNamespace(askopenfilename=lambda **_kwargs: str(archivo))
+    fake_tkinter.TclError = RuntimeError
+    monkeypatch.setitem(sys.modules, "tkinter", fake_tkinter)
+
+    assert ui_utils_module.seleccionar_archivo() is None
+    assert "Formato no soportado" in capsys.readouterr().out
 
 
 def test_collect_manual_mode_context_returns_option_and_config():

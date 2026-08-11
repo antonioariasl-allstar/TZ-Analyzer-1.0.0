@@ -27,8 +27,9 @@ import threading
 import time
 import traceback
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from tz_web.services import (
     AnalysisInProgressError,
@@ -40,6 +41,12 @@ from tz_web.services import (
     InvalidMappingError,
     OutputDirectoryError,
     SheetNotFoundError,
+)
+from tz_web.output_transaction import (
+    InputIntegrityError,
+    OutputCollisionError,
+    OutputValidationError,
+    TransactionError,
 )
 
 # ---------------------------------------------------------------------------
@@ -86,6 +93,7 @@ STAGE_LABELS: Dict[str, str] = {
 STATUS_PENDING = "pending"
 STATUS_RUNNING = "running"
 STATUS_SUCCESS = "success"
+STATUS_PARTIAL = "partial"
 STATUS_FAILED = "failed"
 
 # ---------------------------------------------------------------------------
@@ -106,7 +114,7 @@ MODO_3 = "3"
 
 UPLOAD_ROOT = os.path.join(tempfile.gettempdir(), "TZ_Analyzer_Web_Uploads")
 _LOG_DIR = os.path.join(tempfile.gettempdir(), "TZ_Analyzer_Web_Logs")
-ALLOWED_UPLOAD_EXTENSIONS: Tuple[str, ...] = (".xlsx", ".xls")
+ALLOWED_UPLOAD_EXTENSIONS: Tuple[str, ...] = (".xlsx",)
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB (sección 4, límite inicial configurable)
 _STALE_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60  # 24h
 
@@ -145,10 +153,15 @@ _KNOWN_DOMAIN_EXCEPTIONS: Tuple[type, ...] = (
     OutputDirectoryError,
     AnalysisInProgressError,
     ArchivoNoProcesableError,
+    InputIntegrityError,
+    OutputCollisionError,
+    OutputValidationError,
+    TransactionError,
 )
 
 MSG_ANALYSIS_IN_PROGRESS = (
-    "Ya hay un análisis en ejecución; espere a que finalice antes de iniciar otro."
+    "Hay un análisis en procesamiento. Espere a que finalice antes de iniciar "
+    "o modificar otro análisis."
 )
 
 
@@ -207,6 +220,12 @@ class Session:
     temp_path: Optional[str] = None
     original_filename: Optional[str] = None
     upload_dir: Optional[str] = None
+    # SHA-256 calculado una sola vez cuando la subida ya fue aceptada como
+    # XLSX legible. El worker no analiza ``temp_path``: antes de arrancar
+    # crea su propia copia y conserva debajo su ruta/digest efectivos.
+    upload_sha256: Optional[str] = None
+    input_snapshot_path: Optional[str] = None
+    input_snapshot_sha256: Optional[str] = None
     available_sheets: List[str] = field(default_factory=list)
     sheet: Optional[str] = None
 
@@ -310,9 +329,43 @@ def finish_run(session_id: str) -> None:
             _RUNNING_SESSION_ID = None
 
 
+@contextmanager
+def terminal_run(session_id: str) -> Iterator[None]:
+    """Hace atomica la transicion terminal respecto de mutaciones web.
+
+    El worker completa resultado/error/estado dentro del mismo ``RLock`` que
+    usa ``mutation_guard``. Si el polling observa el estado terminal antes de
+    salir del bloque, cualquier POST de recuperacion espera hasta que la
+    reserva global haya sido liberada en ``finally``.
+    """
+    global _RUNNING_SESSION_ID
+    with _RUNNING_LOCK:
+        try:
+            yield
+        finally:
+            if _RUNNING_SESSION_ID == session_id:
+                _RUNNING_SESSION_ID = None
+
+
 def is_any_run_active() -> bool:
     with _RUNNING_LOCK:
         return _RUNNING_SESSION_ID is not None
+
+
+@contextmanager
+def mutation_guard() -> Iterator[bool]:
+    """Serializa una mutación destructiva contra el inicio de una corrida.
+
+    El lock se conserva durante toda la mutación. Así, comprobar que no hay
+    una ejecución activa y modificar/descartar el caso forman una sola
+    operación respecto de ``try_start_run``; no queda una ventana entre un
+    ``is_any_run_active()`` y el cambio de estado.
+
+    El valor producido es ``False`` cuando ya existe una reserva activa. En
+    ese caso el llamador debe salir sin tocar sesión, input ni configuración.
+    """
+    with _RUNNING_LOCK:
+        yield _RUNNING_SESSION_ID is None
 
 
 def discard_session(session_id: str) -> None:

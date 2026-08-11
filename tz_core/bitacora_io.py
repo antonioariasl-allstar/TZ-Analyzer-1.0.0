@@ -30,8 +30,13 @@ def seleccionar_archivo(titulo: str = "Seleccionar bitácora Excel") -> Optional
             return _sel_archivo()
         except Exception:
             pass
-    ruta = safe_input("Ruta del archivo Excel (.xlsx/.xls) (C=cancelar): ").strip('"')
-    return ruta if ruta else None
+    ruta = safe_input("Ruta del archivo Excel (.xlsx) (C=cancelar): ").strip('"')
+    if not ruta:
+        return None
+    if os.path.splitext(ruta)[1].lower() != ".xlsx":
+        print("[WARN] Formato no soportado. Use un archivo .xlsx.")
+        return None
+    return ruta
 
 
 def seleccionar_carpeta(titulo: str = "Seleccionar carpeta de salida") -> Optional[str]:

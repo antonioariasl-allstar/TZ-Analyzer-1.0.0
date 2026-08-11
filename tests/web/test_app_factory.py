@@ -38,7 +38,7 @@ def test_menu_principal_muestra_los_tres_modos(client):
 
 
 def test_modo_1_abre_la_pantalla_de_carga_de_archivo(client):
-    resp = client.get("/analizador")
+    resp = client.post("/modo/1", follow_redirects=True)
     assert resp.status_code == 200
     assert b"Cargar archivo" in resp.data
     assert b'enctype="multipart/form-data"' in resp.data
@@ -59,18 +59,18 @@ def test_modo_2_ya_no_esta_pendiente(client):
 
 
 def test_pantallas_del_modo_1_incluyen_boton_volver_al_menu(client):
-    resp = client.get("/analizador")
+    resp = client.post("/modo/1", follow_redirects=True)
     assert "Volver al menú principal".encode("utf-8") in resp.data
 
 
 def test_encabezado_no_muestra_ip_local(client):
-    resp = client.get("/analizador")
+    resp = client.post("/modo/1", follow_redirects=True)
     assert b"127.0.0.1" not in resp.data
     assert "Aplicación local".encode("utf-8") in resp.data
 
 
 def test_pie_de_pagina_muestra_las_tres_lineas(client):
-    resp = client.get("/analizador")
+    resp = client.post("/modo/1", follow_redirects=True)
     assert "Procesamiento local".encode("utf-8") in resp.data
     assert "Desarrollado por Omar Arias (Tony Zero)".encode("utf-8") in resp.data
     assert "Los datos y archivos permanecen en este equipo.".encode("utf-8") in resp.data

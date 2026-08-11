@@ -1,7 +1,7 @@
-"""
+r"""
 Genera/actualiza los archivos golden normalizados para la prueba E2E.
 Uso:
-  python -m tests.update_golden
+  .\.venv312\Scripts\python.exe -m tests.update_golden
 """
 from __future__ import annotations
 import os

@@ -1,4 +1,4 @@
-"""FASE 1 WEB — contrato de errores, lock serial y productos parciales de
+"""FASE 1 WEB — contrato de errores, lock serial y publicación de
 ``tz_web.services.process_case()``.
 
 Complementa ``tests/integration/test_process_case_e2e.py`` (camino feliz con
@@ -7,8 +7,7 @@ el fixture real) cubriendo:
 - rechazo controlado de una segunda ejecución simultánea (AnalysisInProgressError);
 - que el Lock se libera incluso tras un fallo, permitiendo una ejecución
   posterior;
-- degradación a producto parcial cuando un solo componente (KML) falla, sin
-  abortar el análisis completo.
+- fallo terminal sin publicación cuando falta HTML, KMZ o manifiesto.
 """
 from __future__ import annotations
 
@@ -29,6 +28,11 @@ from tz_web.services import (
     SheetNotFoundError,
     _EXECUTION_LOCK,
     process_case,
+)
+from tz_web.output_transaction import (
+    MANIFEST_SCHEMA,
+    OutputValidationError,
+    finalize_output as finalize_output_real,
 )
 
 DATA_PATH = os.path.join(
@@ -208,49 +212,125 @@ def test_lock_se_libera_incluso_si_process_case_lanza_una_excepcion(tmp_path):
     assert resultado.success is True
 
 
-def test_fallo_de_kml_degrada_a_producto_parcial_sin_abortar(tmp_path):
-    """Si generar_kml() falla, el análisis debe completarse igual: HTML y
-    hashes se generan, kmz_path queda en None y el motivo queda registrado
-    en errors — el proceso no se aborta por completo."""
+def test_fallo_de_kml_es_failed_y_no_publica_carpeta_incompleta(tmp_path):
+    """KMZ es obligatorio: el contrato anterior de success era AUD-06."""
 
     def _boom(*_a, **_k):
         raise RuntimeError("kml roto (simulado)")
 
+    output_base = tmp_path / "out"
     with patch("tz_web.services.generar_kml", side_effect=_boom):
-        resultado = process_case(
-            CaseRequest(
-                ruta_archivo=DATA_PATH,
-                carpeta_salida=str(tmp_path / "out"),
-                mapeo=dict(_MAPEO_COMPLETO),
-                duration_unit_decision="segundos",
+        with pytest.raises(OutputValidationError, match="kmz"):
+            process_case(
+                CaseRequest(
+                    ruta_archivo=DATA_PATH,
+                    carpeta_salida=str(output_base),
+                    mapeo=dict(_MAPEO_COMPLETO),
+                    duration_unit_decision="segundos",
+                )
             )
-        )
-
-    assert resultado.success is True
-    assert resultado.kmz_path is None
-    assert resultado.html_path and os.path.isfile(resultado.html_path)
-    assert any("kml" in e.lower() for e in resultado.errors)
+    assert not any(path.is_dir() for path in output_base.iterdir())
 
 
-def test_fallo_de_html_degrada_a_producto_parcial_sin_abortar(tmp_path):
-    """Simétrico al anterior: si la generación de HTML falla, el KMZ y los
-    hashes igual deben producirse; el análisis no debe abortar."""
+def test_fallo_de_html_es_failed_y_no_publica_carpeta_incompleta(tmp_path):
+    """HTML es obligatorio: no se publica un KMZ aislado como success."""
 
     def _boom(**_k):
         raise RuntimeError("html roto (simulado)")
 
+    output_base = tmp_path / "out"
     with patch("tz_web.services.generar_informe_html", side_effect=_boom):
-        resultado = process_case(
-            CaseRequest(
-                ruta_archivo=DATA_PATH,
-                carpeta_salida=str(tmp_path / "out"),
-                mapeo=dict(_MAPEO_COMPLETO),
-                duration_unit_decision="segundos",
+        with pytest.raises(OutputValidationError, match="html"):
+            process_case(
+                CaseRequest(
+                    ruta_archivo=DATA_PATH,
+                    carpeta_salida=str(output_base),
+                    mapeo=dict(_MAPEO_COMPLETO),
+                    duration_unit_decision="segundos",
+                )
             )
-        )
+    assert not any(path.is_dir() for path in output_base.iterdir())
 
-    assert resultado.success is True
-    assert resultado.html_path is None
-    assert resultado.kmz_path and os.path.isfile(resultado.kmz_path)
-    motivos = resultado.warnings + resultado.errors
-    assert any("html" in motivo.lower() for motivo in motivos)
+
+def test_C_kmz_desaparece_despues_de_html_y_antes_de_validar_no_publica(tmp_path):
+    output_base = tmp_path / "out"
+
+    def _remove_kmz_then_finalize(transaction, **kwargs):
+        for spec in kwargs["artifacts"]:
+            if spec.role == "kmz" and spec.path and os.path.isfile(spec.path):
+                os.remove(spec.path)
+        return finalize_output_real(transaction, **kwargs)
+
+    with patch("tz_web.services.finalize_output", side_effect=_remove_kmz_then_finalize):
+        with pytest.raises(OutputValidationError, match="kmz"):
+            process_case(
+                CaseRequest(
+                    ruta_archivo=DATA_PATH,
+                    carpeta_salida=str(output_base),
+                    mapeo=dict(_MAPEO_COMPLETO),
+                    duration_unit_decision="segundos",
+                )
+            )
+    assert not any(path.is_dir() for path in output_base.iterdir())
+
+
+def test_D_fallo_durante_kmz_deja_archivo_truncado_y_no_publica(tmp_path):
+    output_base = tmp_path / "out"
+
+    def _truncated_kmz_then_boom(_df, archivo_kml, **_kwargs):
+        kmz_path = os.path.splitext(archivo_kml)[0] + ".kmz"
+        with open(kmz_path, "wb") as partial:
+            partial.write(b"PK\x03\x04truncado")
+        raise RuntimeError("fallo durante KMZ")
+
+    with patch("tz_web.services.generar_kml", side_effect=_truncated_kmz_then_boom):
+        with pytest.raises(OutputValidationError, match="kmz"):
+            process_case(
+                CaseRequest(
+                    ruta_archivo=DATA_PATH,
+                    carpeta_salida=str(output_base),
+                    mapeo=dict(_MAPEO_COMPLETO),
+                    duration_unit_decision="segundos",
+                )
+            )
+    assert not any(path.is_dir() for path in output_base.iterdir())
+
+
+def test_E_fallo_antes_del_manifiesto_limpia_staging_y_no_publica(tmp_path):
+    output_base = tmp_path / "out"
+    with patch("tz_web.services.finalize_output", side_effect=OSError("antes de hashes")):
+        with pytest.raises(OSError, match="antes de hashes"):
+            process_case(
+                CaseRequest(
+                    ruta_archivo=DATA_PATH,
+                    carpeta_salida=str(output_base),
+                    mapeo=dict(_MAPEO_COMPLETO),
+                    duration_unit_decision="segundos",
+                )
+            )
+    assert not any(path.is_dir() for path in output_base.iterdir())
+
+
+def test_e2e_manifiesto_v1_es_la_fuente_final_y_solo_usa_rutas_relativas(tmp_path):
+    result = process_case(
+        CaseRequest(
+            ruta_archivo=DATA_PATH,
+            input_sha256=None,
+            input_original_name="bitacora_original.xlsx",
+            carpeta_salida=str(tmp_path / "out"),
+            mapeo=dict(_MAPEO_COMPLETO),
+            duration_unit_decision="segundos",
+            mode="1",
+        )
+    )
+
+    assert result.status == "success"
+    assert result.hashes_path and os.path.isfile(result.hashes_path)
+    with open(result.hashes_path, "r", encoding="utf-8") as manifest:
+        lines = manifest.read().splitlines()
+    assert lines[0] == MANIFEST_SCHEMA
+    assert all(".tzp" not in line for line in lines)
+    for line in lines[2:]:
+        relative = line.split("\t", 4)[4]
+        assert not os.path.isabs(relative)
+        assert os.path.isfile(os.path.join(result.output_dir, *relative.split("/")))

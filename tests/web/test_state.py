@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 
 import pytest
@@ -16,6 +17,7 @@ from tz_web.services import (
     OutputDirectoryError,
     SheetNotFoundError,
 )
+from tz_web.output_transaction import InputIntegrityError, OutputValidationError
 
 
 def test_stage_percent_cubre_las_8_etapas_reales_de_process_case():
@@ -55,6 +57,8 @@ def test_stage_percent_cubre_las_etapas_de_modo3():
     (OutputDirectoryError, "carpeta de prueba inválida"),
     (AnalysisInProgressError, "ya en ejecución de prueba"),
     (ArchivoNoProcesableError, "no procesable de prueba"),
+    (InputIntegrityError, "integridad de entrada no verificable"),
+    (OutputValidationError, "producto obligatorio invalido"),
 ])
 def test_translate_error_usa_el_mensaje_curado_de_excepciones_de_dominio(exc_type, mensaje):
     assert tz_web_state.translate_error(exc_type(mensaje)) == mensaje
@@ -115,6 +119,44 @@ def test_try_start_run_es_exclusivo_entre_sesiones():
     assert tz_web_state.is_any_run_active() is False
     assert tz_web_state.try_start_run("sesion-b") is True
     tz_web_state.finish_run("sesion-b")
+
+
+def test_terminal_run_no_abre_ventana_entre_estado_terminal_y_liberacion():
+    session = tz_web_state.create_session()
+    assert tz_web_state.try_start_run(session.id) is True
+    terminal_visible = threading.Event()
+    allow_finish = threading.Event()
+    mutation_attempted = threading.Event()
+    mutation_entered = threading.Event()
+    observed = []
+
+    def _finish():
+        with tz_web_state.terminal_run(session.id):
+            session.status = tz_web_state.STATUS_PARTIAL
+            terminal_visible.set()
+            assert allow_finish.wait(timeout=5)
+
+    def _mutate():
+        mutation_attempted.set()
+        with tz_web_state.mutation_guard() as allowed:
+            observed.append(allowed)
+            mutation_entered.set()
+
+    finisher = threading.Thread(target=_finish)
+    mutation = threading.Thread(target=_mutate)
+    finisher.start()
+    assert terminal_visible.wait(timeout=5)
+    mutation.start()
+    assert mutation_attempted.wait(timeout=5)
+    assert mutation_entered.wait(timeout=0.1) is False
+
+    allow_finish.set()
+    finisher.join(timeout=5)
+    mutation.join(timeout=5)
+
+    assert mutation_entered.is_set()
+    assert observed == [True]
+    assert tz_web_state.is_any_run_active() is False
 
 
 def test_ensure_writable_dir_crea_y_confirma_escritura(tmp_path):

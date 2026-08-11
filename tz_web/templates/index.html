@@ -35,14 +35,14 @@
 <div class="tz-card">
   <h2>Paso 1: Cargar archivo</h2>
   <p class="tz-help">
-    Seleccione la bitácora en formato Excel (.xlsx o .xls). Límite de tamaño:
+    Seleccione la bitácora en formato Excel (.xlsx). Límite de tamaño:
     {{ 200 }} MB. El archivo se guarda temporalmente en este equipo con un
     nombre seguro; el nombre original solo se muestra como referencia.
   </p>
   <form action="{{ url_for('tz_web.upload') }}" method="post" enctype="multipart/form-data">
     <div class="tz-field">
       <label for="archivo">Archivo Excel</label>
-      <input type="file" id="archivo" name="archivo" accept=".xlsx,.xls" required
+      <input type="file" id="archivo" name="archivo" accept=".xlsx" required
              class="tz-visually-hidden tz-file-input" onchange="tzHandleFileSelect(this)">
       <label for="archivo" class="tz-btn tz-btn-secondary tz-file-label">Seleccionar archivo</label>
       <div id="archivo_seleccionado" class="tz-file-selected" hidden>

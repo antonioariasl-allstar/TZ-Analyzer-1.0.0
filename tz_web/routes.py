@@ -15,9 +15,11 @@ un identificador cerrado (``kind``) y resuelven la ruta real desde el
 from __future__ import annotations
 
 import colorsys
+import copy
 import os
 import threading
 import uuid
+from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -45,6 +47,14 @@ from tz_core.user_paths import resolve_default_output_dir
 from tz_web import manual_validators as mv
 from tz_web import state
 from tz_web.field_catalog import FIELD_DESCRIPTIONS, FIELD_GROUPS, FIELD_LABELS
+from tz_web.output_transaction import (
+    InputIntegrityError,
+    OutputValidationError,
+    RESULT_PARTIAL,
+    RESULT_SUCCESS,
+    create_input_snapshot,
+    sha256_file,
+)
 from tz_web.services_modo3 import (
     MODO3_TIPO_ANTENA,
     MODO3_TIPO_PUNTO_LIBRE,
@@ -132,6 +142,32 @@ def _current_session(create: bool = True) -> Optional[state.Session]:
     return case
 
 
+def _mutation_guard(redirect_endpoint: str):
+    """Protege una ruta que cambia o descarta estado del caso.
+
+    La política y el mensaje viven en un único punto. ``state.mutation_guard``
+    conserva el mismo lock que usa la reserva de ejecución durante toda la
+    vista, evitando una carrera entre comprobar el estado y mutarlo.
+    """
+    def _decorate(view):
+        @wraps(view)
+        def _guarded(*args, **kwargs):
+            with state.mutation_guard() as allowed:
+                if allowed:
+                    return view(*args, **kwargs)
+
+                # No usar _current_session(): incluso actualizar ``updated_at``
+                # violaría el contrato de dejar el caso intacto al rechazar.
+                case = state.get_session(flask_session.get("case_id"))
+                flash(state.MSG_ANALYSIS_IN_PROGRESS, "error")
+                if case is not None and case.status == state.STATUS_RUNNING:
+                    return redirect(url_for("tz_web.processing_screen"))
+                return redirect(url_for(redirect_endpoint))
+
+        return _guarded
+    return _decorate
+
+
 def _open_with_default_app(path: str) -> None:
     """Abre ``path`` con la aplicación asociada del sistema operativo.
 
@@ -177,6 +213,9 @@ def _reset_file_state(case: state.Session) -> None:
     case.temp_path = None
     case.original_filename = None
     case.upload_dir = None
+    case.upload_sha256 = None
+    case.input_snapshot_path = None
+    case.input_snapshot_sha256 = None
     case.available_sheets = []
     _reset_sheet_state(case)
 
@@ -191,42 +230,51 @@ def menu_screen():
     return render_template("menu.html", show_nav=False)
 
 
-@bp.route("/modo/2", methods=["POST"])
-def mode_2():
-    """Entrada real del Modo 2 (bitácora filtrada por tiempo): inicia o
-    restablece la sesión de análisis y la marca como Modo 2, entrando al
-    mismo flujo de archivo/hoja/vista previa/mapeo que el Modo 1 (sección 2
-    del microbloque). No se duplican pantallas ni rutas: solo cambia
-    ``case.modo``, que ``mapping_confirm`` usa después para decidir si
-    inserta la pantalla de Filtro temporal."""
-    case = _current_session()
-    case.modo = state.MODO_2
+@bp.route("/modo/<modo>", methods=["POST"])
+@_mutation_guard("tz_web.menu_screen")
+def select_mode(modo: str):
+    """Entrada única y explícita para MODO_1/MODO_2/MODO_3.
+
+    Elegir un modo significa iniciar deliberadamente otro análisis: se
+    descarta el caso anterior (incluido su temporal) y se crea una ``Session``
+    nueva, cuyos defaults impiden que filtros, identidad, resultados o
+    registros manuales contaminen el flujo elegido.
+    """
+    if modo not in (state.MODO_1, state.MODO_2, state.MODO_3):
+        abort(404)
+
+    previous_id = flask_session.get("case_id")
+    if previous_id:
+        state.discard_session(previous_id)
+
+    case = state.create_session()
+    case.modo = modo
     state.touch(case)
+    flask_session["case_id"] = case.id
+
+    if modo == state.MODO_3:
+        return redirect(url_for("tz_web.modo3_tipo_screen"))
     return redirect(url_for("tz_web.index"))
-
-
-@bp.route("/modo/3", methods=["POST"])
-def mode_3():
-    """Entrada real del Modo 3 (mapeo manual de antenas/ubicaciones): inicia
-    o restablece la sesión de análisis y la marca como Modo 3. A diferencia
-    de los Modos 1/2, no entra al flujo de archivo/hoja/mapeo de bitácoras:
-    va directo a la selección del tipo de registro (sección 1 del
-    microbloque Modo 3)."""
-    case = _current_session()
-    case.modo = state.MODO_3
-    state.touch(case)
-    return redirect(url_for("tz_web.modo3_tipo_screen"))
 
 
 @bp.route("/analizador", methods=["GET"])
 def index():
-    case = _current_session()
+    case = _current_session(create=False)
+    if case is None:
+        flash("Seleccione primero un modo de análisis.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
+    if case.modo == state.MODO_3:
+        return redirect(url_for("tz_web.modo3_tipo_screen"))
     return render_template("index.html", case=case)
 
 
 @bp.route("/upload", methods=["POST"])
+@_mutation_guard("tz_web.index")
 def upload():
-    case = _current_session()
+    case = _current_session(create=False)
+    if case is None or case.modo not in (state.MODO_1, state.MODO_2):
+        flash("Seleccione primero el Modo 1 o el Modo 2 desde el menú principal.", "error")
+        return redirect(url_for("tz_web.menu_screen"))
 
     upload_file = request.files.get("archivo")
     if upload_file is None or not upload_file.filename:
@@ -246,18 +294,25 @@ def upload():
     upload_dir = os.path.join(state.UPLOAD_ROOT, case.id)
     # Una nueva subida reemplaza cualquier archivo previo de esta sesión.
     state.clear_uploaded_file(case)
+    _reset_file_state(case)
     os.makedirs(upload_dir, exist_ok=True)
+    case.upload_dir = upload_dir
     dest_path = os.path.join(upload_dir, safe_name)
+
+    def _reject_staged_upload() -> None:
+        state.clear_uploaded_file(case)
+        case.upload_dir = None
 
     try:
         upload_file.save(dest_path)
     except OSError as exc:
+        _reject_staged_upload()
         state.log_technical_error("upload.save", exc)
         flash("No se pudo guardar el archivo subido.", "error")
         return redirect(url_for("tz_web.index"))
 
     if os.path.getsize(dest_path) > state.MAX_UPLOAD_BYTES:
-        os.remove(dest_path)
+        _reject_staged_upload()
         flash(
             f"El archivo supera el límite permitido de "
             f"{state.MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
@@ -268,21 +323,32 @@ def upload():
     try:
         hojas = _list_sheets(dest_path)
     except Exception as exc:  # noqa: BLE001 - error de lectura de un archivo ajeno, se traduce
+        _reject_staged_upload()
         state.log_technical_error("upload.list_sheets", exc)
-        os.remove(dest_path)
         flash("El archivo no pudo leerse. Verifique que sea un Excel válido y no esté dañado.", "error")
         return redirect(url_for("tz_web.index"))
 
     if not hojas:
-        os.remove(dest_path)
+        _reject_staged_upload()
         flash("El archivo no tiene hojas visibles para analizar.", "error")
         return redirect(url_for("tz_web.index"))
 
     # Nuevo archivo reinicia cualquier estado de mapeo/configuración previo.
-    _reset_file_state(case)
+    try:
+        upload_sha256 = sha256_file(dest_path)
+    except OSError as exc:
+        try:
+            _reject_staged_upload()
+        except OSError:
+            case.upload_dir = None
+        state.log_technical_error("upload.sha256", exc)
+        flash("No se pudo registrar la integridad del archivo subido.", "error")
+        return redirect(url_for("tz_web.index"))
+
     case.temp_path = dest_path
     case.original_filename = upload_file.filename
     case.upload_dir = upload_dir
+    case.upload_sha256 = upload_sha256
     case.available_sheets = hojas
     state.touch(case)
 
@@ -290,6 +356,7 @@ def upload():
 
 
 @bp.route("/file/change", methods=["POST"])
+@_mutation_guard("tz_web.index")
 def change_file():
     """Acción "Cambiar archivo": limpia archivo/hoja/mapeo de la sesión
     actual (sin usar discard_session, que reiniciaría toda la sesión) y
@@ -303,6 +370,7 @@ def change_file():
 
 
 @bp.route("/sheet", methods=["POST"])
+@_mutation_guard("tz_web.index")
 def select_sheet():
     case = _current_session(create=False)
     if case is None or not case.temp_path:
@@ -331,6 +399,7 @@ def select_sheet():
 
 
 @bp.route("/sheet/change", methods=["POST"])
+@_mutation_guard("tz_web.index")
 def change_sheet():
     """Acción "Cambiar hoja": conserva el archivo cargado, descarta la hoja
     elegida (y cualquier mapeo dependiente de ella) y regresa a la
@@ -509,6 +578,7 @@ def mapping_screen():
 
 
 @bp.route("/mapping", methods=["POST"])
+@_mutation_guard("tz_web.mapping_screen")
 def mapping_submit():
     case = _current_session(create=False)
     if case is None or not case.columns:
@@ -569,6 +639,7 @@ def _serialize_capabilities(report: Any) -> Dict[str, Any]:
 
 
 @bp.route("/mapping/confirm", methods=["POST"])
+@_mutation_guard("tz_web.mapping_screen")
 def mapping_confirm():
     case = _current_session(create=False)
     if case is None or not case.mapping_draft:
@@ -586,6 +657,7 @@ def mapping_confirm():
 
 
 @bp.route("/mapping/edit", methods=["POST"])
+@_mutation_guard("tz_web.mapping_screen")
 def mapping_edit():
     """"Volver a editar" desde la Revisión del mapeo: conserva íntegramente
     ``mapping_draft`` (Usar columna/Omitir, columna elegida, unidad de
@@ -714,6 +786,7 @@ def configure_filtro_tiempo_screen():
 
 
 @bp.route("/configure/filtro-tiempo", methods=["POST"])
+@_mutation_guard("tz_web.configure_filtro_tiempo_screen")
 def configure_filtro_tiempo_submit():
     case = _current_session(create=False)
     if case is None or not case.mapping:
@@ -769,6 +842,7 @@ def configure_screen():
 
 
 @bp.route("/configure", methods=["POST"])
+@_mutation_guard("tz_web.configure_screen")
 def configure_identity_submit():
     """Guarda (o vacía, si se omite) la identificación de la bitácora de la
     subpantalla 3A y avanza a la siguiente subpantalla de Configuración."""
@@ -793,6 +867,7 @@ def configure_identity_submit():
 
 
 @bp.route("/configure/back-to-mapping", methods=["POST"])
+@_mutation_guard("tz_web.mapping_screen")
 def configure_back_to_mapping():
     """"Volver al mapeo" desde la subpantalla 3A: regresa a la Revisión del
     mapeo (repoblando ``mapping_draft`` a partir del mapeo ya confirmado)
@@ -820,6 +895,7 @@ def configure_options_screen():
 
 
 @bp.route("/configure/opciones", methods=["POST"])
+@_mutation_guard("tz_web.configure_options_screen")
 def configure_options_submit():
     """Guarda Top de antenas/contactos de la subpantalla 3B y navega según
     el botón pulsado ('anterior' -> 3A, 'siguiente' -> 3C)."""
@@ -860,6 +936,7 @@ def configure_outputs_screen():
 
 
 @bp.route("/configure/productos", methods=["POST"])
+@_mutation_guard("tz_web.configure_outputs_screen")
 def configure_outputs_submit():
     """Guarda la decisión de KML opcional de la subpantalla 3C.
 
@@ -957,6 +1034,7 @@ def configure_color_screen():
 
 
 @bp.route("/configure/color", methods=["POST"])
+@_mutation_guard("tz_web.configure_color_screen")
 def configure_color_submit():
     """Guarda el color elegido en la subpantalla 3D y navega según el botón
     pulsado ('anterior' -> 3C, 'siguiente' -> 3E)."""
@@ -1058,6 +1136,7 @@ def configure_final_preview_name():
 
 
 @bp.route("/configure/final", methods=["POST"])
+@_mutation_guard("tz_web.configure_final_screen")
 def configure_final_submit():
     """Guarda tipo de bitácora y nombre de salida de la subpantalla 3E y
     navega según el botón pulsado ('anterior' -> 3D, 'siguiente' -> Resumen).
@@ -1139,6 +1218,7 @@ def configure_resumen_screen():
 
 
 @bp.route("/configure/resumen", methods=["POST"])
+@_mutation_guard("tz_web.configure_resumen_screen")
 def configure_resumen_submit():
     """"Anterior" regresa a Preparar análisis sin tocar nada; "Generar
     análisis" valida la carpeta de salida segura e inicia el análisis (Paso
@@ -1244,6 +1324,7 @@ def _parse_filtro_tiempo() -> Tuple[Optional[Dict[str, Optional[str]]], Optional
 
 
 @bp.route("/configure/legacy", methods=["POST"])
+@_mutation_guard("tz_web.configure_legacy_screen")
 def configure_legacy_submit():
     case = _current_session(create=False)
     if case is None or not case.mapping:
@@ -1348,6 +1429,7 @@ def modo3_tipo_screen():
 
 
 @bp.route("/modo3/tipo", methods=["POST"])
+@_mutation_guard("tz_web.modo3_tipo_screen")
 def modo3_tipo_submit():
     """Guarda el tipo de registro elegido (sección 2). Si ya hay registros
     cargados de un tipo distinto al elegido, bloquea el cambio (sección 8):
@@ -1441,6 +1523,7 @@ def modo3_registros_screen():
 
 
 @bp.route("/modo3/registros", methods=["POST"])
+@_mutation_guard("tz_web.modo3_registros_screen")
 def modo3_registro_guardar():
     """Alta o edición de un registro (sección 4/5/7): si el formulario trae
     ``registro_id`` de un registro existente, se reemplaza en el mismo lugar
@@ -1484,6 +1567,7 @@ def modo3_registro_guardar():
 
 
 @bp.route("/modo3/registros/<registro_id>/eliminar", methods=["POST"])
+@_mutation_guard("tz_web.modo3_registros_screen")
 def modo3_registro_eliminar(registro_id: str):
     case = _current_session(create=False)
     if not _modo3_guard(case):
@@ -1519,6 +1603,7 @@ def modo3_productos_screen():
 
 
 @bp.route("/modo3/productos", methods=["POST"])
+@_mutation_guard("tz_web.modo3_productos_screen")
 def modo3_productos_submit():
     """Guarda el producto opcional (KML suelto). Reutiliza case.kml_opcional/
     case.solo_kmz — los mismos campos que ya usa Configuración de Modo 1/2
@@ -1576,6 +1661,7 @@ def modo3_color_screen():
 
 
 @bp.route("/modo3/color", methods=["POST"])
+@_mutation_guard("tz_web.modo3_color_screen")
 def modo3_color_submit():
     case = _current_session(create=False)
     if not _modo3_guard(case):
@@ -1627,6 +1713,7 @@ def modo3_preparar_screen():
 
 
 @bp.route("/modo3/preparar", methods=["POST"])
+@_mutation_guard("tz_web.modo3_preparar_screen")
 def modo3_preparar_submit():
     case = _current_session(create=False)
     if not _modo3_guard(case):
@@ -1674,13 +1761,58 @@ def modo3_resumen_screen():
     )
 
 
+_THREAD_START_ERROR_MESSAGE = (
+    "No se pudo iniciar el procesamiento en segundo plano. Intente generar "
+    "el análisis nuevamente."
+)
+
+
+def _log_technical_error_best_effort(context: str, exc: BaseException) -> None:
+    """El log técnico nunca puede impedir una transición terminal."""
+    try:
+        state.log_technical_error(context, exc)
+    except Exception:  # noqa: BLE001 - logging es deliberadamente best-effort
+        pass
+
+
+def _mark_run_failed(
+    case: state.Session,
+    exc: BaseException,
+    context: str,
+    *,
+    user_message: Optional[str] = None,
+) -> None:
+    """Fija y libera el fallo antes de intentar escribir el log técnico."""
+    try:
+        translated = user_message or state.translate_error(exc)
+    except Exception:  # noqa: BLE001 - ni la traducción puede dejar RUNNING
+        translated = user_message or "Ocurrió un error inesperado durante el análisis."
+    try:
+        error_code = state.error_code_for(exc)
+    except Exception:  # noqa: BLE001 - el código es auxiliar, FAILED es obligatorio
+        error_code = None
+
+    import time as _time
+
+    # Orden contractual: terminal completo -> liberar reserva -> touch -> log.
+    with state.terminal_run(case.id):
+        case.error_message = translated
+        case.error_code = error_code
+        case.status = state.STATUS_FAILED
+        case.finished_at = _time.time()
+    state.touch(case)
+    _log_technical_error_best_effort(context, exc)
+
+
 def _start_task_modo3(case: state.Session) -> bool:
     """Arranca el análisis de Modo 3 en segundo plano. Mismo mecanismo de
     exclusión y de progreso que ``_start_task`` (sección 10): una sola
     sesión activa a la vez a nivel web (``state.try_start_run``), y el mismo
     ``case.status``/``stage``/``percent``/``/status`` — no se inventa un
     segundo sistema de progreso."""
-    if case.status == state.STATUS_RUNNING:
+    if case.task_started or case.status in (
+        state.STATUS_SUCCESS, state.STATUS_PARTIAL, state.STATUS_FAILED
+    ):
         return True
     if not state.try_start_run(case.id):
         return False
@@ -1704,37 +1836,60 @@ def _start_task_modo3(case: state.Session) -> bool:
         case.percent = state.STAGE_PERCENT.get(update.stage, case.percent)
         state.touch(case)
 
-    request_obj = Modo3Request(
-        tipo=case.modo3_tipo,
-        registros=[dict(r) for r in case.modo3_registros],
-        carpeta_salida=case.carpeta_salida,
-        color_hex=case.color_hex,
-        kml_opcional=case.kml_opcional,
-        output_base_name=case.output_base_name,
-        on_progress=_on_progress,
-    )
+    try:
+        request_obj = Modo3Request(
+            tipo=case.modo3_tipo,
+            registros=copy.deepcopy(case.modo3_registros),
+            carpeta_salida=case.carpeta_salida,
+            color_hex=case.color_hex,
+            kml_opcional=case.kml_opcional,
+            output_base_name=case.output_base_name,
+            on_progress=_on_progress,
+        )
 
-    def _worker() -> None:
-        import time as _time
-        try:
-            result = process_case_modo3(request_obj)
-            case.result = result
-            case.status = state.STATUS_SUCCESS
-        except Exception as exc:  # noqa: BLE001 - frontera del worker: se traduce, nunca se propaga
-            state.log_technical_error("process_case_modo3", exc)
-            case.error_message = state.translate_error(exc)
-            case.error_code = state.error_code_for(exc)
-            case.status = state.STATUS_FAILED
-        finally:
-            case.finished_at = _time.time()
-            state.finish_run(case.id)
+        def _worker() -> None:
+            import time as _time
+            try:
+                result = process_case_modo3(request_obj)
+            except Exception as exc:  # noqa: BLE001 - frontera terminal del worker
+                _mark_run_failed(case, exc, "process_case_modo3")
+                return
+
+            result_status = getattr(result, "status", None)
+            if result_status not in (RESULT_SUCCESS, RESULT_PARTIAL):
+                _mark_run_failed(
+                    case,
+                    OutputValidationError(
+                        "El procesamiento no produjo un estado final publicable."
+                    ),
+                    "process_case_modo3.result_status",
+                )
+                return
+            with state.terminal_run(case.id):
+                case.result = result
+                case.status = (
+                    state.STATUS_PARTIAL
+                    if result_status == RESULT_PARTIAL
+                    else state.STATUS_SUCCESS
+                )
+                case.finished_at = _time.time()
             state.touch(case)
 
-    threading.Thread(target=_worker, daemon=True).start()
+        thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
+    except Exception as exc:  # noqa: BLE001 - rollback de reserva/preparación/start
+        case.task_started = False
+        _mark_run_failed(
+            case,
+            exc,
+            "process_case_modo3.thread_start",
+            user_message=_THREAD_START_ERROR_MESSAGE,
+        )
     return True
 
 
 @bp.route("/modo3/resumen", methods=["POST"])
+@_mutation_guard("tz_web.modo3_resumen_screen")
 def modo3_resumen_submit():
     """"Anterior" regresa a Preparar salida; "Generar análisis" valida la
     carpeta de salida (misma validación ya existente, ``state.
@@ -1771,6 +1926,7 @@ def modo3_resumen_submit():
 
 
 @bp.route("/modo3/results/back", methods=["POST"])
+@_mutation_guard("tz_web.results_screen")
 def modo3_results_back():
     """"Volver a preparar salida" desde un resultado FAILED de Modo 3
     (sección 12): los registros manuales viven en ``case.modo3_registros`` y
@@ -1781,6 +1937,10 @@ def modo3_results_back():
     if not _modo3_guard(case):
         flash("Seleccione primero el Modo 3 desde el menú principal.", "error")
         return redirect(url_for("tz_web.menu_screen"))
+
+    if case.status != state.STATUS_FAILED:
+        flash("Solo una ejecuci\u00f3n fallida puede volver a preparar la salida.", "error")
+        return redirect(url_for("tz_web.results_screen"))
 
     _reset_terminal_run_state(case)
     state.touch(case)
@@ -1795,7 +1955,9 @@ def modo3_results_back():
 def _start_task(case: state.Session) -> bool:
     """Impide doble envío: una sola sesión activa a la vez a nivel web,
     además del threading.Lock propio de process_case()."""
-    if case.status == state.STATUS_RUNNING:
+    if case.task_started or case.status in (
+        state.STATUS_SUCCESS, state.STATUS_PARTIAL, state.STATUS_FAILED
+    ):
         return True  # ya en curso para esta sesión: no reintentar, solo continuar a /processing
     if not state.try_start_run(case.id):
         return False
@@ -1819,53 +1981,95 @@ def _start_task(case: state.Session) -> bool:
         case.percent = state.STAGE_PERCENT.get(update.stage, case.percent)
         state.touch(case)
 
-    request_obj = CaseRequest(
-        ruta_archivo=case.temp_path,
-        carpeta_salida=case.carpeta_salida,
-        mapeo=dict(case.mapping),
-        hoja=case.sheet,
-        filtro_tiempo=case.filtro_tiempo,
-        tipo_bitacora=case.tipo_bitacora,
-        identity_overrides=case.identity_overrides or None,
-        top_antenas=case.top_antenas,
-        top_contactos=case.top_contactos,
-        color_hex=case.color_hex,
-        solo_kmz=case.solo_kmz,
-        output_base_name=case.output_base_name,
-        date_order_decision=case.date_order_decision,
-        duration_unit_decision=case.duration_unit_decision,
-        qc_bloqueante_decision=case.qc_bloqueante_decision,
-        on_progress=_on_progress,
-    )
+    try:
+        if not case.temp_path or not case.upload_dir or not case.upload_sha256:
+            raise InputIntegrityError(
+                "No existe una entrada aceptada con integridad registrada para esta ejecuci\u00f3n."
+            )
+        input_snapshot = create_input_snapshot(
+            case.temp_path,
+            os.path.join(case.upload_dir, ".execution-snapshots"),
+            expected_sha256=case.upload_sha256,
+            original_name=case.original_filename,
+        )
+        case.input_snapshot_path = input_snapshot.path
+        case.input_snapshot_sha256 = input_snapshot.sha256
 
-    def _worker() -> None:
-        import time as _time
-        try:
-            result = process_case(request_obj)
-            case.result = result
-            case.status = state.STATUS_SUCCESS
-        except Exception as exc:  # noqa: BLE001 - frontera del worker: se traduce, nunca se propaga
-            state.log_technical_error("process_case", exc)
-            case.error_message = state.translate_error(exc)
-            case.error_code = state.error_code_for(exc)
-            case.status = state.STATUS_FAILED
-        finally:
-            case.finished_at = _time.time()
-            state.finish_run(case.id)
+        request_obj = CaseRequest(
+            ruta_archivo=input_snapshot.path,
+            carpeta_salida=case.carpeta_salida,
+            mapeo=copy.deepcopy(case.mapping),
+            hoja=case.sheet,
+            input_sha256=input_snapshot.sha256,
+            input_original_name=input_snapshot.original_name,
+            mode=case.modo,
+            filtro_tiempo=copy.deepcopy(case.filtro_tiempo),
+            tipo_bitacora=case.tipo_bitacora,
+            identity_overrides=copy.deepcopy(case.identity_overrides) or None,
+            top_antenas=case.top_antenas,
+            top_contactos=case.top_contactos,
+            color_hex=case.color_hex,
+            solo_kmz=case.solo_kmz,
+            output_base_name=case.output_base_name,
+            date_order_decision=case.date_order_decision,
+            duration_unit_decision=case.duration_unit_decision,
+            qc_bloqueante_decision=case.qc_bloqueante_decision,
+            on_progress=_on_progress,
+        )
+
+        def _worker() -> None:
+            import time as _time
+            try:
+                result = process_case(request_obj)
+            except Exception as exc:  # noqa: BLE001 - frontera terminal del worker
+                _mark_run_failed(case, exc, "process_case")
+                return
+
+            result_status = getattr(result, "status", None)
+            if result_status not in (RESULT_SUCCESS, RESULT_PARTIAL):
+                _mark_run_failed(
+                    case,
+                    OutputValidationError(
+                        "El procesamiento no produjo un estado final publicable."
+                    ),
+                    "process_case.result_status",
+                )
+                return
+            with state.terminal_run(case.id):
+                case.result = result
+                case.status = (
+                    state.STATUS_PARTIAL
+                    if result_status == RESULT_PARTIAL
+                    else state.STATUS_SUCCESS
+                )
+                case.finished_at = _time.time()
             state.touch(case)
 
-    threading.Thread(target=_worker, daemon=True).start()
+        thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
+    except Exception as exc:  # noqa: BLE001 - rollback de reserva/preparación/start
+        case.task_started = False
+        _mark_run_failed(
+            case,
+            exc,
+            "process_case.thread_start",
+            user_message=(
+                None if isinstance(exc, InputIntegrityError) else _THREAD_START_ERROR_MESSAGE
+            ),
+        )
     return True
 
 
 @bp.route("/processing", methods=["GET"])
 def processing_screen():
     case = _current_session(create=False)
+    if case is not None and case.status in (
+        state.STATUS_SUCCESS, state.STATUS_PARTIAL, state.STATUS_FAILED
+    ):
+        return redirect(url_for("tz_web.results_screen"))
     if case is None or not case.task_started:
         flash("Primero configure y confirme el análisis.", "error")
         return redirect(url_for("tz_web.configure_screen"))
-    if case.status in (state.STATUS_SUCCESS, state.STATUS_FAILED):
-        return redirect(url_for("tz_web.results_screen"))
     return render_template("processing.html", case=case)
 
 
@@ -1892,7 +2096,9 @@ def status_json():
 @bp.route("/results", methods=["GET"])
 def results_screen():
     case = _current_session(create=False)
-    if case is None or case.status not in (state.STATUS_SUCCESS, state.STATUS_FAILED):
+    if case is None or case.status not in (
+        state.STATUS_SUCCESS, state.STATUS_PARTIAL, state.STATUS_FAILED
+    ):
         flash("Aún no hay resultados disponibles.", "error")
         return redirect(url_for("tz_web.index"))
     return render_template(
@@ -1909,7 +2115,7 @@ def results_screen():
 
 
 def _reset_terminal_run_state(case: state.Session) -> None:
-    """Limpia el estado terminal de una corrida FAILED (``error_message``/
+    """Limpia el estado terminal de una corrida FAILED/PARTIAL (``error_message``/
     ``error_code``/``result``/``finished_at``/progreso), común a ambas
     acciones de recuperación desde Resultados (``results_back_to_mapping``/
     ``results_back_to_filtro_tiempo``) — ninguna toca archivo, hoja, mapeo ni
@@ -1927,7 +2133,28 @@ def _reset_terminal_run_state(case: state.Session) -> None:
     case.finished_at = None
 
 
+@bp.route("/results/back-to-products", methods=["POST"])
+@_mutation_guard("tz_web.results_screen")
+def results_back_to_products():
+    """Desde PARTIAL vuelve a la seleccion del producto opcional.
+
+    La entrada/snapshot y toda la configuracion permanecen intactos; solo se
+    habilita una nueva ejecucion deliberada.
+    """
+    case = _current_session(create=False)
+    if case is None or case.status != state.STATUS_PARTIAL:
+        flash("No hay una ejecuci\u00f3n parcial para reconfigurar.", "error")
+        return redirect(url_for("tz_web.results_screen"))
+
+    _reset_terminal_run_state(case)
+    state.touch(case)
+    if case.modo == state.MODO_3:
+        return redirect(url_for("tz_web.modo3_productos_screen"))
+    return redirect(url_for("tz_web.configure_outputs_screen"))
+
+
 @bp.route("/results/back-to-mapping", methods=["POST"])
+@_mutation_guard("tz_web.results_screen")
 def results_back_to_mapping():
     """"Volver a revisar mapeo" desde un resultado FAILED: repuebla
     ``mapping_draft`` a partir del mapeo ya confirmado (mismo patrón que
@@ -1939,6 +2166,9 @@ def results_back_to_mapping():
     if case is None or not case.mapping:
         flash("Primero confirme el mapeo de columnas.", "error")
         return redirect(url_for("tz_web.mapping_screen"))
+    if case.status != state.STATUS_FAILED:
+        flash("Solo una ejecuci\u00f3n fallida puede volver al mapeo.", "error")
+        return redirect(url_for("tz_web.results_screen"))
 
     case.mapping_draft = case.mapping
     case.mapping_stage = "review"
@@ -1948,6 +2178,7 @@ def results_back_to_mapping():
 
 
 @bp.route("/results/back-to-filtro-tiempo", methods=["POST"])
+@_mutation_guard("tz_web.results_screen")
 def results_back_to_filtro_tiempo():
     """"Volver a revisar filtro temporal" desde un resultado FAILED por
     filtro temporal sin registros (sección 9 del microbloque Modo 2 parte
@@ -1959,6 +2190,12 @@ def results_back_to_filtro_tiempo():
     if case is None or not case.mapping or case.modo != state.MODO_2:
         flash("Primero confirme el mapeo de columnas.", "error")
         return redirect(url_for("tz_web.mapping_screen"))
+    if (
+        case.status != state.STATUS_FAILED
+        or case.error_code != state.ERROR_CODE_FILTRO_SIN_REGISTROS
+    ):
+        flash("Este resultado no corresponde a un filtro temporal sin registros.", "error")
+        return redirect(url_for("tz_web.results_screen"))
 
     _reset_terminal_run_state(case)
     state.touch(case)
@@ -2009,6 +2246,7 @@ def open_product(kind: str):
 
 
 @bp.route("/new", methods=["POST"])
+@_mutation_guard("tz_web.menu_screen")
 def new_case():
     session_id = flask_session.get("case_id")
     if session_id:

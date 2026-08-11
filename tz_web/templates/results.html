@@ -3,8 +3,12 @@
 {% block title %}TZ Analyzer — Resultados{% endblock %}
 {% block content %}
 
-{% if case.status == 'success' %}
+{% if case.status in ['success', 'partial'] %}
+  {% if case.status == 'partial' %}
+  <div class="tz-banner warning">Análisis finalizado parcialmente. Los productos disponibles se publicaron; revise los faltantes indicados.</div>
+  {% else %}
   <div class="tz-banner success">Análisis finalizado correctamente.</div>
+  {% endif %}
 
   {% set result = case.result %}
   <div class="tz-card">
@@ -54,7 +58,7 @@
 
   {% if result.errors %}
   <div class="tz-card">
-    <h2>Errores parciales</h2>
+    <h2>Incidencias registradas</h2>
     <div class="tz-banner error">
       <ul style="margin:0;padding-left:18px">
         {% for e in result.errors %}<li>{{ e }}</li>{% endfor %}
@@ -115,6 +119,16 @@
     </div>
   </div>
 
+  {% if case.status == 'partial' %}
+  <div class="tz-card">
+    <div class="tz-actions">
+      <form action="{{ url_for('tz_web.results_back_to_products') }}" method="post">
+        <button type="submit" class="tz-btn tz-btn-secondary">Volver a configurar productos</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
 {% else %}
   <div class="tz-banner error">
     El análisis no pudo completarse: {{ case.error_message }}
@@ -143,7 +157,7 @@
   </div>
 {% endif %}
 
-{% if case.status == 'success' %}
+{% if case.status in ['success', 'partial'] %}
 <div class="tz-card">
   <form action="{{ url_for('tz_web.new_case') }}" method="post">
     <button type="submit" class="tz-btn tz-btn-primary">Iniciar nuevo análisis</button>

@@ -1,0 +1,9 @@
+# Entorno de pruebas canónico para CPython 3.12.8 x64 en Windows.
+# Las dependencias runtime se mantienen separadas y con versiones exactas.
+-r requirements.txt
+
+iniconfig==2.3.0
+packaging==26.2
+pluggy==1.6.0
+Pygments==2.20.0
+pytest==9.1.1

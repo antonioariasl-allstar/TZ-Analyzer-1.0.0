@@ -1,11 +1,11 @@
-"""
+r"""
 Prueba E2E con baseline dorado. Ejecuta el pipeline mínimo para generar
 KMZ + HTML con el dataset de ejemplo y compara contra golden normalizado.
 
 Modo de uso inicial para crear golden:
-  python -m tests.update_golden
+  .\.venv312\Scripts\python.exe -m tests.update_golden
 Luego:
-  python tests/test_e2e_regresion.py
+  .\.venv312\Scripts\python.exe -m pytest tests/integration/test_e2e_regresion.py -q
 """
 from __future__ import annotations
 import os
@@ -30,7 +30,11 @@ from script_principal_bitacoras_refactory import (
 )
 from tz_core.html.assembler import generar_informe_html
 from tz_core.kml_generator import generar_kml
-from tests.normalize_outputs import normalize_kml_from_kmz, normalize_html
+from tests.normalize_outputs import (
+    canonicalize_normalized_kml,
+    normalize_html,
+    normalize_kml_from_kmz,
+)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TESTS = os.path.join(ROOT, 'tests')
@@ -63,7 +67,10 @@ def _load_df_imei20() -> pd.DataFrame:
 
 
 if pytest:
-    @pytest.mark.skipif(not os.path.exists(GOLDEN_DIR), reason="Golden no inicializado. Ejecuta: python -m tests.update_golden")
+    @pytest.mark.skipif(
+        not os.path.exists(GOLDEN_DIR),
+        reason=r"Golden no inicializado. Ejecuta: .\.venv312\Scripts\python.exe -m tests.update_golden",
+    )
     def test_e2e_outputs_golden_match(tmp_path):
         # Arrange
         df = _load_df_imei20()
@@ -90,20 +97,49 @@ if pytest:
         actual_html = normalize_html(html_path)
 
         # Load golden
-        assert os.path.exists(GOLDEN_KML_NORM), "Falta golden KML normalizado. Ejecuta: python -m tests.update_golden"
-        assert os.path.exists(GOLDEN_HTML_NORM), "Falta golden HTML normalizado. Ejecuta: python -m tests.update_golden"
+        assert os.path.exists(GOLDEN_KML_NORM), (
+            r"Falta golden KML normalizado. Ejecuta: .\.venv312\Scripts\python.exe -m tests.update_golden"
+        )
+        assert os.path.exists(GOLDEN_HTML_NORM), (
+            r"Falta golden HTML normalizado. Ejecuta: .\.venv312\Scripts\python.exe -m tests.update_golden"
+        )
         with open(GOLDEN_KML_NORM, 'r', encoding='utf-8') as fk:
             golden_kml = fk.read().strip()
         with open(GOLDEN_HTML_NORM, 'r', encoding='utf-8') as fh:
             golden_html = fh.read().strip()
 
         # Assert
-        assert actual_kml == golden_kml, "El KML actual no coincide con el golden normalizado"
+        assert canonicalize_normalized_kml(actual_kml) == canonicalize_normalized_kml(golden_kml), (
+            "El KML actual no coincide semánticamente con el golden normalizado"
+        )
         assert actual_html == golden_html, "El HTML actual no coincide con el golden normalizado"
 else:
     def test_e2e_outputs_golden_match():
         """Versión simplificada sin pytest para compatibilidad"""
         print("TEST E2E: Requiere pytest para ejecución completa")
+
+
+def test_kml_canonicalization_accepts_equivalent_entity_serialization():
+    literal_quotes = (
+        '<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark>'
+        '<description>&lt;div style="line-height:1.10"&gt;Texto&lt;/div&gt;</description>'
+        '<Point><coordinates>-89.200000,13.700000,0</coordinates></Point>'
+        '</Placemark></kml>'
+    )
+    escaped_quotes = literal_quotes.replace('style="line-height:1.10"', 'style=&quot;line-height:1.10&quot;')
+
+    assert canonicalize_normalized_kml(literal_quotes) == canonicalize_normalized_kml(escaped_quotes)
+
+
+def test_kml_canonicalization_rejects_semantic_change():
+    baseline = (
+        '<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark>'
+        '<Point><coordinates>-89.200000,13.700000,0</coordinates></Point>'
+        '</Placemark></kml>'
+    )
+    changed_coordinates = baseline.replace("-89.200000", "-88.200000")
+
+    assert canonicalize_normalized_kml(baseline) != canonicalize_normalized_kml(changed_coordinates)
 
 
 def test_kmz_estructura_basica_sintetica():

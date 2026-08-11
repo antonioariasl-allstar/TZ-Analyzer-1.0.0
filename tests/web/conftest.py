@@ -55,6 +55,13 @@ def client(app):
 
 
 def upload_file_from_path(client, path: str, filename: str):
+    # La selección de modo es la única entrada que crea un caso. Los tests
+    # que ya eligieron Modo 2 conservan ese modo; solo se inicia Modo 1 cuando
+    # el cliente aún no tiene una sesión válida.
+    with client.session_transaction() as browser_session:
+        case = tz_web_state.get_session(browser_session.get("case_id"))
+    if case is None:
+        client.post("/modo/1")
     with open(path, "rb") as fh:
         payload = fh.read()
     data = {"archivo": (io.BytesIO(payload), filename)}
@@ -154,7 +161,7 @@ def wait_for_terminal_status(client, timeout: float = 30.0):
     while time.time() < deadline:
         resp = client.get("/status")
         last = resp.get_json()
-        if last["status"] in ("success", "failed"):
+        if last["status"] in ("success", "partial", "failed"):
             return last
         time.sleep(0.2)
     raise AssertionError(f"El análisis no terminó a tiempo; último estado: {last}")

@@ -1,6 +1,7 @@
 import os
 import re
 import zipfile
+import xml.etree.ElementTree as ET
 
 def _read_kml_from_kmz(kmz_path: str) -> str:
     with zipfile.ZipFile(kmz_path, 'r') as z:
@@ -14,6 +15,19 @@ _ISO_DATE_RE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})([ T]\d{2}:\d{2}:\d{2})?\b")
 _LAT_LON_FLOAT_RE = re.compile(r"(-?\d{1,3}\.\d{5,})")  # redondear coords largas
 _HTML_META_TIME_RE = re.compile(r"(Generado el|Fecha de generación|Generated on)[^\n<]*", re.IGNORECASE)
 _HTML_TIMESTAMP_RE = re.compile(r"\b\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}\b")  # formato dd/mm/yyyy HH:MM:SS
+_DATE_PLACEHOLDER = "__TZ_ANALYZER_DATE__"
+
+
+def canonicalize_normalized_kml(kml: str) -> str:
+    """Canonicaliza KML normalizado para compararlo por semántica XML.
+
+    El golden histórico contiene ``<DATE>`` como marcador textual. Antes de
+    parsearlo se convierte a texto plano para que el XML vuelva a ser válido.
+    C14N 2.0 elimina diferencias léxicas equivalentes, por ejemplo ``&quot;``
+    frente a una comilla literal dentro del texto de ``description``.
+    """
+    parseable_kml = kml.replace("<DATE>", _DATE_PLACEHOLDER)
+    return ET.canonicalize(xml_data=parseable_kml)
 
 
 def normalize_kml_from_kmz(kmz_path: str) -> str:

@@ -121,10 +121,16 @@ function tzGuardStartButton(button) {
   return true;
 }
 
+var TZ_POLL_MAX_CONSECUTIVE_FAILURES = 4;
+var TZ_POLL_STATUS_ERROR_MESSAGE =
+  "No se pudo consultar el estado del análisis. Verifique que TZ Analyzer continúe abierto.";
+
 function tzStartPolling(statusUrl, resultsUrl) {
   var fill = document.getElementById("tz-progress-fill");
   var label = document.getElementById("tz-progress-label");
   var stageItems = document.querySelectorAll("#tz-stage-list li");
+  var consecutiveFailures = 0;
+  var pollingStopped = false;
   var stageOrder = Array.prototype.map.call(stageItems, function (li) {
     return li.getAttribute("data-stage");
   });
@@ -144,20 +150,45 @@ function tzStartPolling(statusUrl, resultsUrl) {
     });
   }
 
+  function scheduleNextPoll(delay) {
+    if (!pollingStopped) {
+      window.setTimeout(poll, delay);
+    }
+  }
+
+  function handlePollingFailure() {
+    consecutiveFailures += 1;
+    if (consecutiveFailures >= TZ_POLL_MAX_CONSECUTIVE_FAILURES) {
+      pollingStopped = true;
+      if (label) {
+        label.textContent = TZ_POLL_STATUS_ERROR_MESSAGE;
+      }
+      return;
+    }
+    scheduleNextPoll(2000);
+  }
+
   function poll() {
+    if (pollingStopped) {
+      return;
+    }
     fetch(statusUrl, { credentials: "same-origin" })
-      .then(function (resp) { return resp.json(); })
+      .then(function (resp) {
+        if (!resp.ok) {
+          throw new Error("HTTP status request failed");
+        }
+        return resp.json();
+      })
       .then(function (data) {
         applyState(data);
-        if (data.status === "success" || data.status === "failed") {
+        consecutiveFailures = 0;
+        if (data.status === "success" || data.status === "partial" || data.status === "failed") {
           window.location.href = resultsUrl;
           return;
         }
-        window.setTimeout(poll, 1500);
+        scheduleNextPoll(1500);
       })
-      .catch(function () {
-        window.setTimeout(poll, 2000);
-      });
+      .catch(handlePollingFailure);
   }
 
   poll();

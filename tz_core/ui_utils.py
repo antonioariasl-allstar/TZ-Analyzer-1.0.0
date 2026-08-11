@@ -650,7 +650,7 @@ ARQUITECTURA HÍBRIDA:
 🎯 FILOSOFÍA DE DISEÑO: Especialización intencional en Excel para workflow forense real
 
 CARACTERÍSTICAS ACTUALES:
-- Especialización Excel (.xlsx/.xls) - 95% de casos de uso forenses
+- Especialización Excel (.xlsx) - 95% de casos de uso forenses
 - UI robusta (Tkinter + fallback consola) - Funciona en cualquier entorno  
 - Validación de archivos básica pero efectiva
 - Memoria de sesión (LAST_DIR) - UX optimizada
@@ -683,7 +683,11 @@ COMPORTAMIENTO TÉCNICO:
 LAST_DIR: Optional[str] = None
 
 # Filtros de archivo para Excel
-_EXCEL_FILETYPES = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+_EXCEL_FILETYPES = [("Excel files", "*.xlsx"), ("All files", "*.*")]
+
+
+def _is_supported_excel_path(path: str) -> bool:
+    return os.path.isfile(path) and os.path.splitext(path)[1].lower() == ".xlsx"
 
 
 def _console_prompt(msg: str, validator: Optional[Callable[[str], bool]] = None) -> Optional[str]:
@@ -711,7 +715,7 @@ def _get_initialdir() -> str:
 
 def seleccionar_archivo(titulo: str = "Seleccionar bitácora Excel") -> Optional[str]:
     """
-    Abre un diálogo gráfico (Tkinter) para seleccionar un archivo Excel (.xlsx/.xls).
+    Abre un diálogo gráfico (Tkinter) para seleccionar un archivo Excel (.xlsx).
     Si Tkinter no está disponible o falla, solicita la ruta por consola.
 
     Args:
@@ -727,8 +731,8 @@ def seleccionar_archivo(titulo: str = "Seleccionar bitácora Excel") -> Optional
         # Fallback headless (sin GUI)
         return _console_prompt(
             "No se pudo abrir el selector gráfico.\n"
-            "Ingrese la ruta del archivo Excel (.xlsx/.xls) o presione Enter para cancelar: ",
-            validator=lambda p: os.path.isfile(p) and os.path.splitext(p)[1].lower() in {".xlsx", ".xls"},
+            "Ingrese la ruta del archivo Excel (.xlsx) o presione Enter para cancelar: ",
+            validator=_is_supported_excel_path,
         )
 
     # GUI disponible
@@ -739,7 +743,7 @@ def seleccionar_archivo(titulo: str = "Seleccionar bitácora Excel") -> Optional
         root = Tk()
         root.withdraw()
         filename = filedialog.askopenfilename(
-            title=f"{titulo} (formatos .xlsx/.xls)",
+            title=f"{titulo} (formato .xlsx)",
             initialdir=initial,
             filetypes=_EXCEL_FILETYPES,
         )
@@ -747,6 +751,9 @@ def seleccionar_archivo(titulo: str = "Seleccionar bitácora Excel") -> Optional
 
         if not filename:
             return None  # cancelado
+        if not _is_supported_excel_path(filename):
+            print("[WARN] Formato no soportado. Use un archivo .xlsx.")
+            return None
 
         # actualizar LAST_DIR
         try:
@@ -759,8 +766,8 @@ def seleccionar_archivo(titulo: str = "Seleccionar bitácora Excel") -> Optional
         # Fallback si el diálogo truena en tiempo de ejecución
         return _console_prompt(
             "No se pudo abrir el selector gráfico.\n"
-            "Ingrese la ruta del archivo Excel (.xlsx/.xls) o presione Enter para cancelar: ",
-            validator=lambda p: os.path.isfile(p) and os.path.splitext(p)[1].lower() in {".xlsx", ".xls"},
+            "Ingrese la ruta del archivo Excel (.xlsx) o presione Enter para cancelar: ",
+            validator=_is_supported_excel_path,
         )
 
 

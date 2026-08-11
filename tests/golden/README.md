@@ -10,7 +10,7 @@ Cómo inicializar/actualizar:
 
    powershell
    ---
-   python -m tests.update_golden
+   .\.venv312\Scripts\python.exe -m tests.update_golden
 
 Esto generará:
 - kml_normalized.txt

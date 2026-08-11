@@ -152,7 +152,6 @@ from tz_core.bitacora_io import (
 )
 from tz_core.config_loader import get_config
 from tz_core.exceptions import ArchivoNoProcesableError
-from tz_core.file_utils import escribe_hashes_txt, relocate_kmz_file
 from tz_core.health_utils import log_dataset_stats, run_health_checks
 from tz_core.html.assembler import generar_informe_html
 from tz_core.ingestion_pipeline import run_ingestion_pipeline
@@ -169,12 +168,21 @@ from tz_core.schema_utils import prep_meta_unicos
 from tz_core.time_filters import FiltroTiempo, aplicar_filtros_tiempo
 from tz_core.ui_utils import (
     prompt_case_identity,
-    prompt_output_routing,
     suggest_case_name,
 )
 from tz_core.user_paths import default_output_cwd_fn
 from tz_core.utils import sanear_nombre_archivo
 from tz_core.validation_utils import validar_datos
+from tz_web.output_transaction import (
+    ArtifactSpec,
+    OutputTransaction,
+    RESULT_FAILED,
+    RESULT_PARTIAL,
+    RESULT_SUCCESS,
+    finalize_output,
+    sha256_file,
+    verify_input_snapshot,
+)
 from tz_web.scope import describir_alcance
 
 __all__ = [
@@ -315,6 +323,13 @@ class CaseRequest:
     date_order_decision: str = "1"  # "1"=DD/MM/AAAA, "2"=MM/DD/AAAA
     duration_unit_decision: str = "desconocida"  # milisegundos|segundos|minutos|desconocida
     qc_bloqueante_decision: str = "S"  # "S"=continuar pese a la advertencia QC
+    mode: str = "1"  # "1"=bitácora completa | "2"=bitácora temporal
+
+    # Proveniencia del snapshot inmutable creado antes de arrancar el worker.
+    # Se mantienen opcionales para compatibilidad con llamadores directos del
+    # servicio; en el flujo web MB3 siempre llegan informados.
+    input_sha256: Optional[str] = None
+    input_original_name: Optional[str] = None
 
     # Progreso
     on_progress: Optional[Callable[[ProgressUpdate], None]] = None
@@ -324,10 +339,9 @@ class CaseRequest:
 class CaseResult:
     """Resultado estructurado de ``process_case()``.
 
-    ``success`` es True siempre que la función retorne (no lance una
-    excepción de dominio): un producto individual faltante se refleja como
-    ``None`` en su campo de ruta + una entrada en ``warnings``/``errors``,
-    nunca como una afirmación falsa de que el archivo existe.
+    ``status`` es la fuente de verdad: ``success``/``partial``/``failed``.
+    ``success`` permanece como booleano de compatibilidad, pero solo es True
+    para SUCCESS; los consumidores nuevos deben leer ``status``.
     """
 
     success: bool
@@ -341,6 +355,16 @@ class CaseResult:
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     summary: Dict[str, Any] = field(default_factory=dict)
+    # Contrato explícito de producto. ``success`` se conserva para llamadores
+    # anteriores y solo representa SUCCESS completo.
+    status: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.status is None:
+            self.status = RESULT_SUCCESS if self.success else RESULT_FAILED
+        if self.status not in (RESULT_SUCCESS, RESULT_PARTIAL, RESULT_FAILED):
+            raise ValueError(f"Estado de CaseResult no soportado: {self.status!r}")
+        self.success = self.status == RESULT_SUCCESS
 
 
 def _nombre_con_filtro(suggestion: Any) -> str:
@@ -565,9 +589,9 @@ def process_case(request: CaseRequest) -> CaseResult:
     ``SheetNotFoundError``, ``CaseLoadError``, ``InvalidMappingError``,
     ``OutputDirectoryError``, ``ArchivoNoProcesableError``,
     ``AnalysisInProgressError``) para condiciones que impiden producir un
-    resultado; para fallos parciales de un producto individual (HTML, KMZ o
-    hashes) retorna un ``CaseResult`` con esa ruta en ``None`` y el motivo en
-    ``warnings``/``errors``.
+    resultado. HTML, KMZ y manifiesto son obligatorios: si falta cualquiera,
+    la transacción se aborta y se propaga ``OutputValidationError``. Solo un
+    KML suelto solicitado puede degradar el resultado publicado a PARTIAL.
     """
 
     if not _EXECUTION_LOCK.acquire(blocking=False):
@@ -579,6 +603,9 @@ def process_case(request: CaseRequest) -> CaseResult:
     sequence = 0
     carpeta_salida_abs: Optional[str] = None
     nombre_salida = "proceso"
+    transaction: Optional[OutputTransaction] = None
+    input_sha256 = ""
+    input_original_name = ""
 
     def _log(msg: str) -> None:
         logs.append(str(msg))
@@ -595,11 +622,20 @@ def process_case(request: CaseRequest) -> CaseResult:
             # ---- 1. validando_entrada ------------------------------------
             _emit("validando_entrada", "Verificando archivo, hoja y carpeta de salida")
 
+            if request.mode not in ("1", "2"):
+                raise ValueError(f"Modo de CaseRequest no soportado: {request.mode!r}")
+
             ruta = (request.ruta_archivo or "").strip().strip('"')
             if not ruta or not os.path.isfile(ruta):
                 raise CaseFileNotFoundError(
                     f"No se encontró el archivo de entrada: {request.ruta_archivo!r}"
                 )
+
+            input_sha256 = (request.input_sha256 or sha256_file(ruta)).lower()
+            input_original_name = os.path.basename(
+                request.input_original_name or ruta
+            )
+            verify_input_snapshot(ruta, input_sha256)
 
             if request.hoja:
                 visibles, _err = obtener_hojas_visibles(ruta)
@@ -771,30 +807,25 @@ def process_case(request: CaseRequest) -> CaseResult:
             override_tops = {"antenas": top_antenas, "contactos": top_contactos}
 
             # Nombre candidato (override explícito del llamador, o el
-            # sugerido por suggest_case_name) saneado y luego hecho único
-            # por ejecución — ver _generate_unique_case_name: el timestamp
-            # embebido por suggest_case_name tiene precisión de minuto, que
-            # no basta para un servicio con más de una corrida por minuto.
+            # sugerido por suggest_case_name). La reserva transaccional hace
+            # atómica la elección final y aplica sufijos sin sobrescribir.
             candidato_base = sanear_nombre_archivo(
                 request.output_base_name or base_auto, base_auto
             )
-            nombre_unico = _generate_unique_case_name(carpeta_salida_abs, candidato_base)
-
-            routing = prompt_output_routing(
-                base_name=base_auto,
-                input_fn=lambda _msg: nombre_unico,
-                output_fn=_log,
-                sanitize_fn=lambda s: sanear_nombre_archivo(s, base_auto),
-                select_folder=lambda: carpeta_salida_abs,
-                cwd_fn=default_output_cwd_fn,
-                ensure_dir=ensure_dir,
-                separate_kml=bool(config.get("salida", {}).get("separar_kml_kmz", False)),
+            candidato_unico = _generate_unique_case_name(carpeta_salida_abs, candidato_base)
+            transaction = OutputTransaction.reserve(carpeta_salida_abs, candidato_unico)
+            nombre_unico = transaction.name
+            nombre_salida = nombre_unico
+            carpeta_base = transaction.work_dir
+            carpeta_salida_caso = transaction.work_dir
+            separar_kml = bool(config.get("salida", {}).get("separar_kml_kmz", False))
+            carpeta_kml = (
+                ensure_dir(os.path.join(transaction.work_dir, "kml"))
+                if separar_kml
+                else transaction.work_dir
             )
-
-            nombre_salida = routing.base_name
-            carpeta_base = routing.base_folder
-            carpeta_salida_caso = routing.output_folder
-            archivo_kml = routing.kml_path
+            archivo_kml = os.path.join(carpeta_kml, f"{nombre_salida}_mapeo.kml")
+            _log(f"[QC] Carpeta destino transaccional reservada para: {nombre_salida}")
 
             write_minimal_filter_log_if_needed(
                 result=ingestion.time_filters,
@@ -819,7 +850,7 @@ def process_case(request: CaseRequest) -> CaseResult:
                     override_tops=override_tops,
                     duracion_estado=ingestion.duracion_estado,
                 )
-            except Exception as exc:  # noqa: BLE001 - degradado a producto parcial, ver docstring
+            except Exception as exc:  # noqa: BLE001 - finalize valida el KMZ obligatorio
                 _log(f"[ERROR] Generación de KML/KMZ falló: {exc}")
 
             outputs = produce_case_outputs(
@@ -837,8 +868,18 @@ def process_case(request: CaseRequest) -> CaseResult:
                 build_interactions_section=construir_seccion_interacciones,
                 build_contacts_section=construir_seccion_todos_contactos,
                 generar_html_fn=generar_informe_html,
-                relocate_kmz_fn=relocate_kmz_file,
-                write_hashes_fn=escribe_hashes_txt,
+                # El generador ya escribe el KMZ dentro del staging final; no
+                # debe "reubicarlo" sobre sí mismo (el helper heredado elimina
+                # primero el destino cuando source==target).
+                relocate_kmz_fn=lambda **_kwargs: (
+                    os.path.splitext(archivo_kml)[0] + ".kmz"
+                    if os.path.isfile(os.path.splitext(archivo_kml)[0] + ".kmz")
+                    else None
+                ),
+                # El manifiesto transaccional es la única fuente final. El
+                # reporte heredado que pueda crear el ensamblador HTML vive
+                # solo en staging y se sustituye antes de publicar.
+                write_hashes_fn=lambda _path, _pairs: None,
                 summarize_fn=lambda **_kwargs: None,
                 logger=_log,
                 output_fn=_log,
@@ -858,21 +899,6 @@ def process_case(request: CaseRequest) -> CaseResult:
             warnings_list: List[str] = []
             errors_list: List[str] = []
 
-            def _verify(reported: Optional[str], label: str) -> Optional[str]:
-                if not reported:
-                    warnings_list.append(f"No se generó el producto: {label}.")
-                    return None
-                if not os.path.isfile(reported):
-                    errors_list.append(
-                        f"El producto {label} fue reportado pero no existe físicamente: {reported}"
-                    )
-                    return None
-                return reported
-
-            html_path = _verify(outputs.informe_html, "informe HTML")
-            kmz_path = _verify(outputs.kmz_path, "KMZ")
-            hashes_path = _verify(outputs.hashes_path, "hashes")
-
             # El KML suelto es un producto opcional (ver solo_kmz): cuando no
             # se pidió, generar_kml() ya lo elimina tras comprimirlo en el
             # KMZ, así que su ausencia aquí no es un fallo — no se reporta en
@@ -886,9 +912,49 @@ def process_case(request: CaseRequest) -> CaseResult:
                 elif "[WARN]" in line:
                     warnings_list.append(line)
 
+            # Opción B del contrato: el log se cierra antes del manifiesto y
+            # se publica best-effort, pero queda explícitamente fuera del
+            # conjunto hash. No se vuelve a modificar después.
+            _log("[publicacion] Generación cerrada; validando antes de publicar")
             log_path = _write_execution_log(carpeta_salida_caso, nombre_salida, logs)
 
-            _emit("finalizado", "Análisis finalizado")
+            # Última lectura del input inmediatamente antes de cerrar el
+            # manifiesto: los bytes analizados deben seguir correspondiendo al
+            # digest aceptado y transportado en CaseRequest.
+            verify_input_snapshot(ruta, input_sha256)
+
+            kml_requested = not bool(config.get("salida", {}).get("solo_kmz", False))
+            publication = finalize_output(
+                transaction,
+                artifacts=(
+                    ArtifactSpec("html", outputs.informe_html, required=True),
+                    ArtifactSpec("kmz", outputs.kmz_path, required=True),
+                    ArtifactSpec(
+                        "kml",
+                        kml_path,
+                        required=False,
+                        requested=kml_requested,
+                    ),
+                ),
+                mode=request.mode,
+                manifest_name=f"{nombre_salida}_hashes.txt",
+                input_metadata={
+                    "original_name": input_original_name,
+                    "snapshot_sha256": input_sha256,
+                },
+                excluded_paths=(log_path,) if log_path else (),
+                pre_publish_check=lambda: verify_input_snapshot(ruta, input_sha256),
+            )
+            warnings_list.extend(publication.warnings)
+            _emit("finalizado", "Análisis finalizado y publicado")
+
+            html_path = publication.artifacts.get("html")
+            kmz_path = publication.artifacts.get("kmz")
+            kml_path = publication.artifacts.get("kml")
+            hashes_path = publication.manifest_path
+            if log_path:
+                log_relative = os.path.relpath(log_path, carpeta_salida_caso)
+                log_path = os.path.join(publication.final_dir, log_relative)
 
             contactos_cap = (
                 ingestion.capabilities_report.capacidad("contactos")
@@ -919,11 +985,13 @@ def process_case(request: CaseRequest) -> CaseResult:
                 # usó para producir resultados reales y no debe mostrarse
                 # como si lo fuera (ver results.html).
                 "contactos_disponible": contactos_disponible,
+                "result_status": publication.status,
+                "input_sha256": input_sha256,
             }
 
             return CaseResult(
-                success=True,
-                output_dir=carpeta_salida_caso,
+                success=publication.status in (RESULT_SUCCESS, RESULT_PARTIAL),
+                output_dir=publication.final_dir,
                 html_path=html_path,
                 kmz_path=kmz_path,
                 kml_path=kml_path,
@@ -933,10 +1001,11 @@ def process_case(request: CaseRequest) -> CaseResult:
                 warnings=warnings_list,
                 errors=errors_list,
                 summary=summary,
+                status=publication.status,
             )
         except Exception:
-            if carpeta_salida_abs:
-                _write_execution_log(carpeta_salida_abs, f"{nombre_salida}_fallo", logs)
+            if transaction is not None:
+                transaction.abort()
             raise
     finally:
         _EXECUTION_LOCK.release()

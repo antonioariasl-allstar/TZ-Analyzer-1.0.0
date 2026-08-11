@@ -9,6 +9,7 @@ import os
 import zipfile
 
 from tz_web import state as tz_web_state
+from tz_web.services import CaseResult
 from tests.web.conftest import (
     REAL_MAPPING_FORM,
     SHEET_NAME,
@@ -349,6 +350,30 @@ def test_L_error_de_generacion_preserva_registros_y_permite_volver(client, tmp_p
     case = current_case(client)
     assert len(case.modo3_registros) == 1
     assert case.status == tz_web_state.STATUS_PENDING
+
+
+def test_partial_permite_reconfigurar_productos_y_preserva_registros(client, tmp_path):
+    enter_modo_3(client)
+    elegir_tipo(client, "antena")
+    agregar_antena(client)
+    case = current_case(client)
+    original_records = [dict(record) for record in case.modo3_registros]
+    case.status = tz_web_state.STATUS_PARTIAL
+    case.task_started = True
+    case.result = CaseResult(
+        success=False,
+        status="partial",
+        output_dir=str(tmp_path / "publicado_parcial"),
+        warnings=["KML opcional no disponible"],
+    )
+
+    response = client.post("/results/back-to-products", follow_redirects=True)
+
+    assert response.request.path == "/modo3/productos"
+    assert case.status == tz_web_state.STATUS_PENDING
+    assert case.result is None
+    assert case.modo3_registros == original_records
+    assert case.modo3_tipo == "antena"
 
 
 # ---------------------------------------------------------------------------

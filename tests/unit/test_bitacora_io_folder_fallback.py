@@ -13,7 +13,26 @@ import sys
 from pathlib import Path
 
 import tz_core.bitacora_io as bitacora_io_module
-from tz_core.bitacora_io import seleccionar_carpeta_salida
+from tz_core.bitacora_io import seleccionar_archivo, seleccionar_carpeta_salida
+
+
+def test_seleccionar_archivo_fallback_acepta_xlsx(tmp_path, monkeypatch):
+    archivo = tmp_path / "bitacora.xlsx"
+    archivo.write_bytes(b"xlsx simulado")
+    monkeypatch.setattr(bitacora_io_module, "_sel_archivo", None)
+    monkeypatch.setattr(bitacora_io_module, "safe_input", lambda _prompt: str(archivo))
+
+    assert seleccionar_archivo() == str(archivo)
+
+
+def test_seleccionar_archivo_fallback_rechaza_xls(tmp_path, monkeypatch, capsys):
+    archivo = tmp_path / "bitacora.xls"
+    archivo.write_bytes(b"BIFF simulado")
+    monkeypatch.setattr(bitacora_io_module, "_sel_archivo", None)
+    monkeypatch.setattr(bitacora_io_module, "safe_input", lambda _prompt: str(archivo))
+
+    assert seleccionar_archivo() is None
+    assert "Formato no soportado" in capsys.readouterr().out
 
 
 def test_gui_cancel_normal_mode_preserves_cwd_behavior(tmp_path, monkeypatch, capsys):

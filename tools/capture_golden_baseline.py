@@ -60,7 +60,7 @@ def main():
             print("⚠️  No se encontraron archivos en el directorio de outputs")
     
     print("\n🎯 Siguiente paso: Normalizar outputs para golden baseline")
-    print("   Ejecuta: python -m tests.update_golden")
+    print(r"   Ejecuta: .\.venv312\Scripts\python.exe -m tests.update_golden")
     
     return True
 

@@ -73,5 +73,8 @@ if __name__ == "__main__":
     print(f"\n🚀 Ejecutando script principal...")
     print(f"="*50)
     
-    # Ejecutar script directamente
-    os.system("python script_principal_bitacoras_refactory.py")
+    # Reutilizar el mismo intérprete validado con el que se lanzó la herramienta.
+    subprocess.run(
+        [sys.executable, "script_principal_bitacoras_refactory.py"],
+        check=True,
+    )
