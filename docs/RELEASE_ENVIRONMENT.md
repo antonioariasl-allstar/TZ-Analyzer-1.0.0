@@ -38,6 +38,7 @@ pytz==2025.2
 simplekml==1.3.6
 six==1.17.0
 tzdata==2025.2
+waitress==3.0.2
 Werkzeug==3.1.8
 ```
 
@@ -45,6 +46,12 @@ Werkzeug==3.1.8
 Windows. TZ Analyzer no contiene imports ni funciones activas que requieran
 `lxml`, `pillow` o `xlsxwriter`; eran residuos del árbol histórico de
 `python-pptx` y no forman parte del entorno canónico.
+
+`waitress` se agregó en MICROBLOQUE 5 (AUD-03): es el servidor WSGI de
+producción que usa `tz_launcher.py` para servir la aplicación web —
+`Werkzeug` sigue como dependencia transitiva de Flask, pero su servidor de
+desarrollo ya no es parte de ningún camino de arranque real (ver
+`docs/LAUNCHER_LIFECYCLE.md`).
 
 ## Dependencias de pruebas
 

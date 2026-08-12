@@ -10,6 +10,7 @@ import time
 
 import pytest
 
+from tz_web import lifecycle
 from tz_web import routes
 from tz_web import state
 from tz_web.services import CaseResult, FiltroTiempoSinRegistrosError
@@ -150,6 +151,40 @@ def test_A_new_durante_running_se_rechaza_y_conserva_caso(client, tmp_path):
         state.finish_run(case.id)
 
 
+@pytest.mark.parametrize("modo3", [False, True])
+def test_resumen_con_cierre_pendiente_bloquea_y_muestra_mensaje_especifico(
+    client, tmp_path, modo3
+):
+    """Extremo a extremo (sección 1 del MB5): con lifecycle en
+    CLOSE_WHEN_IDLE/SHUTTING_DOWN, la pantalla de resumen no debe arrancar
+    un análisis nuevo, y el mensaje mostrado debe ser el de cierre pendiente
+    — no el genérico de "ya hay un análisis en curso" (MSG_ANALYSIS_IN_
+    PROGRESS), que induciría a error sobre la causa real."""
+    case = _attach_case(client, state.MODO_3 if modo3 else state.MODO_1)
+    case.carpeta_salida = str(tmp_path / "salida")
+    if modo3:
+        case.modo3_tipo = "antena"
+        case.modo3_registros = [{"id": "a", "nombre": "A"}]
+        endpoint = "/modo3/resumen"
+    else:
+        _seed_accepted_input(case, tmp_path)
+        case.mapping = {"fecha": ("col", "FECHA")}
+        endpoint = "/configure/resumen"
+
+    lifecycle.request_shutdown(reason="test_resumen_con_cierre_pendiente")
+    assert lifecycle.get_state() == lifecycle.SHUTTING_DOWN
+
+    try:
+        response = client.post(endpoint, follow_redirects=True)
+        assert response.status_code == 200
+        assert state.MSG_SHUTDOWN_PENDING.encode("utf-8") in response.data
+        assert state.MSG_ANALYSIS_IN_PROGRESS.encode("utf-8") not in response.data
+        assert case.task_started is False
+        assert state.is_any_run_active() is False
+    finally:
+        lifecycle.reset_for_tests()
+
+
 def test_B_upload_y_cambios_durante_running_no_mutan_input(client, tmp_path):
     case = _attach_case(client)
     _contaminate(case, tmp_path)
@@ -288,7 +323,7 @@ def test_G_fallo_del_logger_no_impide_estado_failed(monkeypatch, tmp_path, modo3
     monkeypatch.setattr(routes, process_name, _process_fails)
     monkeypatch.setattr(state, "log_technical_error", _logger_fails)
 
-    assert starter(case) is True
+    assert starter(case) == (True, None)
     assert case.status == state.STATUS_FAILED
     assert case.error_message
     assert case.error_code == state.ERROR_CODE_FILTRO_SIN_REGISTROS
@@ -329,7 +364,7 @@ def test_H_thread_start_fallido_hace_rollback_y_expone_resultado(
 
     monkeypatch.setattr(routes.threading, "Thread", _BrokenStartThread)
 
-    assert starter(case) is True
+    assert starter(case) == (True, None)
     assert case.status == state.STATUS_FAILED
     assert case.task_started is False
     assert case.finished_at is not None
@@ -424,7 +459,7 @@ def test_J_requests_son_snapshots_independientes_de_session(monkeypatch, tmp_pat
         return CaseResult(success=True, output_dir=request_obj.carpeta_salida, summary={})
 
     monkeypatch.setattr(routes, "process_case", _capture_case)
-    assert routes._start_task(case) is True
+    assert routes._start_task(case) == (True, None)
     case.mapping["fecha"] = ("col", "FECHA_MUTADA")
     case.filtro_tiempo["dia"] = "2030-12-31"
     case.identity_overrides["alias"] = "Mutado"
@@ -448,7 +483,7 @@ def test_J_requests_son_snapshots_independientes_de_session(monkeypatch, tmp_pat
         return CaseResult(success=True, output_dir=request_obj.carpeta_salida, summary={})
 
     monkeypatch.setattr(routes, "process_case_modo3", _capture_modo3)
-    assert routes._start_task_modo3(modo3) is True
+    assert routes._start_task_modo3(modo3) == (True, None)
     modo3.modo3_registros[0]["nombre"] = "Mutado"
     modo3.modo3_registros[0]["meta"]["etiquetas"].append("dos")
     _DeferredThread.targets.pop(0)()

@@ -29,7 +29,7 @@ import traceback
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from tz_web.services import (
     AnalysisInProgressError,
@@ -164,6 +164,18 @@ MSG_ANALYSIS_IN_PROGRESS = (
     "o modificar otro análisis."
 )
 
+MSG_SHUTDOWN_PENDING = (
+    "TZ Analyzer tiene un cierre pendiente y no puede iniciar un nuevo análisis."
+)
+
+# Motivos de rechazo de try_start_run_detailed() (sección 1 del MB5: mensaje
+# de UI distinto segun la causa, sin que el llamador tenga que adivinarla
+# comparando texto). "busy": ya hay otra sesión con un análisis activo.
+# "shutdown_pending": tz_web.lifecycle está en CLOSE_WHEN_IDLE/SHUTTING_DOWN
+# (ver set_run_start_guard más abajo) — no depende de is_any_run_active().
+RUN_START_REJECTED_BUSY = "busy"
+RUN_START_REJECTED_SHUTDOWN = "shutdown_pending"
+
 
 def translate_error(exc: BaseException) -> str:
     """Traduce una excepción a un mensaje comprensible para el usuario.
@@ -287,6 +299,47 @@ _SESSIONS_LOCK = threading.RLock()
 _RUNNING_SESSION_ID: Optional[str] = None
 _RUNNING_LOCK = threading.RLock()
 
+# Callbacks invocados (bajo _RUNNING_LOCK, ya reentrante) justo despues de
+# liberar la reserva de ejecucion activa. Usado por tz_web.lifecycle (MB5)
+# para completar un cierre CLOSE_WHEN_IDLE en cuanto el analisis en curso
+# termina, sin que ese modulo duplique este lock ni tz_web.state conozca a
+# tz_web.lifecycle (import en un solo sentido).
+_ON_RUN_RELEASED: List[Callable[[], None]] = []
+
+# Chequeo adicional evaluado, bajo el mismo _RUNNING_LOCK que reserva una
+# ejecucion, antes de conceder try_start_run(). Registrado por
+# tz_web.lifecycle (mismo sentido de import de arriba: este modulo no sabe
+# qué es "lifecycle", solo que alguien puede vetar un arranque y por qué).
+# Debe devolver None si el arranque esta permitido, o uno de los
+# RUN_START_REJECTED_* si debe rechazarse. Al evaluarse dentro del mismo
+# lock que la reserva, no hay ventana entre "¿puedo iniciar?" y "reservar":
+# cualquier transicion a CLOSE_WHEN_IDLE/SHUTTING_DOWN (tz_web.lifecycle.
+# request_shutdown) tambien adquiere este lock antes de cambiar de estado,
+# asi que las dos decisiones quedan serializadas entre si.
+_RUN_START_GUARD: Optional[Callable[[], Optional[str]]] = None
+
+
+def register_on_run_released(callback: Callable[[], None]) -> None:
+    """Registra ``callback`` para ejecutarse cada vez que se libera la
+    reserva de ejecucion activa (exito, fallo o cancelacion del arranque)."""
+    _ON_RUN_RELEASED.append(callback)
+
+
+def set_run_start_guard(guard: Optional[Callable[[], Optional[str]]]) -> None:
+    """Registra (o quita, con ``None``) el chequeo adicional de
+    ``try_start_run_detailed``. Ver el comentario junto a ``_RUN_START_GUARD``."""
+    global _RUN_START_GUARD
+    with _RUNNING_LOCK:
+        _RUN_START_GUARD = guard
+
+
+def _notify_run_released() -> None:
+    for callback in _ON_RUN_RELEASED:
+        try:
+            callback()
+        except Exception:  # noqa: BLE001 - un callback no debe tumbar al worker
+            pass
+
 
 def create_session() -> Session:
     session = Session(id=uuid.uuid4().hex)
@@ -309,17 +362,37 @@ def touch(session: Session) -> None:
 def try_start_run(session_id: str) -> bool:
     """Reserva el "turno" de ejecución para ``session_id``.
 
-    Devuelve False si ya hay otra sesión con un análisis en curso —
-    protección de doble envío / segunda tarea simultánea en la capa web,
+    Devuelve False si ya hay otra sesión con un análisis en curso, o si el
+    chequeo adicional registrado vía ``set_run_start_guard`` rechaza el
+    arranque (p. ej. cierre pendiente) — ver ``try_start_run_detailed`` para
+    distinguir ambos motivos.
+    """
+    started, _reason = try_start_run_detailed(session_id)
+    return started
+
+
+def try_start_run_detailed(session_id: str) -> Tuple[bool, Optional[str]]:
+    """Igual que ``try_start_run``, pero además informa el motivo del rechazo
+    (uno de ``RUN_START_REJECTED_*``) para que la capa web pueda mostrar un
+    mensaje preciso en vez de asumir siempre "análisis en curso".
+
+    Protección de doble envío / segunda tarea simultánea en la capa web,
     complementaria al ``threading.Lock`` propio de
-    ``tz_web.services.process_case`` (sección 9).
+    ``tz_web.services.process_case`` (sección 9), más el veto de
+    ``_RUN_START_GUARD`` — ambos chequeos y la reserva ocurren en una sola
+    adquisición de ``_RUNNING_LOCK``, así que no hay ventana entre decidir y
+    reservar.
     """
     global _RUNNING_SESSION_ID
     with _RUNNING_LOCK:
         if _RUNNING_SESSION_ID is not None:
-            return False
+            return False, RUN_START_REJECTED_BUSY
+        if _RUN_START_GUARD is not None:
+            rejection = _RUN_START_GUARD()
+            if rejection is not None:
+                return False, rejection
         _RUNNING_SESSION_ID = session_id
-        return True
+        return True, None
 
 
 def finish_run(session_id: str) -> None:
@@ -327,6 +400,7 @@ def finish_run(session_id: str) -> None:
     with _RUNNING_LOCK:
         if _RUNNING_SESSION_ID == session_id:
             _RUNNING_SESSION_ID = None
+            _notify_run_released()
 
 
 @contextmanager
@@ -345,11 +419,24 @@ def terminal_run(session_id: str) -> Iterator[None]:
         finally:
             if _RUNNING_SESSION_ID == session_id:
                 _RUNNING_SESSION_ID = None
+                _notify_run_released()
 
 
 def is_any_run_active() -> bool:
     with _RUNNING_LOCK:
         return _RUNNING_SESSION_ID is not None
+
+
+@contextmanager
+def run_lock() -> Iterator[None]:
+    """Expone el lock de reserva de ejecucion para coordinar decisiones
+    atomicas con ``is_any_run_active()`` desde otros modulos (p. ej.
+    ``tz_web.lifecycle`` al decidir si un cierre solicitado debe aplicarse
+    de inmediato o diferirse), sin duplicar el lock ni el estado que ya
+    mantiene ``try_start_run``/``terminal_run``.
+    """
+    with _RUNNING_LOCK:
+        yield
 
 
 @contextmanager

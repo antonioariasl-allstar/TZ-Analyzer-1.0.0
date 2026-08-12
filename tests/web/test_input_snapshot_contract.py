@@ -48,7 +48,7 @@ def test_B_reemplazo_no_cambia_los_bytes_del_worker_activo(client, tmp_path, mon
     monkeypatch.setattr(routes.threading, "Thread", _DeferredThread)
     monkeypatch.setattr(routes, "process_case", _process)
 
-    assert routes._start_task(case) is True
+    assert routes._start_task(case) == (True, None)
     snapshot_path = case.input_snapshot_path
     assert snapshot_path != case.temp_path
     assert os.path.isfile(snapshot_path)

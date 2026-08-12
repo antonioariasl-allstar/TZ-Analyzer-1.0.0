@@ -193,3 +193,64 @@ function tzStartPolling(statusUrl, resultsUrl) {
 
   poll();
 }
+
+// ---------------------------------------------------------------------------
+// Ciclo de vida del backend (MICROBLOQUE 5): heartbeat mientras la pestaña
+// está abierta y cierre explícito ("Cerrar TZ Analyzer"). El token viaja en
+// una cabecera propia, nunca en la URL — ver tz_web/templates/base.html
+// (meta[name=tz-token]) y tz_web/internal_routes.py.
+// ---------------------------------------------------------------------------
+
+var TZ_HEARTBEAT_INTERVAL_MS = 60000;
+
+function tzGetInstanceToken() {
+  var meta = document.querySelector('meta[name="tz-token"]');
+  return meta ? meta.content : "";
+}
+
+function tzStartHeartbeat() {
+  var token = tzGetInstanceToken();
+  if (!token) {
+    return;
+  }
+  function beat() {
+    fetch("/internal/heartbeat", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "X-TZ-Token": token },
+    }).catch(function () {
+      // Sin conectividad momentánea con el propio backend local: el
+      // siguiente heartbeat lo reintenta; no hay nada que mostrar al
+      // usuario por un solo fallo aislado.
+    });
+  }
+  beat();
+  window.setInterval(beat, TZ_HEARTBEAT_INTERVAL_MS);
+}
+
+function tzRequestShutdown() {
+  var token = tzGetInstanceToken();
+  if (!token) {
+    return;
+  }
+  if (!window.confirm("¿Cerrar TZ Analyzer? Si hay un análisis en curso, continuará hasta terminar y luego se cerrará.")) {
+    return;
+  }
+  fetch("/internal/shutdown", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "X-TZ-Token": token },
+  })
+    .then(function (resp) {
+      return resp.json();
+    })
+    .then(function (data) {
+      var mensaje = data.lifecycle_state === "CLOSE_WHEN_IDLE"
+        ? "Hay un análisis en curso. TZ Analyzer se cerrará automáticamente al finalizar."
+        : "TZ Analyzer se está cerrando.";
+      window.alert(mensaje);
+    })
+    .catch(function () {
+      window.alert("No se pudo solicitar el cierre de TZ Analyzer. Intente nuevamente.");
+    });
+}

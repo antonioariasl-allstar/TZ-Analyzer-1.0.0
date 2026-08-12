@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tz-token" content="{{ tz_instance_token }}">
   <title>{% block title %}TZ Analyzer{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
@@ -14,9 +15,14 @@
         <div class="tz-title">TZ Analyzer</div>
         <div class="tz-subtitle">Versión 1.1 — Aplicación local</div>
       </div>
-      {% if show_nav|default(true) %}
-        <a class="tz-btn tz-btn-secondary tz-btn-menu" href="{{ url_for('tz_web.menu_screen') }}">Volver al menú principal</a>
-      {% endif %}
+      <div class="tz-header-actions">
+        {% if show_nav|default(true) %}
+          <a class="tz-btn tz-btn-secondary tz-btn-menu" href="{{ url_for('tz_web.menu_screen') }}">Volver al menú principal</a>
+        {% endif %}
+        {% if tz_instance_token %}
+          <button type="button" class="tz-btn tz-btn-danger tz-btn-exit" onclick="tzRequestShutdown()">SALIR</button>
+        {% endif %}
+      </div>
     </div>
   </header>
 
@@ -64,6 +70,10 @@
     <div class="tz-footer-note">Los datos y archivos permanecen en este equipo.</div>
   </footer>
 
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", tzStartHeartbeat);
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

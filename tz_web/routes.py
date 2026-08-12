@@ -168,6 +168,18 @@ def _mutation_guard(redirect_endpoint: str):
     return _decorate
 
 
+def _flash_start_rejected(reason: Optional[str]) -> None:
+    """Mensaje de UI para un arranque rechazado por ``try_start_run_detailed``
+    (sección 1 del MB5): distingue "ya hay un análisis en curso" de "cierre
+    pendiente", en vez de asumir siempre la primera causa."""
+    message = (
+        state.MSG_SHUTDOWN_PENDING
+        if reason == state.RUN_START_REJECTED_SHUTDOWN
+        else state.MSG_ANALYSIS_IN_PROGRESS
+    )
+    flash(message, "error")
+
+
 def _open_with_default_app(path: str) -> None:
     """Abre ``path`` con la aplicación asociada del sistema operativo.
 
@@ -1242,9 +1254,9 @@ def configure_resumen_submit():
     case.carpeta_salida = carpeta_salida_abs
     state.touch(case)
 
-    started = _start_task(case)
+    started, reason = _start_task(case)
     if not started:
-        flash(state.MSG_ANALYSIS_IN_PROGRESS, "error")
+        _flash_start_rejected(reason)
         return redirect(url_for("tz_web.configure_resumen_screen"))
 
     return redirect(url_for("tz_web.processing_screen"))
@@ -1386,9 +1398,9 @@ def configure_legacy_submit():
     case.qc_bloqueante_decision = request.form.get("qc_bloqueante_decision", "S")
     state.touch(case)
 
-    started = _start_task(case)
+    started, reason = _start_task(case)
     if not started:
-        flash(state.MSG_ANALYSIS_IN_PROGRESS, "error")
+        _flash_start_rejected(reason)
         return redirect(url_for("tz_web.configure_legacy_screen"))
 
     return redirect(url_for("tz_web.processing_screen"))
@@ -1804,18 +1816,24 @@ def _mark_run_failed(
     _log_technical_error_best_effort(context, exc)
 
 
-def _start_task_modo3(case: state.Session) -> bool:
+def _start_task_modo3(case: state.Session) -> Tuple[bool, Optional[str]]:
     """Arranca el análisis de Modo 3 en segundo plano. Mismo mecanismo de
     exclusión y de progreso que ``_start_task`` (sección 10): una sola
-    sesión activa a la vez a nivel web (``state.try_start_run``), y el mismo
-    ``case.status``/``stage``/``percent``/``/status`` — no se inventa un
-    segundo sistema de progreso."""
+    sesión activa a la vez a nivel web (``state.try_start_run_detailed``), y
+    el mismo ``case.status``/``stage``/``percent``/``/status`` — no se
+    inventa un segundo sistema de progreso.
+
+    Devuelve ``(iniciado, motivo_rechazo)``: ``motivo_rechazo`` es ``None``
+    salvo cuando ``iniciado`` es ``False``, en cuyo caso es uno de
+    ``state.RUN_START_REJECTED_*`` para que el llamador elija el mensaje
+    correcto (análisis en curso vs. cierre pendiente)."""
     if case.task_started or case.status in (
         state.STATUS_SUCCESS, state.STATUS_PARTIAL, state.STATUS_FAILED
     ):
-        return True
-    if not state.try_start_run(case.id):
-        return False
+        return True, None
+    started, reason = state.try_start_run_detailed(case.id)
+    if not started:
+        return False, reason
 
     case.status = state.STATUS_RUNNING
     case.task_started = True
@@ -1885,7 +1903,7 @@ def _start_task_modo3(case: state.Session) -> bool:
             "process_case_modo3.thread_start",
             user_message=_THREAD_START_ERROR_MESSAGE,
         )
-    return True
+    return True, None
 
 
 @bp.route("/modo3/resumen", methods=["POST"])
@@ -1917,9 +1935,9 @@ def modo3_resumen_submit():
     case.carpeta_salida = carpeta_salida_abs
     state.touch(case)
 
-    started = _start_task_modo3(case)
+    started, reason = _start_task_modo3(case)
     if not started:
-        flash(state.MSG_ANALYSIS_IN_PROGRESS, "error")
+        _flash_start_rejected(reason)
         return redirect(url_for("tz_web.modo3_resumen_screen"))
 
     return redirect(url_for("tz_web.processing_screen"))
@@ -1952,15 +1970,18 @@ def modo3_results_back():
 # ---------------------------------------------------------------------------
 
 
-def _start_task(case: state.Session) -> bool:
+def _start_task(case: state.Session) -> Tuple[bool, Optional[str]]:
     """Impide doble envío: una sola sesión activa a la vez a nivel web,
-    además del threading.Lock propio de process_case()."""
+    además del threading.Lock propio de process_case().
+
+    Devuelve ``(iniciado, motivo_rechazo)`` — ver ``_start_task_modo3``."""
     if case.task_started or case.status in (
         state.STATUS_SUCCESS, state.STATUS_PARTIAL, state.STATUS_FAILED
     ):
-        return True  # ya en curso para esta sesión: no reintentar, solo continuar a /processing
-    if not state.try_start_run(case.id):
-        return False
+        return True, None  # ya en curso para esta sesión: no reintentar, solo continuar a /processing
+    started, reason = state.try_start_run_detailed(case.id)
+    if not started:
+        return False, reason
 
     case.status = state.STATUS_RUNNING
     case.task_started = True
@@ -2057,7 +2078,7 @@ def _start_task(case: state.Session) -> bool:
                 None if isinstance(exc, InputIntegrityError) else _THREAD_START_ERROR_MESSAGE
             ),
         )
-    return True
+    return True, None
 
 
 @bp.route("/processing", methods=["GET"])

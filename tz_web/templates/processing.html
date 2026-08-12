@@ -28,7 +28,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
 <script>
   tzStartPolling("{{ url_for('tz_web.status_json') }}", "{{ url_for('tz_web.results_screen') }}");
 </script>
