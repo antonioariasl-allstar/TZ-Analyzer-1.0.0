@@ -11,6 +11,7 @@ from tz_web.services import MSG_FILTRO_SIN_REGISTROS
 from tests.web.conftest import (
     REAL_MAPPING_FORM,
     SHEET_NAME,
+    select_output_folder,
     upload_real_file,
     wait_for_terminal_status,
 )
@@ -51,6 +52,7 @@ def advance_to_resumen_desde_filtro(client, *, nombre_modo="sugerido", output_ba
         "accion": "siguiente", "nombre_modo": nombre_modo,
         "output_base_name": output_base_name, "tipo_bitacora": tipo_bitacora,
     }, follow_redirects=True)
+    select_output_folder(client)
     return client.get("/configure/resumen")
 
 
@@ -161,6 +163,7 @@ def test_modo_1_sigue_enviando_filtro_none_y_alcance_bitacora_completa(client):
     assert case.filtro_tiempo is None
     assert case.modo == tz_web_state.MODO_1
 
+    select_output_folder(client)
     client.post("/configure/resumen", data={"accion": "siguiente"}, follow_redirects=True)
     wait_for_terminal_status(client)
 

@@ -47,9 +47,15 @@
       <h3>Salida</h3>
       <dl>
         <dt>Nombre base</dt><dd>{{ case.output_base_name or suggested_name or 'Se sugerirá automáticamente' }}</dd>
-        <dt>Carpeta base</dt><dd class="tz-path">{{ carpeta_salida }}</dd>
+        <dt>Carpeta base</dt><dd class="tz-path">{{ carpeta_salida or 'Ninguna carpeta seleccionada' }}</dd>
       </dl>
     </div>
+
+    {% if not carpeta_salida %}
+    <div class="tz-banner error">
+      Debe seleccionar una carpeta de salida en "Preparar salida" antes de generar el análisis.
+    </div>
+    {% endif %}
 
     <div class="tz-summary-block">
       <h3>{{ 'Antenas/Celdas cargadas' if es_antena else 'Puntos libres cargados' }}</h3>
@@ -90,7 +96,7 @@
 
     <div class="tz-actions">
       <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
-      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Generar análisis</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary" {% if not carpeta_salida %}disabled{% endif %}>Generar análisis</button>
     </div>
   </form>
 </div>

@@ -42,8 +42,11 @@ from tz_core.bitacora_io import cargar_excel_con_normalizacion, listar_todas_hoj
 from tz_core.capabilities import detectar_capacidades
 from tz_core.config_loader import get_config
 from tz_core.field_roles import WIZARD_ORDER_PRIMARY, WIZARD_ORDER_SECONDARY
+from tz_core.folder_dialog import FolderDialogUnavailableError, pick_folder
 from tz_core.mapping_wizard import FIELD_CONTEXT
 from tz_core.user_paths import resolve_default_output_dir
+from tz_web import help_content
+from tz_web import lifecycle
 from tz_web import manual_validators as mv
 from tz_web import state
 from tz_web.field_catalog import FIELD_DESCRIPTIONS, FIELD_GROUPS, FIELD_LABELS
@@ -103,6 +106,10 @@ _DURATION_UNIT_LABELS = {
     "desconocida": "Desconocida (no calcular duración)",
 }
 _DATE_ORDER_LABELS = {"1": "DD/MM/AAAA", "2": "MM/DD/AAAA"}
+MSG_CARPETA_SALIDA_REQUERIDA = (
+    "Seleccione una carpeta de salida en \"Preparar análisis\" antes de generar el análisis."
+)
+
 _FILTRO_TIPO_LABELS = {
     "ninguno": "Sin filtro (bitácora completa)",
     "dia": "Día específico",
@@ -188,6 +195,95 @@ def _open_with_default_app(path: str) -> None:
     """
     if hasattr(os, "startfile"):
         os.startfile(path)  # noqa: S606 - ruta ya validada contra CaseResult, ver _resolve_open_path
+
+
+# ---------------------------------------------------------------------------
+# Selector de carpeta de salida (MICROBLOQUE 6) — compartido por Modo 1/2
+# ("Preparar análisis", configure_final.html) y Modo 3 (modo3_preparar.html).
+#
+# Deliberadamente NO usa ``_mutation_guard``/``state.mutation_guard()``
+# alrededor de ``pick_folder()``: ese lock (``state._RUNNING_LOCK``) también
+# lo necesitan ``try_start_run_detailed`` y ``lifecycle.request_shutdown``, y
+# el diálogo nativo puede quedar abierto un tiempo indefinido mientras el
+# usuario decide. Sostenerlo durante esa espera bloquearía cualquier otra
+# mutación, el arranque de un análisis real y hasta el cierre del backend —
+# justo lo que la sección de seguridad/concurrencia del encargo prohíbe. En
+# su lugar: un chequeo previo barato (sin reservar nada) antes de abrir el
+# diálogo, y un ``mutation_guard()`` acotado solo alrededor de la escritura
+# final a la sesión, una vez que el usuario ya decidió.
+# ---------------------------------------------------------------------------
+
+
+def _reject_reason_for_mutation() -> Optional[str]:
+    """Motivo de rechazo (``state.RUN_START_REJECTED_*``) para una operación
+    que debe respetar "análisis activo"/"cierre pendiente" sin competir por
+    el mismo cupo que ``try_start_run_detailed`` (que además reserva un
+    turno de ejecución real — no aplica aquí, elegir una carpeta no es un
+    análisis). ``None`` si la operación puede proceder."""
+    if state.is_any_run_active():
+        return state.RUN_START_REJECTED_BUSY
+    if lifecycle.get_state() != lifecycle.RUNNING:
+        return state.RUN_START_REJECTED_SHUTDOWN
+    return None
+
+
+def _message_for_rejection(reason: str) -> str:
+    return (
+        state.MSG_SHUTDOWN_PENDING
+        if reason == state.RUN_START_REJECTED_SHUTDOWN
+        else state.MSG_ANALYSIS_IN_PROGRESS
+    )
+
+
+@bp.route("/output-folder/select", methods=["POST"])
+def select_output_folder():
+    """Abre el selector nativo de carpetas y, si el usuario confirma una
+    elección válida, la persiste en ``case.carpeta_salida``.
+
+    Responde JSON siempre (endpoint consumido vía ``fetch`` desde
+    configure_final.html/modo3_preparar.html, ver tzSeleccionarCarpetaSalida
+    en app.js), nunca un redirect: no hay nada que renderizar de nuevo, y el
+    botón que lo invoca no debe recargar el resto del formulario en curso
+    (nombre de salida, tipo de bitácora, etc. — ver sección UX del encargo).
+    """
+    case = _current_session(create=False)
+    if case is None:
+        return jsonify({"status": "error", "message": "No hay una sesión activa."}), 400
+
+    reason = _reject_reason_for_mutation()
+    if reason is not None:
+        return jsonify({"status": "error", "message": _message_for_rejection(reason)}), 409
+
+    carpeta_inicial = case.carpeta_salida or resolve_default_output_dir(warn=lambda _msg: None)
+    try:
+        seleccionada = pick_folder(initial_dir=carpeta_inicial)
+    except FolderDialogUnavailableError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 502
+
+    if seleccionada is None:
+        # Cancelado: la selección existente (si la había) no se toca.
+        return jsonify({"status": "cancelled", "carpeta_salida": case.carpeta_salida}), 200
+
+    # Reconfirmar bajo el lock real, acotado a la escritura: el diálogo pudo
+    # haber estado abierto un buen rato, tiempo suficiente para que un
+    # análisis arrancara o un cierre quedara pendiente mientras tanto.
+    with state.mutation_guard() as allowed:
+        if not allowed:
+            return jsonify({"status": "error", "message": state.MSG_ANALYSIS_IN_PROGRESS}), 409
+        if lifecycle.get_state() != lifecycle.RUNNING:
+            return jsonify({"status": "error", "message": state.MSG_SHUTDOWN_PENDING}), 409
+        try:
+            carpeta_salida_abs = state.ensure_writable_dir(seleccionada)
+        except OSError as exc:
+            state.log_technical_error("select_output_folder.ensure_writable_dir", exc)
+            return jsonify({
+                "status": "error",
+                "message": f"No se pudo usar la carpeta seleccionada: {exc}",
+            }), 400
+        case.carpeta_salida = carpeta_salida_abs
+        state.touch(case)
+
+    return jsonify({"status": "ok", "carpeta_salida": carpeta_salida_abs}), 200
 
 
 # ---------------------------------------------------------------------------
@@ -1096,7 +1192,12 @@ def configure_final_screen():
     # subpantalla) se evalúa ANTES de calcular el nombre sugerido, para que
     # la sugerencia siempre corresponda a la última decisión guardada.
     tipo_bitacora_actual = case.tipo_bitacora
-    carpeta_salida = case.carpeta_salida or resolve_default_output_dir(warn=lambda _msg: None)
+    # Sin fallback silencioso a una carpeta por defecto (MICROBLOQUE 6): el
+    # contrato histórico exige que el usuario elija explícitamente la
+    # ubicación de salida — ``None`` aquí significa "todavía no elegida", y
+    # la plantilla lo muestra como tal en vez de una ruta que TZ Analyzer
+    # nunca comunicó como una decisión real del usuario.
+    carpeta_salida = case.carpeta_salida
 
     suggested_name = None
     if not case.output_base_name:
@@ -1201,7 +1302,7 @@ def configure_resumen_screen():
         flash("Primero confirme el mapeo de columnas.", "error")
         return redirect(url_for("tz_web.mapping_screen"))
 
-    carpeta_salida = case.carpeta_salida or resolve_default_output_dir(warn=lambda _msg: None)
+    carpeta_salida = case.carpeta_salida
 
     suggested_name = None
     if not case.output_base_name:
@@ -1243,13 +1344,19 @@ def configure_resumen_submit():
     if request.form.get("accion", "siguiente") == "anterior":
         return redirect(url_for("tz_web.configure_final_screen"))
 
-    carpeta_resuelta = case.carpeta_salida or resolve_default_output_dir(warn=lambda _msg: None)
+    # Sin selección explícita, no se arranca (MICROBLOQUE 6): nunca se
+    # sustituye en silencio por Documents\TZ Analyzer ni %TEMP% — se manda
+    # de vuelta a "Preparar análisis", donde vive el selector.
+    if not case.carpeta_salida:
+        flash(MSG_CARPETA_SALIDA_REQUERIDA, "error")
+        return redirect(url_for("tz_web.configure_final_screen"))
+
     try:
-        carpeta_salida_abs = state.ensure_writable_dir(carpeta_resuelta)
+        carpeta_salida_abs = state.ensure_writable_dir(case.carpeta_salida)
     except OSError as exc:
         state.log_technical_error("configure_resumen_submit.ensure_dir", exc)
-        flash("No se pudo preparar la carpeta de salida segura del sistema.", "error")
-        return redirect(url_for("tz_web.configure_resumen_screen"))
+        flash("No se pudo preparar la carpeta de salida seleccionada.", "error")
+        return redirect(url_for("tz_web.configure_final_screen"))
 
     case.carpeta_salida = carpeta_salida_abs
     state.touch(case)
@@ -1710,7 +1817,7 @@ def modo3_preparar_screen():
         flash("Agregue al menos un registro antes de continuar.", "error")
         return redirect(url_for("tz_web.modo3_registros_screen"))
 
-    carpeta_salida = case.carpeta_salida or resolve_default_output_dir(warn=lambda _msg: None)
+    carpeta_salida = case.carpeta_salida
     suggested_name = None
     if not case.output_base_name:
         suggested_name = sugerir_nombre_modo3(case.modo3_tipo, case.modo3_registros)
@@ -1757,7 +1864,7 @@ def modo3_resumen_screen():
         flash("Agregue al menos un registro antes de continuar.", "error")
         return redirect(url_for("tz_web.modo3_registros_screen"))
 
-    carpeta_salida = case.carpeta_salida or resolve_default_output_dir(warn=lambda _msg: None)
+    carpeta_salida = case.carpeta_salida
     suggested_name = None
     if not case.output_base_name:
         suggested_name = sugerir_nombre_modo3(case.modo3_tipo, case.modo3_registros)
@@ -1924,13 +2031,16 @@ def modo3_resumen_submit():
     if request.form.get("accion", "siguiente") == "anterior":
         return redirect(url_for("tz_web.modo3_preparar_screen"))
 
-    carpeta_resuelta = case.carpeta_salida or resolve_default_output_dir(warn=lambda _msg: None)
+    if not case.carpeta_salida:
+        flash(MSG_CARPETA_SALIDA_REQUERIDA, "error")
+        return redirect(url_for("tz_web.modo3_preparar_screen"))
+
     try:
-        carpeta_salida_abs = state.ensure_writable_dir(carpeta_resuelta)
+        carpeta_salida_abs = state.ensure_writable_dir(case.carpeta_salida)
     except OSError as exc:
         state.log_technical_error("modo3_resumen_submit.ensure_dir", exc)
-        flash("No se pudo preparar la carpeta de salida segura del sistema.", "error")
-        return redirect(url_for("tz_web.modo3_resumen_screen"))
+        flash("No se pudo preparar la carpeta de salida seleccionada.", "error")
+        return redirect(url_for("tz_web.modo3_preparar_screen"))
 
     case.carpeta_salida = carpeta_salida_abs
     state.touch(case)
@@ -2274,6 +2384,26 @@ def new_case():
         state.discard_session(session_id)
     flask_session.pop("case_id", None)
     return redirect(url_for("tz_web.menu_screen"))
+
+
+# ---------------------------------------------------------------------------
+# Ayuda / Manual de usuario (MICROBLOQUE 6-2) — documentación estática local.
+#
+# Deliberadamente NO usa ``_current_session()``/``state.Session``: el manual
+# debe funcionar sin caso abierto, sin tocar la sesión del navegador (ni
+# siquiera crearla) y sin competir con ``mutation_guard``/``lifecycle`` — ver
+# sección de seguridad del encargo: AYUDA es documentación estática, no una
+# pantalla operativa, y no debe reflejar datos del caso en curso.
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/help", methods=["GET"])
+def help_screen():
+    return render_template(
+        "help.html",
+        help_sections=help_content.HELP_SECTIONS,
+        help_version_label=help_content.HELP_VERSION_LABEL,
+    )
 
 
 # ---------------------------------------------------------------------------

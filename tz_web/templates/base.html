@@ -19,6 +19,7 @@
         {% if show_nav|default(true) %}
           <a class="tz-btn tz-btn-secondary tz-btn-menu" href="{{ url_for('tz_web.menu_screen') }}">Volver al menú principal</a>
         {% endif %}
+        <button type="button" class="tz-btn tz-btn-secondary tz-btn-help" onclick="tzAbrirAyuda()">AYUDA</button>
         {% if tz_instance_token %}
           <button type="button" class="tz-btn tz-btn-danger tz-btn-exit" onclick="tzRequestShutdown()">SALIR</button>
         {% endif %}

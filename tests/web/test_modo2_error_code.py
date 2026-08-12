@@ -9,7 +9,13 @@ from __future__ import annotations
 from tz_web import routes as tz_web_routes
 from tz_web import state as tz_web_state
 from tz_web.services import ArchivoNoProcesableError, FiltroTiempoSinRegistrosError, MSG_FILTRO_SIN_REGISTROS
-from tests.web.conftest import REAL_MAPPING_FORM, SHEET_NAME, upload_real_file, wait_for_terminal_status
+from tests.web.conftest import (
+    REAL_MAPPING_FORM,
+    SHEET_NAME,
+    select_output_folder,
+    upload_real_file,
+    wait_for_terminal_status,
+)
 
 
 def enter_modo_2(client):
@@ -58,6 +64,7 @@ def run_modo2_hasta_fallo(client, monkeypatch, exc):
     client.post("/configure/final", data={
         "accion": "siguiente", "nombre_modo": "sugerido", "tipo_bitacora": "",
     }, follow_redirects=True)
+    select_output_folder(client)
     client.post("/configure/resumen", data={"accion": "siguiente"}, follow_redirects=True)
     return wait_for_terminal_status(client)
 

@@ -93,16 +93,19 @@ a {
   flex-wrap: wrap;
 }
 
-.tz-header .tz-btn-menu {
+.tz-header .tz-btn-menu,
+.tz-header .tz-btn-help {
   background: transparent;
   border-color: #b9c4e0;
   color: #fff;
 }
 
-.tz-header .tz-btn-menu:hover {
+.tz-header .tz-btn-menu:hover,
+.tz-header .tz-btn-help:hover {
   border-color: #fff;
 }
 
+.tz-header .tz-btn-help,
 .tz-header .tz-btn-exit {
   padding: 6px 14px;
   font-size: 12.5px;

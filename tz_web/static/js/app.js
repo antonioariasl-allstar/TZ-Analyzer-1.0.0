@@ -111,6 +111,74 @@ function tzToggleFiltroModo2() {
   if (horasWrap) horasWrap.style.display = (valor === "rango_horas_dia" || valor === "rango_horas") ? "" : "none";
 }
 
+// ---------------------------------------------------------------------------
+// Selector de carpeta de salida (MICROBLOQUE 6) — configure_final.html
+// (Modo 1/2) y modo3_preparar.html comparten este mismo botón/endpoint.
+// El diálogo nativo puede tardar lo que el usuario decida: el botón se
+// deshabilita mientras espera la respuesta para evitar clics duplicados,
+// pero nunca bloquea el resto de la página ni el resto del formulario.
+// ---------------------------------------------------------------------------
+
+function tzSeleccionarCarpetaSalida() {
+  var btn = document.getElementById("btn_seleccionar_carpeta");
+  var texto = document.getElementById("carpeta_salida_texto");
+  var errorBox = document.getElementById("carpeta_salida_error");
+  if (!btn || !texto) {
+    return;
+  }
+  if (errorBox) {
+    errorBox.style.display = "none";
+    errorBox.textContent = "";
+  }
+  var textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Abriendo selector…";
+
+  fetch("/output-folder/select", {
+    method: "POST",
+    credentials: "same-origin",
+  })
+    .then(function (resp) {
+      return resp.json().catch(function () {
+        return null;
+      });
+    })
+    .then(function (data) {
+      if (!data) {
+        throw new Error("Respuesta inválida del selector de carpetas.");
+      }
+      if (data.status === "ok") {
+        texto.textContent = data.carpeta_salida;
+      } else if (data.status === "cancelled") {
+        // Cancelado: la selección existente (si la había) no cambia.
+      } else if (errorBox) {
+        errorBox.textContent = data.message || "No se pudo seleccionar la carpeta. Intente nuevamente.";
+        errorBox.style.display = "";
+      }
+    })
+    .catch(function () {
+      if (errorBox) {
+        errorBox.textContent = "No se pudo comunicar con TZ Analyzer para abrir el selector. Intente nuevamente.";
+        errorBox.style.display = "";
+      }
+    })
+    .finally(function () {
+      btn.disabled = false;
+      btn.textContent = textoOriginal;
+    });
+}
+
+// ---------------------------------------------------------------------------
+// AYUDA (MICROBLOQUE 6-2): abre el manual de usuario en una ventana/pestaña
+// nombrada estable, reutilizada si ya está abierta. Nunca navega la pestaña
+// operativa actual — el análisis, mapeo o configuración en curso no se ve
+// afectado por abrir/cerrar la ayuda.
+// ---------------------------------------------------------------------------
+
+function tzAbrirAyuda() {
+  window.open("/help", "tz_analyzer_help");
+}
+
 function tzGuardStartButton(button) {
   if (button.dataset.tzSubmitted === "1") {
     return false;

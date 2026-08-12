@@ -1,0 +1,234 @@
+/* TZ Analyzer — Manual de Usuario (MICROBLOQUE 6-2).
+   Reutiliza las variables de color/tipografía de app.css para mantener la
+   misma identidad visual, sin copiar la estética operativa (header con
+   pasos, SALIR, etc.) — el manual es un documento propio. Sin dependencias
+   externas ni CDN. */
+
+.tz-help-body {
+  background: var(--tz-bg);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+.tz-help-header {
+  background: linear-gradient(180deg, var(--tz-navy) 0%, var(--tz-navy-dark) 100%);
+  color: #fff;
+  padding: 16px 0;
+  box-shadow: var(--tz-shadow);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.tz-help-header-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 93%;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.tz-help-logo {
+  height: 36px;
+  width: auto;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.tz-help-header-text h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.tz-help-version {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #b9c4e0;
+}
+
+.tz-help-nav-toggle {
+  margin-left: auto;
+  display: none;
+}
+
+.tz-help-layout {
+  width: 93%;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.tz-help-nav {
+  position: sticky;
+  top: 84px;
+  background: var(--tz-card);
+  border: 1px solid var(--tz-border);
+  border-radius: var(--tz-radius);
+  padding: 16px;
+  box-shadow: var(--tz-shadow);
+}
+
+.tz-help-nav-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--tz-muted);
+  margin-bottom: 8px;
+}
+
+.tz-help-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tz-help-nav-list a {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--tz-ink);
+  text-decoration: none;
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+
+.tz-help-nav-list a:hover,
+.tz-help-nav-list a:focus-visible {
+  background: var(--tz-bg);
+  color: var(--tz-blue);
+}
+
+.tz-help-content {
+  min-width: 0;
+}
+
+.tz-help-section {
+  background: var(--tz-card);
+  border: 1px solid var(--tz-border);
+  border-radius: var(--tz-radius);
+  box-shadow: var(--tz-shadow);
+  padding: 22px 26px;
+  margin-bottom: 20px;
+  /* Deja el título visible debajo de la cabecera pegajosa al navegar por ancla. */
+  scroll-margin-top: 92px;
+}
+
+.tz-help-section h2 {
+  margin-top: 0;
+  font-size: 20px;
+  color: var(--tz-navy);
+}
+
+.tz-help-section h3 {
+  font-size: 15.5px;
+  color: var(--tz-navy);
+  margin-bottom: 6px;
+}
+
+.tz-help-section p,
+.tz-help-section li {
+  color: var(--tz-ink);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.tz-help-section ul,
+.tz-help-section ol {
+  padding-left: 22px;
+}
+
+.tz-help-flow {
+  font-weight: 600;
+  background: var(--tz-bg);
+  border: 1px solid var(--tz-border);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+/* Advertencias diferenciadas del resto del texto (ámbar, igual paleta que
+   los banners operativos de app.css). */
+.tz-help-warn {
+  background: var(--tz-amber-bg);
+  border: 1px solid var(--tz-amber-border);
+  color: var(--tz-amber-text);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 12px 0 18px;
+  font-size: 14px;
+}
+
+/* Acordeones nativos (<details>/<summary>) — sin JS, accesibles con
+   teclado de forma nativa. */
+.tz-help-accordion {
+  border: 1px solid var(--tz-border);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  padding: 4px 14px;
+}
+
+.tz-help-accordion summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 10px 0;
+  color: var(--tz-navy);
+}
+
+.tz-help-accordion[open] summary {
+  border-bottom: 1px solid var(--tz-border);
+  margin-bottom: 8px;
+}
+
+.tz-help-accordion-body {
+  padding-bottom: 10px;
+}
+
+.tz-help-pending {
+  border-style: dashed;
+  border-color: var(--tz-amber-border);
+  background: var(--tz-amber-bg);
+}
+
+.tz-help-pending h2 {
+  color: var(--tz-amber-text);
+}
+
+/* Pantallas anchas: barra lateral fija visible; el botón de índice no hace
+   falta. Pantallas pequeñas: índice plegable, oculto salvo al abrirlo. */
+@media (max-width: 900px) {
+  .tz-help-nav-toggle {
+    display: inline-block;
+  }
+
+  .tz-help-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tz-help-nav {
+    position: static;
+    display: none;
+  }
+
+  .tz-help-nav.tz-help-nav-open {
+    display: block;
+  }
+}

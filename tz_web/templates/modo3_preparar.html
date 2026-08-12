@@ -42,9 +42,13 @@
     </p>
 
     <h3>Carpeta base de salida</h3>
-    <p class="tz-help">Los resultados se guardarán en:</p>
-    <p class="tz-path">{{ carpeta_salida }}</p>
-    <p class="tz-help">El sistema creará automáticamente una carpeta independiente para este análisis.</p>
+    <p class="tz-help">Elija la carpeta donde TZ Analyzer guardará los resultados de este caso.</p>
+    <div class="tz-output-name-display">
+      <span class="tz-path" id="carpeta_salida_texto">{{ carpeta_salida or 'Ninguna carpeta seleccionada' }}</span>
+      <button type="button" class="tz-btn tz-btn-secondary" id="btn_seleccionar_carpeta" onclick="tzSeleccionarCarpetaSalida()">Seleccionar carpeta…</button>
+    </div>
+    <div id="carpeta_salida_error" class="tz-banner error" style="display:none"></div>
+    <p class="tz-help">El sistema creará automáticamente una carpeta independiente para este análisis dentro de la carpeta elegida.</p>
 
     <div class="tz-actions">
       <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>

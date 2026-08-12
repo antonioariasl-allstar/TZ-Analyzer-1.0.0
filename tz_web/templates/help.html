@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TZ Analyzer — Manual de Usuario</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/help.css') }}">
+</head>
+<body class="tz-help-body">
+
+  <header class="tz-help-header">
+    <div class="tz-help-header-inner">
+      <img class="tz-help-logo" src="{{ url_for('tz_web.logo_asset') }}" alt="TZ Analyzer">
+      <div class="tz-help-header-text">
+        <h1>TZ Analyzer — Manual de Usuario</h1>
+        <p class="tz-help-version">{{ help_version_label }}</p>
+      </div>
+      <button type="button" id="tz-help-nav-toggle" class="tz-btn tz-btn-secondary tz-help-nav-toggle"
+              aria-controls="tz-help-nav" aria-expanded="false" onclick="tzHelpToggleNav()">
+        Índice
+      </button>
+    </div>
+  </header>
+
+  <div class="tz-help-layout">
+    <nav id="tz-help-nav" class="tz-help-nav" aria-label="Índice del manual">
+      <div class="tz-help-nav-title">Índice</div>
+      <ol class="tz-help-nav-list">
+        {% for anchor, label in help_sections %}
+          <li><a href="#{{ anchor }}">{{ label }}</a></li>
+        {% endfor %}
+      </ol>
+    </nav>
+
+    <main class="tz-help-content">
+
+      <!-- =================================================================
+           1. ACERCA DE TZ ANALYZER
+      ================================================================== -->
+      <section id="acerca" class="tz-help-section">
+        <h2>Acerca de TZ Analyzer</h2>
+        <p>
+          TZ Analyzer es una aplicación de uso local diseñada para asistir el
+          análisis de bitácoras telefónicas y la georreferenciación de
+          antenas, celdas y otros puntos de interés relacionados con un caso.
+        </p>
+        <p>
+          Su finalidad es transformar la información disponible —una
+          bitácora en formato Excel o coordenadas ingresadas manualmente— en
+          productos técnicos que el analista pueda revisar, verificar y
+          utilizar como apoyo en su trabajo.
+        </p>
+        <p>
+          El procesamiento se realiza localmente en el equipo donde se
+          ejecuta TZ Analyzer. Los productos generados se guardan en la
+          carpeta que el analista elija explícitamente (ver
+          <a href="#carpeta-salida">Carpeta de salida</a>), que puede ser una
+          unidad externa, una carpeta sincronizada u otra ubicación distinta
+          del equipo donde corre la aplicación.
+        </p>
+      </section>
+
+      <!-- =================================================================
+           2. ANTES DE COMENZAR
+      ================================================================== -->
+      <section id="antes-de-comenzar" class="tz-help-section">
+        <h2>Antes de comenzar</h2>
+
+        <div class="tz-help-warn">
+          <strong>Pendiente de confirmar en la distribución Beta:</strong>
+          el nombre definitivo del archivo que iniciará TZ Analyzer se
+          confirmará junto con la distribución Beta.
+        </div>
+
+        <ul>
+          <li>TZ Analyzer se inicia ejecutando únicamente el archivo
+            principal indicado dentro de la carpeta de la aplicación.</li>
+          <li>No deben ejecutarse archivos internos para iniciar el
+            programa.</li>
+          <li>No deben eliminarse, renombrarse, moverse ni modificarse
+            archivos o subcarpetas internas de la carpeta de la
+            aplicación.</li>
+          <li>Para trasladar TZ Analyzer a otro lugar o equipo, debe
+            copiarse o moverse la carpeta completa.</li>
+          <li>Al iniciarse, TZ Analyzer abre automáticamente la interfaz en
+            el navegador.</li>
+          <li>Si ya existe una instancia activa, una segunda ejecución
+            reutiliza la instancia existente en lugar de abrir una
+            nueva.</li>
+          <li>Para cerrar TZ Analyzer debe utilizarse <strong>SALIR</strong>,
+            en el encabezado.</li>
+          <li>Cerrar únicamente la pestaña del navegador no equivale al
+            cierre inmediato del programa: el mecanismo de cierre existente
+            gestiona la inactividad y el cierre real del programa en segundo
+            plano.</li>
+        </ul>
+      </section>
+
+      <!-- =================================================================
+           3. INICIO RÁPIDO
+      ================================================================== -->
+      <section id="inicio-rapido" class="tz-help-section">
+        <h2>Inicio rápido</h2>
+        <p class="tz-help-flow">
+          Abrir TZ Analyzer &rarr; ENTRAR AL ANALIZADOR &rarr; elegir modo
+          &rarr; cargar/ingresar información &rarr; revisar configuración
+          &rarr; seleccionar carpeta de salida &rarr; revisar resumen
+          &rarr; generar &rarr; revisar resultados
+        </p>
+        <ol>
+          <li>Elegir el modo de análisis (Modo 1, Modo 2 o Modo 3).</li>
+          <li>Cargar la bitácora o ingresar coordenadas manualmente, según
+            el modo elegido.</li>
+          <li>Revisar cómo TZ Analyzer interpretará la información
+            (mapeo de columnas).</li>
+          <li>Configurar las opciones disponibles para el análisis.</li>
+          <li>Seleccionar explícitamente la carpeta de salida.</li>
+          <li>Revisar el resumen del análisis antes de ejecutarlo.</li>
+          <li>Ejecutar el análisis.</li>
+          <li>Revisar los productos generados.</li>
+        </ol>
+        <p>
+          "Volver al menú principal" permite abandonar la preparación actual
+          y comenzar una nueva. Esto es distinto de un análisis que ya esté
+          procesándose: mientras un análisis está en curso, TZ Analyzer lo
+          protege para evitar que se interrumpa o se pierda por accidente.
+        </p>
+      </section>
+
+      <!-- =================================================================
+           4. MODOS DE ANÁLISIS
+      ================================================================== -->
+      <section id="modos" class="tz-help-section">
+        <h2>Modos de análisis</h2>
+
+        <details id="modo-1" class="tz-help-accordion">
+          <summary>Modo 1 — Procesar bitácora completa</summary>
+          <div class="tz-help-accordion-body">
+            <p><strong>Cuándo usarlo:</strong> para analizar todos los
+              registros de una bitácora sin limitar por tiempo.</p>
+            <p><strong>Pasos:</strong></p>
+            <ul>
+              <li>Cargar el archivo .xlsx.</li>
+              <li>Elegir la hoja a analizar.</li>
+              <li>Revisar la vista previa de los datos.</li>
+              <li>Mapear las columnas del archivo a los campos que TZ
+                Analyzer reconoce.</li>
+              <li>Revisar las capacidades disponibles según lo mapeado.</li>
+              <li>Identificación de la bitácora (opcional).</li>
+              <li>Configurar la cantidad de antenas/contactos destacados a
+                mostrar.</li>
+              <li>Elegir los productos de salida.</li>
+              <li>Elegir el color del caso.</li>
+              <li>Definir el nombre de salida.</li>
+              <li>Seleccionar la carpeta de salida.</li>
+              <li>Revisar el resumen.</li>
+              <li>Procesamiento.</li>
+              <li>Resultados.</li>
+            </ul>
+            <p>
+              El KMZ forma parte de los productos generados; el KML suelto
+              es opcional. También se genera un informe HTML y un archivo de
+              verificación de integridad.
+            </p>
+          </div>
+        </details>
+
+        <details id="modo-2" class="tz-help-accordion">
+          <summary>Modo 2 — Procesar bitácora filtrada por tiempo</summary>
+          <div class="tz-help-accordion-body">
+            <p>
+              Es el mismo análisis del Modo 1, pero acotado a una ventana
+              temporal determinada.
+            </p>
+            <p><strong>Tipos de filtro disponibles:</strong></p>
+            <ul>
+              <li>Día específico.</li>
+              <li>Rango de fechas.</li>
+              <li>Rango de horas (todos los días).</li>
+              <li>Rango de horas en un día específico.</li>
+            </ul>
+            <p><strong>Consideraciones:</strong></p>
+            <ul>
+              <li>Si la bitácora no tiene una fecha reconocible, TZ Analyzer
+                no puede aplicar un filtro temporal.</li>
+              <li>Si la bitácora tiene fecha pero no hora, solo están
+                disponibles los filtros por día o por rango de fechas.</li>
+              <li>Si el filtro elegido no encuentra registros, es posible
+                volver directamente a revisar el filtro sin perder el resto
+                de la configuración ya definida.</li>
+            </ul>
+          </div>
+        </details>
+
+        <details id="modo-3" class="tz-help-accordion">
+          <summary>Modo 3 — Mapear antenas y ubicaciones manualmente</summary>
+          <div class="tz-help-accordion-body">
+            <ul>
+              <li>No requiere cargar un archivo Excel.</li>
+              <li>Los registros se ingresan manualmente, uno por uno.</li>
+              <li>Se puede trabajar con Antenas/Celdas o con Puntos libres,
+                sin mezclar ambos tipos dentro de una misma sesión
+                actual.</li>
+              <li>Los registros ingresados pueden agregarse, editarse y
+                eliminarse antes de generar el análisis.</li>
+              <li>Nombre, latitud y longitud son obligatorios.</li>
+              <li>Azimut y celda se solicitan cuando corresponde al tipo de
+                registro.</li>
+              <li>Dirección y detalle son opcionales.</li>
+              <li>Se elige un color para el caso.</li>
+              <li>Se selecciona la carpeta de salida.</li>
+              <li>Se revisa el resumen antes de generar.</li>
+            </ul>
+            <p>El Modo 3 genera:</p>
+            <ul>
+              <li>KMZ (obligatorio).</li>
+              <li>KML, cuando se solicita y aplica.</li>
+              <li>
+                <strong>Archivo de datos del análisis (Modo 3):</strong>
+                conserva los registros y la configuración utilizados para
+                generar el mapa.
+              </li>
+              <li>
+                <strong>Archivo de verificación:</strong> contiene
+                información que permite comprobar la integridad de los
+                productos generados.
+              </li>
+              <li>Un registro técnico interno (log), cuando corresponde.</li>
+            </ul>
+          </div>
+        </details>
+      </section>
+
+      <!-- =================================================================
+           5. CARPETA DE SALIDA
+      ================================================================== -->
+      <section id="carpeta-salida" class="tz-help-section">
+        <h2>Carpeta de salida</h2>
+        <ul>
+          <li>El analista selecciona explícitamente la carpeta base donde se
+            guardarán los productos, mediante el botón
+            "Seleccionar carpeta…".</li>
+          <li>No existe una salida automática silenciosa como comportamiento
+            normal: sin una carpeta seleccionada, no es posible generar el
+            análisis.</li>
+          <li>Cancelar el selector no modifica una selección anterior, si ya
+            existía.</li>
+          <li>TZ Analyzer crea, dentro de la ubicación elegida, una carpeta
+            propia para cada ejecución.</li>
+          <li>Un análisis anterior no se sobrescribe.</li>
+        </ul>
+        <div class="tz-help-warn">
+          <strong>Pendiente de confirmar en Beta:</strong> el selector de
+          carpetas funciona actualmente en desarrollo; su comportamiento
+          dentro del futuro empaquetado (ONEDIR) será validado durante el
+          empaquetado.
+        </div>
+      </section>
+
+      <!-- =================================================================
+           6. RESULTADOS GENERADOS
+      ================================================================== -->
+      <section id="resultados" class="tz-help-section">
+        <h2>Resultados generados</h2>
+        <ul>
+          <li>Informe HTML — Modo 1 y Modo 2.</li>
+          <li>KMZ.</li>
+          <li>KML, cuando corresponde.</li>
+          <li>Archivo de datos del análisis (Modo 3).</li>
+          <li>Archivo de verificación/integridad.</li>
+          <li>Registro técnico (log), cuando corresponde.</li>
+        </ul>
+        <p>
+          El archivo de verificación permite comprobar la integridad de los
+          productos mediante valores SHA-256.
+        </p>
+        <p>Al finalizar, el resultado del análisis puede ser:</p>
+        <ul>
+          <li><strong>Completo:</strong> todos los productos solicitados se
+            generaron correctamente.</li>
+          <li><strong>Parcial:</strong> los productos obligatorios se
+            generaron correctamente, pero algún producto opcional
+            solicitado no pudo completarse.</li>
+          <li><strong>Fallido:</strong> TZ Analyzer no publica un resultado
+            como si el análisis hubiera finalizado correctamente.</li>
+        </ul>
+      </section>
+
+      <!-- =================================================================
+           7. USO SIN CONEXIÓN A INTERNET
+      ================================================================== -->
+      <section id="offline" class="tz-help-section">
+        <h2>Uso sin conexión a Internet</h2>
+        <p>
+          TZ Analyzer puede realizar su procesamiento sin conexión a
+          Internet. Los recursos necesarios para la interfaz y el informe se
+          incluyen localmente.
+        </p>
+        <p>
+          Sin conexión, el fondo cartográfico de OpenStreetMap puede no
+          visualizarse. Las ubicaciones, marcadores, geometrías y demás
+          elementos analíticos generados por TZ Analyzer permanecen
+          disponibles.
+        </p>
+        <p>
+          Los enlaces externos incluidos en determinados productos requieren
+          conexión únicamente cuando el usuario decide abrirlos.
+        </p>
+      </section>
+
+      <!-- =================================================================
+           8. PROBLEMAS FRECUENTES
+      ================================================================== -->
+      <section id="problemas-frecuentes" class="tz-help-section">
+        <h2>Problemas frecuentes</h2>
+
+        <details class="tz-help-accordion">
+          <summary>El archivo no es válido o está corrupto</summary>
+          <div class="tz-help-accordion-body">
+            <p>Verifique que el archivo sea un Excel válido y que no esté
+              dañado, y cárguelo nuevamente.</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>El archivo no tiene formato .xlsx</summary>
+          <div class="tz-help-accordion-body">
+            <p>TZ Analyzer solo admite archivos en formato .xlsx. Convierta
+              el archivo a ese formato antes de cargarlo.</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>El archivo supera los 200 MB</summary>
+          <div class="tz-help-accordion-body">
+            <p>Reduzca el tamaño del archivo (por ejemplo, dividiendo la
+              bitácora) antes de cargarlo nuevamente.</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>Modo 2: la bitácora no tiene una fecha reconocible</summary>
+          <div class="tz-help-accordion-body">
+            <p>Sin una fecha reconocible, TZ Analyzer no puede aplicar un
+              filtro temporal. Use el Modo 1 o revise el mapeo de la columna
+              de fecha.</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>Modo 2: la bitácora no tiene hora</summary>
+          <div class="tz-help-accordion-body">
+            <p>Sin una hora reconocible, solo están disponibles los filtros
+              por día o por rango de fechas; los filtros por rango de horas
+              no aplican.</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>El filtro aplicado no encontró registros</summary>
+          <div class="tz-help-accordion-body">
+            <p>Es posible volver directamente a revisar el filtro temporal
+              sin perder el resto de la configuración ya definida.</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>Ya hay un análisis en procesamiento</summary>
+          <div class="tz-help-accordion-body">
+            <p>TZ Analyzer procesa un análisis a la vez. Espere a que
+              finalice antes de iniciar otro.</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>TZ Analyzer tiene un cierre pendiente</summary>
+          <div class="tz-help-accordion-body">
+            <p>Se solicitó cerrar TZ Analyzer y hay un análisis en curso: el
+              cierre se completará automáticamente al finalizar. No es
+              necesario ni posible iniciar un nuevo análisis mientras
+              tanto.</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>No se seleccionó una carpeta de salida</summary>
+          <div class="tz-help-accordion-body">
+            <p>Seleccione una carpeta de salida en "Preparar análisis" antes
+              de generar el análisis; sin ella, TZ Analyzer no permite
+              continuar.</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>La carpeta seleccionada no se puede escribir</summary>
+          <div class="tz-help-accordion-body">
+            <p>Elija una carpeta distinta sobre la que el analista tenga
+              permisos de escritura, o corrija los permisos de la carpeta
+              actual e intente nuevamente.</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>El selector de carpeta no está disponible</summary>
+          <div class="tz-help-accordion-body">
+            <p>El componente del sistema operativo que abre el selector de
+              carpetas no está disponible en este equipo. Intente
+              nuevamente; si el problema persiste, consulte con soporte
+              técnico.</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>El mapa base no se ve sin conexión a Internet</summary>
+          <div class="tz-help-accordion-body">
+            <p>Es el comportamiento esperado: el fondo cartográfico de
+              OpenStreetMap requiere conexión. Las ubicaciones y demás
+              elementos generados por TZ Analyzer siguen disponibles (ver
+              <a href="#offline">Uso sin conexión a Internet</a>).</p>
+          </div>
+        </details>
+
+        <details class="tz-help-accordion">
+          <summary>El resultado fue parcial o falló</summary>
+          <div class="tz-help-accordion-body">
+            <p>Revise el mensaje mostrado al finalizar el análisis. Un
+              resultado parcial indica que los productos obligatorios se
+              generaron correctamente, pero algún producto opcional
+              solicitado no pudo completarse. Un resultado fallido indica
+              que TZ Analyzer no publica un resultado como si hubiera
+              finalizado correctamente.</p>
+          </div>
+        </details>
+      </section>
+
+      <!-- =================================================================
+           9. CONSIDERACIONES DE USO
+      ================================================================== -->
+      <section id="consideraciones" class="tz-help-section">
+        <h2>Consideraciones de uso</h2>
+        <ul>
+          <li>TZ Analyzer procesa un análisis a la vez.</li>
+          <li>SALIR no interrumpe un análisis activo: TZ Analyzer espera a
+            que finalice antes de cerrarse.</li>
+          <li>Volver al menú principal abandona la preparación actual,
+            cuando corresponda.</li>
+          <li>Los resultados generados deben revisarse antes de
+            utilizarse.</li>
+        </ul>
+        <p>
+          Los resultados generados por TZ Analyzer constituyen productos de
+          apoyo al análisis y deben ser revisados por el analista antes de
+          su utilización.
+        </p>
+      </section>
+
+      <!-- =================================================================
+           10. ACERCA DE / VERSIÓN
+      ================================================================== -->
+      <section id="acerca-version" class="tz-help-section">
+        <h2>Acerca de / Versión</h2>
+
+        <h3>Desarrollo</h3>
+        <p>
+          TZ Analyzer fue concebido y desarrollado a partir de experiencia
+          práctica y de necesidades reales del análisis forense de registros
+          de telecomunicaciones. La metodología de procesamiento, los
+          criterios funcionales y el diseño orientado al analista responden
+          a esas necesidades operativas.
+        </p>
+
+        <h3>Uso de herramientas de inteligencia artificial en el desarrollo</h3>
+        <p>
+          Durante el diseño, desarrollo, codificación, pruebas y revisión
+          técnica de TZ Analyzer se utilizaron herramientas de inteligencia
+          artificial como apoyo al proceso de desarrollo de software.
+        </p>
+        <p>
+          TZ Analyzer no incorpora inteligencia artificial para efectuar sus
+          análisis. Los resultados que genera provienen de procedimientos y
+          operaciones programadas y reproducibles.
+        </p>
+
+        <h3>Versión</h3>
+        <p>{{ help_version_label }}</p>
+      </section>
+
+      <!-- =================================================================
+           PENDIENTE DE CONFIRMAR PARA LA DISTRIBUCIÓN BETA
+           Bloque fácil de retirar/actualizar antes de un release estable.
+      ================================================================== -->
+      <section id="pendientes" class="tz-help-section tz-help-pending">
+        <h2>Pendiente de confirmar para la distribución Beta</h2>
+        <p>Los siguientes puntos todavía no están definidos y se
+          confirmarán durante el empaquetado y la distribución Beta:</p>
+        <ul>
+          <li>Nombre definitivo del archivo ejecutable.</li>
+          <li>Comportamiento del selector de carpetas ya empaquetado
+            (ONEDIR).</li>
+          <li>Versión Beta definitiva.</li>
+          <li>Icono y nombre del acceso directo, si finalmente existe
+            uno.</li>
+          <li>Advertencias adicionales que surjan de las pruebas de humo
+            sobre el empaquetado ONEDIR.</li>
+        </ul>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    function tzHelpToggleNav() {
+      var nav = document.getElementById("tz-help-nav");
+      var toggle = document.getElementById("tz-help-nav-toggle");
+      if (!nav || !toggle) {
+        return;
+      }
+      var expanded = nav.classList.toggle("tz-help-nav-open");
+      toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    }
+  </script>
+</body>
+</html>

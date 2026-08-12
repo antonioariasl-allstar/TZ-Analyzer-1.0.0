@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import io
 import os
+import tempfile
+from typing import Optional
 
 import pytest
 
@@ -151,6 +153,29 @@ def advance_to_configure(client):
     client.post("/sheet", data={"hoja": SHEET_NAME}, follow_redirects=True)
     client.post("/mapping", data=dict(REAL_MAPPING_FORM), follow_redirects=True)
     return client.post("/mapping/confirm", follow_redirects=True)
+
+
+def select_output_folder(client, path: Optional[str] = None) -> str:
+    """Fija ``Session.carpeta_salida`` directamente, sin pasar por el
+    diálogo nativo real (MICROBLOQUE 6: la selección ahora es obligatoria y
+    explícita — ver ``tz_web.routes.select_output_folder`` para el endpoint
+    real que sí abre el selector).
+
+    Equivalente de pruebas a "el usuario ya eligió una carpeta válida": las
+    pruebas que ejercitan el endpoint del selector en sí (cancelar, error de
+    escritura, rechazo por análisis activo/cierre pendiente, etc.) no usan
+    este helper — mockean ``tz_web.routes.pick_folder`` y llaman al endpoint
+    real. Este helper es para el resto de pruebas, cuyo interés está en lo
+    que pasa DESPUÉS de tener una carpeta ya elegida.
+    """
+    if path is None:
+        path = tempfile.mkdtemp(prefix="tz_test_salida_")
+    with client.session_transaction() as flask_sess:
+        case_id = flask_sess["case_id"]
+    case = tz_web_state.get_session(case_id)
+    case.carpeta_salida = path
+    tz_web_state.touch(case)
+    return path
 
 
 def wait_for_terminal_status(client, timeout: float = 30.0):

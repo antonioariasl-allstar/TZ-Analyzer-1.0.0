@@ -17,6 +17,7 @@ from tests.web.conftest import (
     REAL_MAPPING_FORM,
     SHEET_NAME,
     advance_to_configure,
+    select_output_folder,
     upload_real_file,
     wait_for_terminal_status,
 )
@@ -780,6 +781,7 @@ def test_cambiar_tipo_no_sobrescribe_nombre_personalizado_al_confirmar(client):
 
 def test_generar_analisis_inicia_tarea_y_redirige_a_procesamiento(client):
     _advance_to_resumen(client)
+    select_output_folder(client)
     resp = client.post("/configure/resumen", data={"accion": "siguiente"}, follow_redirects=True)
     assert resp.status_code == 200
     assert "Procesando análisis".encode("utf-8") in resp.data
