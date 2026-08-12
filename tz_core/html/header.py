@@ -9,6 +9,104 @@ import base64
 import mimetypes
 import os
 
+from tz_core.security_escaping import esc_html
+
+# --- AUD-08: Leaflet/leaflet-heat vendorizados localmente ------------------
+# El informe HTML debe funcionar sin conexión: en vez de <link>/<script src>
+# apuntando a unpkg (CDN), el CSS y el JS de Leaflet/leaflet-heat se leen de
+# tz_core/assets/vendor/leaflet/ (ver NOTICE.md ahí para versión/licencia) y
+# se embeben inline en el propio HTML generado. Los íconos por defecto de
+# Leaflet (marker-icon/-2x/shadow) se embeben como data URIs y se fijan
+# explícitamente vía L.Icon.Default.mergeOptions(), sin depender de que
+# Leaflet detecte una ruta relativa "images/" junto al HTML (que dejaría de
+# existir en cuanto el informe se copie a otra carpeta).
+_VENDOR_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "vendor", "leaflet")
+
+_vendor_cache: dict = {}
+
+
+def _read_vendor_text(name: str) -> str:
+    path = os.path.join(_VENDOR_DIR, name)
+    with open(path, "r", encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _read_vendor_data_uri(rel_path: str, mime: str) -> str:
+    path = os.path.join(_VENDOR_DIR, rel_path)
+    with open(path, "rb") as fh:
+        b64 = base64.b64encode(fh.read()).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
+def _load_vendor_leaflet_block() -> str:
+    """Devuelve <style>/<script> con Leaflet y leaflet-heat embebidos inline.
+
+    Los assets vendorizados (tz_core/assets/vendor/leaflet/) son imprescindibles:
+    si falta alguno o no puede leerse, la generación del informe debe fallar
+    explícitamente en vez de degradar silenciosamente a un HTML que dependa de
+    un CDN externo (el informe debe funcionar sin conexión).
+    """
+    if "block" in _vendor_cache:
+        return _vendor_cache["block"]
+
+    try:
+        leaflet_css = _read_vendor_text("leaflet.css")
+        leaflet_js = _read_vendor_text("leaflet.js")
+        heat_js = _read_vendor_text("leaflet-heat.js")
+
+        marker_icon_uri = _read_vendor_data_uri("images/marker-icon.png", "image/png")
+        marker_icon_2x_uri = _read_vendor_data_uri("images/marker-icon-2x.png", "image/png")
+        marker_shadow_uri = _read_vendor_data_uri("images/marker-shadow.png", "image/png")
+    except OSError as exc:
+        raise RuntimeError(
+            "No se pudieron cargar los assets vendorizados de Leaflet/leaflet-heat "
+            f"requeridos para generar el informe offline (buscados en {_VENDOR_DIR!r}). "
+            "La instalación está incompleta: reinstale/repare tz_core/assets/vendor/leaflet/. "
+            "No se genera HTML degradado que dependa de un CDN externo."
+        ) from exc
+
+    # La única referencia relativa relevante en tiempo de ejecución (el
+    # ícono por defecto de marcador); se reescribe a data URI para que el
+    # CSS embebido no dependa de un archivo "images/..." junto al HTML.
+    leaflet_css = leaflet_css.replace(
+        "url(images/marker-icon.png)", f"url({marker_icon_uri})"
+    )
+
+    block = (
+        f"<style>\n{leaflet_css}\n</style>\n"
+        f"<script>\n{leaflet_js}\n</script>\n"
+        f"<script>\n{heat_js}\n</script>\n"
+        "<script>\n"
+        "(function(){\n"
+        "  try {\n"
+        "    L.Icon.Default.mergeOptions({\n"
+        f"      iconUrl: '{marker_icon_uri}',\n"
+        f"      iconRetinaUrl: '{marker_icon_2x_uri}',\n"
+        f"      shadowUrl: '{marker_shadow_uri}'\n"
+        "    });\n"
+        "  } catch(e) {}\n"
+        "})();\n"
+        "</script>\n"
+    )
+
+    _vendor_cache["block"] = block
+    return block
+
+
+# Helper JS compartido (AUD-07): escapa texto de datos antes de insertarlo
+# como HTML dentro de popups/tooltips de Leaflet armados por concatenación
+# de strings en el navegador (los marcadores se construyen con datos de la
+# bitácora — antena, alias, etc. — vía JSON embebido de forma segura, pero
+# igual deben tratarse como texto, no como markup, al insertarlos en el DOM).
+_TZ_ESC_HTML_JS = """<script>
+window.tzEscHtml = function(value) {
+    if (value === null || value === undefined) return '';
+    var div = document.createElement('div');
+    div.textContent = String(value);
+    return div.innerHTML;
+};
+</script>"""
+
 
 def build_logo_html(config: dict | None = None) -> str:
     """Construye el bloque <img> con logo embebido en base64 o fallback SVG inline."""
@@ -19,7 +117,7 @@ def build_logo_html(config: dict | None = None) -> str:
         _branding = _br_all.get("branding", {}) or {}
 
         # Alt y ancho deseado
-        _alt = (
+        _alt = esc_html(
             str((_branding.get("logo_alt") or "")).strip()
             or str(((_brand.get("logo") or {}).get("alt") or "")).strip()
             or str(_brand.get("name") or "TZ Analyzer").strip()
@@ -112,11 +210,12 @@ def generate_html_header(theme_hex: str, nombre_salida: str) -> str:
         <html lang="es">
         <head>
     """
+    _leaflet_block = _load_vendor_leaflet_block()
     return f"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Informe de Bitácora — {nombre_salida}</title>
+<title>Informe de Bitácora — {esc_html(nombre_salida)}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root {{ 
@@ -184,12 +283,27 @@ section{{margin-top:22px}}
 .barrow td{{padding-top:0}}
 /* estilos para mini-mapas por día */
 .map-notice{{ padding:12px; background:#f0f0f0; border:1px solid #ddd; border-radius:6px; color:#666; text-align:center; font-size:13px; }}
+.tz-offline-map-notice{{ position:absolute; left:0; right:0; bottom:0; z-index:1000; background:#fff8e1cc; border-top:1px solid #f0d98c; color:#6b5300; font-size:12px; text-align:center; padding:6px 10px; pointer-events:none; }}
 </style>
 
-<!-- Dependencias de Leaflet para mapas de calor -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+<!-- Dependencias de Leaflet/leaflet-heat vendorizadas localmente (AUD-08, offline) -->
+{_leaflet_block}
+{_TZ_ESC_HTML_JS}
+<script>
+// AUD-08: aviso discreto y no bloqueante cuando el fondo cartográfico (tiles
+// remotos de OpenStreetMap) no puede cargarse por falta de conexión. Nunca
+// impide que el mapa, los marcadores o el heatmap se inicialicen.
+window.tzShowOfflineMapNotice = function(map, containerId) {{
+    try {{
+        var el = document.getElementById(containerId);
+        if (!el || el.querySelector('.tz-offline-map-notice')) return;
+        var notice = document.createElement('div');
+        notice.className = 'tz-offline-map-notice';
+        notice.textContent = 'Fondo cartográfico no disponible sin conexión. Las ubicaciones y geometrías del análisis se conservan.';
+        el.appendChild(notice);
+    }} catch (e) {{}}
+}};
+</script>
 
 </head>"""
 
@@ -234,7 +348,7 @@ def generate_body_header(logo_html: str, nombre_salida: str, hoja: str | None, g
         version = 'Versión 1.0.0'
     
     # Construir texto de hoja si existe
-    hoja_text = f' — Hoja: {hoja}' if hoja else ''
+    hoja_text = f' — Hoja: {esc_html(hoja)}' if hoja else ''
     
     return f"""<body>
   <header>
@@ -249,7 +363,7 @@ def generate_body_header(logo_html: str, nombre_salida: str, hoja: str | None, g
     </div>
 
     <h1 style="font-size:20px;font-weight:700;margin:4px 0 0 0;">
-      Informe de Bitácora — <span class="badge">{nombre_salida}</span>
+      Informe de Bitácora — <span class="badge">{esc_html(nombre_salida)}</span>
     </h1>
 
     <div class="small" style="margin-top:4px;">

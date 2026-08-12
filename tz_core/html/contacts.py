@@ -18,6 +18,7 @@ from tz_core.bitacora_normalization import (
     es_valor_significativo,
 )
 from tz_core.logging_utils import log
+from tz_core.security_escaping import esc_html
 from tz_core.analytics import construir_seccion_todos_contactos
 
 
@@ -316,7 +317,7 @@ def build_top_contacts_sections(
                 rows.append(
                     f"<tr>"
                     f"<td class='right mono'>{i}</td>"
-                    f"<td class='mono'>{k}</td>"
+                    f"<td class='mono'>{esc_html(k)}</td>"
                     f"<td class='mono'>{int(n):,} <span class='small'>({pct:.1f}%)</span></td>"
                     f"</tr>"
                 )
@@ -361,7 +362,7 @@ def build_top_contacts_sections(
                         rows.append(
                             f"<tr>"
                             f"<td class='right mono'>{i}</td>"
-                            f"<td class='mono'>{k}</td>"
+                            f"<td class='mono'>{esc_html(k)}</td>"
                             f"<td class='mono'>{_fmt_hms(tot)} <span class='small'>({pct:.1f}%)</span></td>"
                             f"</tr>"
                         )
@@ -408,7 +409,7 @@ def build_top_contacts_sections(
                 rows.append(
                     f"<tr>"
                     f"<td class='right mono'>{i}</td>"
-                    f"<td class='mono'>{k}</td>"
+                    f"<td class='mono'>{esc_html(k)}</td>"
                     f"<td class='mono'>{int(n):,} <span class='small'>({pct:.1f}%)</span></td>"
                     f"</tr>"
                 )
@@ -446,7 +447,7 @@ def build_top_contacts_sections(
                         rows.append(
                             f"<tr>"
                             f"<td class='right mono'>{i}</td>"
-                            f"<td class='mono'>{k}</td>"
+                            f"<td class='mono'>{esc_html(k)}</td>"
                             f"<td class='mono'>{_fmt_hms(tot)} <span class='small'>({pct:.1f}%)</span></td>"
                             f"</tr>"
                         )

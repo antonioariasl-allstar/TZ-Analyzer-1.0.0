@@ -13,6 +13,7 @@ from pathlib import Path
 from tz_core.bitacora_normalization import parse_date_series, sanitize_latlon
 from tz_core.html_helpers import fmt_datetime as fmt_dt
 from tz_core.logging_utils import log
+from tz_core.security_escaping import esc_html
 
 
 def prepare_report_metrics(
@@ -277,7 +278,7 @@ def generate_kpi_section(
         <div class="label">{_label_ant_uniq}</div>
       </div>
       <div class="card">
-        <div class="n">{top_antena}</div>
+        <div class="n">{esc_html(top_antena)}</div>
         <div class="label">Top antena ({top_count:,} — {top_pct:.1f}%)</div>
       </div>
     </div>

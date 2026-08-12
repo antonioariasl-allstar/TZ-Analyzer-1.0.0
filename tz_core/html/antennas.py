@@ -14,6 +14,7 @@ import pandas as pd
 from tz_core.bitacora_normalization import parse_date_series, sanitize_latlon
 from tz_core.dataframe_utils import pick_first_existing_column
 from tz_core.logging_utils import log
+from tz_core.security_escaping import esc_html
 from tz_core.time_utils import normalize_hour_to_hhmmss
 
 
@@ -141,9 +142,9 @@ def build_antennas_table(df: pd.DataFrame, config: dict | None = None) -> str:
         for idx, (cnt, antenna, lat_s, lon_s, az_s, es_inferido) in enumerate(entries, start=1):
             # Si hay coordenadas válidas, convertir la antena en link a Google Maps
             if lat_s != "—" and lon_s != "—":
-                ant_cell = f'<a href="https://www.google.com/maps?q={lat_s},{lon_s}" target="_blank" rel="noopener">{antenna}</a>'
+                ant_cell = f'<a href="https://www.google.com/maps?q={lat_s},{lon_s}" target="_blank" rel="noopener">{esc_html(antenna)}</a>'
             else:
-                ant_cell = antenna
+                ant_cell = esc_html(antenna)
             if es_inferido:
                 ant_cell += _BADGE_SITIO_INFERIDO
 
@@ -295,10 +296,10 @@ def build_top_antennas_section(
 
             if (lt is not None) and (lg is not None):
                 url = f"https://www.google.com/maps?q={lt:.6f},{lg:.6f}"
-                ant_fmt = f'<a href="{url}" target="_blank" rel="noopener">{ant}</a>'
+                ant_fmt = f'<a href="{url}" target="_blank" rel="noopener">{esc_html(ant)}</a>'
                 lt_fmt, lg_fmt = f"{lt:.6f}", f"{lg:.6f}"
             else:
-                ant_fmt, lt_fmt, lg_fmt = ant, "—", "—"
+                ant_fmt, lt_fmt, lg_fmt = esc_html(ant), "—", "—"
             if es_inferido:
                 ant_fmt += _BADGE_SITIO_INFERIDO
 
@@ -567,9 +568,9 @@ def build_antennas_by_hour_section(
                 lon_s = _fmt(lon) if lon is not None else "—"
 
                 if lat is not None and lon is not None:
-                    ant_html = f'<a href="https://www.google.com/maps?q={lat_s},{lon_s}" target="_blank" rel="noopener">{ant}</a>'
+                    ant_html = f'<a href="https://www.google.com/maps?q={lat_s},{lon_s}" target="_blank" rel="noopener">{esc_html(ant)}</a>'
                 else:
-                    ant_html = f"{ant}"
+                    ant_html = esc_html(ant)
                 if tiene_col_inferido and bool(sub_ant["sitio_inferido"].fillna(False).astype(bool).any()):
                     ant_html += _BADGE_SITIO_INFERIDO
 

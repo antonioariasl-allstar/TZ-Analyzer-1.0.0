@@ -26,6 +26,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 from tz_core.bitacora_normalization import normalize_imei, parse_duration_seconds, DuracionEstado
+from tz_core.security_escaping import esc_kml_value as _esc
 
 # Import de validation_utils para a_float
 try:
@@ -203,8 +204,8 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
     f = fmt("fecha"); h = fmt("hora")
     if f or h:
         l1 = []
-        if f: l1.append(f"<b>Fecha:</b> {f}")
-        if h: l1.append(f"<b>Hora:</b> {h}")
+        if f: l1.append(f"<b>Fecha:</b> {_esc(f)}")
+        if h: l1.append(f"<b>Hora:</b> {_esc(h)}")
         P.append(" &middot; ".join(l1))
         P.append(hr_compact)
 
@@ -216,9 +217,9 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
     imei_fmt = fmt("imei")
     l2 = []
     if tiene_valor(tel):
-        l2.append(f"<b>Número:</b> {str(tel).strip()}")
+        l2.append(f"<b>Número:</b> {_esc(str(tel).strip())}")
     if imei_fmt:
-        l2.append(f"registrado en <b>IMEI:</b> {imei_fmt}")
+        l2.append(f"registrado en <b>IMEI:</b> {_esc(imei_fmt)}")
     if l2:
         P.append(", ".join(l2))
         grupo_identidad_tuvo_datos = True
@@ -234,9 +235,9 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
         nombre_usuario = campos.get("nombre_usuario", None)
     l3a = []
     if tiene_valor(alias):
-        l3a.append(f"<b>Alias:</b> {str(alias).strip()}")
+        l3a.append(f"<b>Alias:</b> {_esc(str(alias).strip())}")
     if tiene_valor(nombre_usuario):
-        l3a.append(f"<b>Usuario:</b> {str(nombre_usuario).strip()}")
+        l3a.append(f"<b>Usuario:</b> {_esc(str(nombre_usuario).strip())}")
     if l3a:
         P.append(" &middot; ".join(l3a))
         grupo_identidad_tuvo_datos = True
@@ -244,7 +245,7 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
     # Fila 3b: Abonado
     abon = campos.get("abonado", None)
     if tiene_valor(abon):
-        P.append(f"<b>Abonado:</b> {str(abon).strip()}")
+        P.append(f"<b>Abonado:</b> {_esc(str(abon).strip())}")
         grupo_identidad_tuvo_datos = True
 
     # Separador del grupo identidad
@@ -268,20 +269,20 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
 
     l4 = []
     if tiene_valor(ant_line):
-        l4.append(f"<b>Antena:</b> {str(ant_line).strip()}")
+        l4.append(f"<b>Antena:</b> {_esc(str(ant_line).strip())}")
     if lat: l4.append(f"<b>Lat:</b> {lat}")
     if lon: l4.append(f"<b>Long:</b> {lon}")
     if az:
-        az_txt = f"<b>Azimut:</b> {az}°"
+        az_txt = f"<b>Azimut:</b> {_esc(az)}°"
         if count_azimut is not None:
             try:
                 nveces = int(count_azimut)
             except Exception:
                 nveces = count_azimut
             az_txt += f" (<b>{nveces} veces</b>)"
-        l4.append(az_txt)      
-    if celda: l4.append(f"<b>Celda:</b> {celda}")
-    if lac: l4.append(f"<b>LAC:</b> {lac}")
+        l4.append(az_txt)
+    if celda: l4.append(f"<b>Celda:</b> {_esc(celda)}")
+    if lac: l4.append(f"<b>LAC:</b> {_esc(lac)}")
     
     seccion_ubicacion_tuvo_datos = False
     if l4:
@@ -322,7 +323,7 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
             if _norm_text(direccion) and _norm_text(ant_line) and _norm_text(direccion) == _norm_text(ant_line):
                 mostrar_dir = False
         if mostrar_dir:
-            P.append(f"<b>{_label_dir}:</b> {direccion}")
+            P.append(f"<b>{_label_dir}:</b> {_esc(direccion)}")
             seccion_ubicacion_tuvo_datos = True
 
     # Separador tras ubicación
@@ -336,14 +337,14 @@ def armar_descripcion_compacta(campos: dict, count_azimut=None, suprimir_direcci
     l5 = []
 
     if inter is not None:
-        t = f"<b>Interacción:</b> {inter}"
+        t = f"<b>Interacción:</b> {_esc(inter)}"
         # Solo agregar tel_contacto si NO es "—"
         if (telc is not None) and (str(telc).strip() != "—"):
-            t += f" — {str(telc).strip()}"
+            t += f" — {_esc(str(telc).strip())}"
         l5.append(t)
 
     if dur:
-        l5.append(f"<b>Duración:</b> {dur}")
+        l5.append(f"<b>Duración:</b> {_esc(dur)}")
 
     if l5:
         P.append(" &middot; ".join(l5))
@@ -388,15 +389,15 @@ def agregar_bloque(partes: list, fila: dict, pares: list) -> None:
                 extra = ""
                 telc = fila.get("tel_contacto", None)
                 if tiene_valor(telc):
-                    extra = f" — {str(telc).strip()}"
-                bloque.append(f"<b>{etiqueta}:</b> {val_fmt}{extra}<br>")
+                    extra = f" — {_esc(str(telc).strip())}"
+                bloque.append(f"<b>{etiqueta}:</b> {_esc(val_fmt)}{extra}<br>")
                 continue
 
             # Resto de columnas (con formateo)
             val_fmt = _formatear_valor_para_burbuja(col, val)
             if val_fmt is None or (isinstance(val_fmt, str) and not val_fmt.strip()):
                 continue
-            bloque.append(f"<b>{etiqueta}:</b> {val_fmt}<br>")
+            bloque.append(f"<b>{etiqueta}:</b> {_esc(val_fmt)}<br>")
     if bloque:
         partes.extend(bloque)
         partes.append("<hr>")

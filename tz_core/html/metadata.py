@@ -22,6 +22,7 @@ from tz_core.html_helpers import (
 from tz_core.runtime_utils import collect_env_snapshot
 from tz_core.bitacora_normalization import normalize_msisdn, normalize_imei
 from tz_core.logging_utils import log
+from tz_core.security_escaping import esc_html, esc_html_or_none
 
 
 def generate_metadata_section(nombre_bitacora: str | None, hoja: str | None, rango_str: str, ident_rows: str) -> str:
@@ -56,9 +57,9 @@ def generate_metadata_section(nombre_bitacora: str | None, hoja: str | None, ran
     return f"""  <section class="meta">
     <h2>Metadatos</h2>
     <table>
-        <tr><td><b>Bitácora telefónica:</b></td><td class="mono">{nombre_bitacora or '—'}</td></tr>
-        <tr><td><b>Hoja analizada:</b></td><td class="mono">{hoja or '—'}</td></tr>
-        <tr><td><b>Periodo analizado:</b></td><td class="mono">{rango_str}</td></tr>
+        <tr><td><b>Bitácora telefónica:</b></td><td class="mono">{esc_html(nombre_bitacora) or '—'}</td></tr>
+        <tr><td><b>Hoja analizada:</b></td><td class="mono">{esc_html(hoja) or '—'}</td></tr>
+        <tr><td><b>Periodo analizado:</b></td><td class="mono">{esc_html(rango_str)}</td></tr>
         {ident_rows}
     </table>
 
@@ -264,9 +265,15 @@ def build_identification_rows(df: pd.DataFrame, config: Optional[dict] = None) -
     ident_rows += tel_row
     ident_rows += imei_row
     ident_rows += imsi_row
-    ident_rows += row_html("Alias", alias_disp, ali_n, ali_list, ali_more, mono=False)
-    ident_rows += row_html("Usuario", user_disp, usr_n, usr_list, usr_more, mono=False)
-    ident_rows += row_html("Abonado", abon_disp, abo_n, abo_list, abo_more, mono=False)
+    ident_rows += row_html(
+        "Alias", esc_html_or_none(alias_disp), ali_n, [esc_html(v) for v in ali_list], ali_more, mono=False
+    )
+    ident_rows += row_html(
+        "Usuario", esc_html_or_none(user_disp), usr_n, [esc_html(v) for v in usr_list], usr_more, mono=False
+    )
+    ident_rows += row_html(
+        "Abonado", esc_html_or_none(abon_disp), abo_n, [esc_html(v) for v in abo_list], abo_more, mono=False
+    )
 
     return ident_rows
 

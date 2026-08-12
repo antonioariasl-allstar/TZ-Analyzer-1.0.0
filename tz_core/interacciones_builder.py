@@ -10,7 +10,6 @@ Architecture: TZ-Analyzer v1.0.0 — tz_core package
 
 from __future__ import annotations
 
-import json
 from html import escape as _html_escape
 from math import radians, sin, cos, sqrt, atan2
 from typing import Any, Callable, Dict, Optional
@@ -31,6 +30,7 @@ from tz_core.bitacora_normalization import (
     normalize_contact_fields,
 )
 from tz_core.html_helpers import fmt_imei_item
+from tz_core.security_escaping import esc_html, safe_json_for_script
 from tz_core.time_utils import _to_datetime_series, _fmt_hms
 
 
@@ -529,10 +529,10 @@ def construir_seccion_interacciones(
                     lg_f = float(lg)
                     if not (np.isnan(lt_f) or np.isnan(lg_f)):
                         url = f"https://www.google.com/maps?q={lt_f:.6f},{lg_f:.6f}"
-                        return f'<a href="{url}" target="_blank" rel="noopener">{ant}</a>'
+                        return f'<a href="{url}" target="_blank" rel="noopener">{esc_html(ant)}</a>'
             except Exception:
                 pass
-            return str(ant).strip() if str(ant).strip() else "—"
+            return esc_html(ant) if str(ant).strip() else "—"
 
         for idx, (_, r) in enumerate(df_d.iterrows(), start=1):
             contacto = str(r.get("_contacto", "No disponible"))
@@ -553,17 +553,17 @@ def construir_seccion_interacciones(
             row_cls = "" if idx <= 20 else ' style="display:none" class="row-hidden"'
             tds = [
                 f'<td class="mono">{idx}</td>',
-                f"<td>{contacto}</td>",
-                f'<td class="mono nowrap">{hora_val}</td>',
-                f"<td>{tipo_val}</td>",
-                f'<td class="mono nowrap">{dur_hms}</td>',
+                f"<td>{esc_html(contacto)}</td>",
+                f'<td class="mono nowrap">{esc_html(hora_val)}</td>',
+                f"<td>{esc_html(tipo_val)}</td>",
+                f'<td class="mono nowrap">{esc_html(dur_hms)}</td>',
                 f"<td>{ant_val}</td>",
                 f'<td class="mono nowrap">{lat_val}</td>',
                 f'<td class="mono nowrap">{long_val}</td>',
-                f'<td class="mono">{az_val}°</td>',
+                f'<td class="mono">{esc_html(az_val)}°</td>',
             ]
             if include_celda:
-                tds.append(f'<td class="mono">{(celda_val if celda_val else "—")}</td>')
+                tds.append(f'<td class="mono">{esc_html(celda_val) if celda_val else "—"}</td>')
             out.append('<tr data-day="' + pd.to_datetime(d).strftime("%Y-%m-%d") + '"' + row_cls + '>' + ''.join(tds) + '</tr>')
 
         out.append("</tbody></table></div>")
@@ -665,7 +665,7 @@ def construir_seccion_interacciones(
         if alertas:
             out.append('<div class="alertas-dia"><ul>')
             for a in alertas:
-                out.append(f'<li class="alerta-item">{a}</li>')
+                out.append(f'<li class="alerta-item">{esc_html(a)}</li>')
             out.append('</ul></div>')
 
         try:
@@ -730,7 +730,7 @@ def construir_seccion_interacciones(
                 for m in markers:
                     log(f"  - {m['name']}: {m['count']} activaciones en ({m['lat']:.6f}, {m['lon']:.6f})")
 
-                _markers_js = json.dumps(markers, ensure_ascii=False)
+                _markers_js = safe_json_for_script(markers)
                 div_id = f"heatmap-{day_id}"
 
                 template = Template("""
@@ -750,7 +750,8 @@ def construir_seccion_interacciones(
         if (!Array.isArray(markers) || markers.length === 0) return;
         try {
             var map = L.map('${div_id}', { scrollWheelZoom: false });
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+            var tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+            tiles.on('tileerror', function(){ if (window.tzShowOfflineMapNotice) window.tzShowOfflineMapNotice(map, '${div_id}'); });
       
             var latlngs = markers.map(function(m){ return [m.lat, m.lon]; });
             var bounds = L.latLngBounds(latlngs);
@@ -771,7 +772,7 @@ def construir_seccion_interacciones(
                 var popupHtml = '' +
                     '<div style="font-family:sans-serif;min-width:180px;">' +
                     '<strong style="font-size:14px;">Antena #' + (idx+1) + '</strong><br>' +
-                    '<strong style="font-size:13px;color:#333;">' + (m.name || '') + '</strong><br>' +
+                    '<strong style="font-size:13px;color:#333;">' + window.tzEscHtml(m.name || '') + '</strong><br>' +
                     '<span style="font-size:12px;color:#666;">Activaciones: ' + (m.count || 0) + '</span><br>' +
                     '<span style="font-size:11px;color:#999;">Coordenadas: ' + (typeof m.lat==='number'? m.lat.toFixed(6): m.lat) + ', ' + (typeof m.lon==='number'? m.lon.toFixed(6): m.lon) + '</span>' +
                     ((m.azimut !== null && m.azimut !== undefined) ? "<br><span style='font-size:12px;color:#666;'>Azimut principal: " + m.azimut + "°</span>" : '') +

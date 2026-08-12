@@ -43,6 +43,7 @@ from tz_core.bitacora_normalization import (
     es_valor_significativo,
 )
 from tz_core.capabilities import CapabilitiesReport, detectar_capacidades
+from tz_core.security_escaping import esc_html, safe_json_for_script
 from .header import build_logo_html, generate_html_header, generate_body_header
 from .kpi import prepare_report_metrics, generate_kpi_section
 from .metadata import generate_metadata_section, build_identification_rows, inject_technical_metadata
@@ -89,11 +90,11 @@ def _construir_resumen_ejecutivo(
         # --- Apertura: sujeto (número/IMEI/ninguno) + período (si es válido) + total ---
         try:
             if tel_val:
-                _sujeto_txt = f"La bitácora telefónica correspondiente al número {tel_val}"
+                _sujeto_txt = f"La bitácora telefónica correspondiente al número {esc_html(tel_val)}"
             elif imei_val:
                 _sujeto_txt = (
                     f"La bitácora de la terminal telefónica identificada mediante el "
-                    f"IMEI {imei_val}"
+                    f"IMEI {esc_html(imei_val)}"
                 )
             else:
                 _sujeto_txt = "La bitácora analizada"
@@ -138,19 +139,19 @@ def _construir_resumen_ejecutivo(
 
                 if _ct_dur is None:
                     _oraciones.append(
-                        f"El contacto con mayor frecuencia fue <strong>{_ct_frec}</strong>, "
+                        f"El contacto con mayor frecuencia fue <strong>{esc_html(_ct_frec)}</strong>, "
                         f"con {_n_frec} registros."
                     )
                 elif _ct_dur == _ct_frec:
                     _oraciones.append(
-                        f"El contacto con mayor frecuencia fue <strong>{_ct_frec}</strong>, "
+                        f"El contacto con mayor frecuencia fue <strong>{esc_html(_ct_frec)}</strong>, "
                         f"con {_n_frec} registros. Este mismo contacto acumuló la mayor "
                         f"duración de comunicación, con {format_seconds_hms(_dur_seg)}."
                     )
                 else:
                     _oraciones.append(
-                        f"El contacto con mayor frecuencia fue <strong>{_ct_frec}</strong>, "
-                        f"con {_n_frec} registros, mientras que <strong>{_ct_dur}</strong> "
+                        f"El contacto con mayor frecuencia fue <strong>{esc_html(_ct_frec)}</strong>, "
+                        f"con {_n_frec} registros, mientras que <strong>{esc_html(_ct_dur)}</strong> "
                         f"acumuló la mayor duración de comunicación, con "
                         f"{format_seconds_hms(_dur_seg)}."
                     )
@@ -178,12 +179,12 @@ def _construir_resumen_ejecutivo(
                 if _es_sitio_inferido:
                     _oraciones.append(
                         f"El sitio inferido con mayor número de activaciones fue "
-                        f"<strong>{top_antena}</strong>."
+                        f"<strong>{esc_html(top_antena)}</strong>."
                     )
                 else:
                     _oraciones.append(
                         f"La antena con mayor número de activaciones fue "
-                        f"<strong>{top_antena}</strong>."
+                        f"<strong>{esc_html(top_antena)}</strong>."
                     )
         except Exception as exc:
             _log(f"[WARN] resumen_ejecutivo_antena: {exc}")
@@ -347,7 +348,7 @@ def generar_informe_html(
                 _tarjetas.append(
                     f'<div style="margin:8px 0;padding:10px 14px;background:#fff;'
                     f'border-left:3px solid var(--accent);border-radius:3px;">'
-                    f'<strong>{_num}</strong> '
+                    f'<strong>{esc_html(_num)}</strong> '
                     f'<span style="font-size:0.8em;background:var(--accent);color:#fff;'
                     f'padding:2px 6px;border-radius:3px;">{_r["categoria"]}</span><br>'
                     f'<span style="font-size:0.88em;color:#444;">{_r["narrativa"]}</span>'
@@ -769,8 +770,8 @@ def generar_informe_html(
 
                 for idx, salto in enumerate(saltos, start=1):
                     ts_str = salto['timestamp'].strftime('%d/%m/%Y %H:%M:%S') if salto['timestamp'] else '—'
-                    origen = salto['origen']
-                    destino = salto['destino']
+                    origen = esc_html(salto['origen'])
+                    destino = esc_html(salto['destino'])
                     if salto.get('origen_inferido'):
                         origen += _BADGE_SITIO_INFERIDO
                     if salto.get('destino_inferido'):
@@ -895,8 +896,8 @@ def generar_informe_html(
                     
                     # Si no hay puntos suficientes, omitimos la sección
                     if heat_points:
-                        _heat_js = _json.dumps(heat_points, ensure_ascii=False)
-                        _markers_js = _json.dumps(markers_data, ensure_ascii=False)
+                        _heat_js = safe_json_for_script(heat_points)
+                        _markers_js = safe_json_for_script(markers_data)
                         # Sección integrada al bloque de "Antenas más activadas":
                         # sin H2 ni nota, para que el mapa se perciba como parte del resumen de antenas.
                         sec_heatmap = f"""
@@ -917,6 +918,7 @@ def generar_informe_html(
       const tiles = L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
         attribution: '&copy; OpenStreetMap'
       }}).addTo(map);
+      tiles.on('tileerror', function(){{ if (window.tzShowOfflineMapNotice) window.tzShowOfflineMapNotice(map, 'heatmap'); }});
       
                     // === Utilidades para dibujar la orientación (azimut principal) ===
                     const AZ_COLOR = '#e74c3c';
@@ -988,7 +990,7 @@ def generar_informe_html(
           
           // Construir popup con información completa
           let popupContent = `<div style="font-family:sans-serif; font-size:13px;">`;
-          popupContent += `<strong style="font-size:14px;">${{m.name}}</strong><br>`;
+          popupContent += `<strong style="font-size:14px;">${{window.tzEscHtml(m.name)}}</strong><br>`;
           popupContent += `<span style="color:#666;">Activaciones: ${{m.count.toLocaleString()}}</span><br>`;
                     popupContent += `<span style="color:#666;">Coordenadas: ${{m.lat.toFixed(6)}}, ${{m.lon.toFixed(6)}}</span>`;
           

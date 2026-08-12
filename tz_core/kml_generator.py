@@ -51,12 +51,21 @@ from tz_core.bitacora_normalization import (
 )
 from tz_core.site_inference import construir_identificador_sitio
 from tz_core.validation_utils import tiene_valor
+from tz_core.security_escaping import esc_kml_value as _esc
 
 # Separador HTML compacto (usado en descripciones)
 HR_COMPACT = '<div style="border-top:1px solid #bbb; margin:1px 0; height:0;"></div>'
 
 # Cache global de estilos KML reutilizables (performance)
 _REUSABLE_STYLES = None
+
+# href del ícono de punto embebido en el KMZ para esta generación (AUD-08:
+# reemplaza la dependencia remota a maps.google.com/mapfiles/...). Se
+# resuelve una vez por documento vía kml.addfile() y se reutiliza en todos
+# los estilos de punto; si el asset local no está disponible queda en None
+# y el visor usa su propio ícono de pin por defecto (sin red).
+_ICON_HREF = None
+_KML_POINT_ICON_PATH = os.path.join(os.path.dirname(__file__), "assets", "kml_point_icon.png")
 
 # Nota de alcance breve, para burbujas individuales de sitios inferidos
 # (HITO 2B). La nota extensa (con la mención a "TZ Analyzer") solo aparece
@@ -216,8 +225,11 @@ def _crear_feature_kml(
         
         # Extraer parámetros de estilo (o defaults)
         theme_hex = style_cfg.get("theme_hex", "#ff00ff")
-        pin_icon_url = style_cfg.get("pin_icon_url", 
-            "http://maps.google.com/mapfiles/kml/paddle/wht-blank.png")
+        # AUD-08: sin override explícito de config, usar el ícono local
+        # embebido en el KMZ (_ICON_HREF); si no está disponible, no fijar
+        # href y dejar que el visor use su ícono de pin por defecto (nunca
+        # se cae de vuelta a la URL remota de maps.google.com).
+        pin_icon_url = style_cfg.get("pin_icon_url") or _ICON_HREF
         pin_scale = float(style_cfg.get("pin_scale", 1.1))
         label_scale = float(style_cfg.get("label_scale", 1.2))
         line_width = float(style_cfg.get("line_width", 5))
@@ -233,7 +245,8 @@ def _crear_feature_kml(
         s_pin = sk.Style()
         s_pin.iconstyle.color = pin_color
         s_pin.iconstyle.scale = pin_scale
-        s_pin.iconstyle.icon.href = pin_icon_url
+        if pin_icon_url:
+            s_pin.iconstyle.icon.href = pin_icon_url
         s_pin.labelstyle.color = pin_color
         s_pin.labelstyle.scale = label_scale
 
@@ -390,6 +403,17 @@ def generar_kml(
 
     kml = Kml()
     descartadas = 0
+
+    # Ícono de punto embebido en el KMZ (AUD-08): se registra una sola vez
+    # por documento con kml.addfile() y todos los estilos de punto reusan el
+    # mismo href. Sin dependencia remota a maps.google.com.
+    global _ICON_HREF
+    _ICON_HREF = None
+    if os.path.exists(_KML_POINT_ICON_PATH):
+        try:
+            _ICON_HREF = kml.addfile(_KML_POINT_ICON_PATH)
+        except Exception:
+            _ICON_HREF = None
 
     # ScreenOverlay permanente (Nivel 1 de advertencia — spec sección 2.8)
     _assets_dir = os.path.join(os.path.dirname(__file__), "assets")
@@ -656,7 +680,7 @@ def generar_kml(
         f"TZ Analyzer genera los siguientes elementos gr\u00e1ficos:<br><br>"
         f"<b>Radio gr\u00e1fico:</b> {_radio_lea} km<br>"
         f"<b>Apertura del sector:</b> {_half_lea * 2}\u00b0 (\u00b1{_half_lea}\u00b0)<br>"
-        f"<b>Configuraci\u00f3n del radio:</b> {_origen_legible}<br><br>"
+        f"<b>Configuraci\u00f3n del radio:</b> {_esc(_origen_legible)}<br><br>"
         f"<b>\u00bfQu\u00e9 significa el c\u00edrculo?</b><br>"
         f"Representa una distancia gr\u00e1fica de referencia alrededor de la antena "
         f"registrada y facilita la lectura espacial del mapa<br><br>"
@@ -785,12 +809,12 @@ def generar_kml(
         )
         _carpeta_act.description = (
             f"<b>Activación global:</b> {num_act}<br>"
-            f"<b>Fecha y hora:</b> {it.get('fecha', 'Sin Inf.')} {hora_display}<br>"
-            f"<b>Antena:</b> {it.get('antena', '')}<br>"
+            f"<b>Fecha y hora:</b> {_esc(it.get('fecha', 'Sin Inf.'))} {_esc(hora_display)}<br>"
+            f"<b>Antena:</b> {_esc(it.get('antena', ''))}<br>"
             f"{_az_line}"
             f"<b>Radio gráfico:</b> {_radio_kml} km<br>"
             f"{_apertura_line}"
-            f"<b>Origen del radio:</b> {_radio_origen}<br>"
+            f"<b>Origen del radio:</b> {_esc(_radio_origen)}<br>"
             f"<hr>"
             f"<i>Representación gráfica construida a partir de la antena registrada, "
             f"el radio configurado y el azimut disponible en la bitácora</i>"
@@ -937,12 +961,12 @@ def generar_kml(
                     return str(s).strip().lower()
 
             # En carpetas TOP: Mostrar "Antena:" siempre + "Dirección:" solo si es diferente
-            _ant_line = f"<b>Antena:</b> {antena}<br>"
+            _ant_line = f"<b>Antena:</b> {_esc(antena)}<br>"
             _dir_line = ""
             if direccion not in (None, "", "SinInf"):
                 # Mostrar dirección solo si es diferente de antena (evitar redundancia)
                 if _norm_text(direccion) != _norm_text(antena):
-                    _dir_line = f"<b>{_label_dir_top}:</b> {direccion}<br>"
+                    _dir_line = f"<b>{_label_dir_top}:</b> {_esc(direccion)}<br>"
 
             # Nota breve de sitio inferido (HITO 2B) — la nota extensa aparece
             # una sola vez, como leyenda general del documento.
@@ -954,18 +978,18 @@ def generar_kml(
             desc_core = f"""
 <b>Total de activaciones:</b> {total}<br>
 <hr>
-<b>Número:</b> {numero}<br>
-<b>IMEI:</b> {imei}<br>
-<b>Alias:</b> {alias}<br>
-<b>Usuario:</b> {usuario}<br>
-<b>Abonado:</b> {abonado}<br>
+<b>Número:</b> {_esc(numero)}<br>
+<b>IMEI:</b> {_esc(imei)}<br>
+<b>Alias:</b> {_esc(alias)}<br>
+<b>Usuario:</b> {_esc(usuario)}<br>
+<b>Abonado:</b> {_esc(abonado)}<br>
 <hr>
 {_ant_line}<b>Lat:</b> {lat} &nbsp; <b>Long:</b> {lon}<br>
-<b>Celda:</b> {celda}<br>
+<b>Celda:</b> {_esc(celda)}<br>
 {_dir_line}
 {_sitio_inferido_line}<hr>
-<b>Azimut principal:</b> {az_p_disp}° ({cuenta_principal} veces)<br>
-<b>Azimuts secundarios:</b> {secundarios_text if secundarios_text else 'Ninguno'}
+<b>Azimut principal:</b> {_esc(az_p_disp)}° ({cuenta_principal} veces)<br>
+<b>Azimuts secundarios:</b> {_esc(secundarios_text) if secundarios_text else 'Ninguno'}
 """
 
             _crear_feature_kml(container, antena, lon, lat, desc_core,
@@ -1048,11 +1072,19 @@ def generar_kml_puntos_libres(df, archivo_salida_kml, config):
     """
     kml = Kml()
     descartadas = 0
-    
+
     # Obtener estilo del config
     color_hex = config.get("style", {}).get("theme_hex", "#ff0000")
     abgr_color = hex_to_kml_color(color_hex)
-    icon_url = "http://maps.google.com/mapfiles/kml/paddle/wht-blank.png"
+    # AUD-08: ícono local embebido en el KMZ; sin dependencia remota a
+    # maps.google.com. Si el asset no está disponible, no se fija href y el
+    # visor usa su ícono de pin por defecto.
+    icon_url = None
+    if os.path.exists(_KML_POINT_ICON_PATH):
+        try:
+            icon_url = kml.addfile(_KML_POINT_ICON_PATH)
+        except Exception:
+            icon_url = None
 
     for idx, row in df.iterrows():
         lat = row.get("lat", None)
@@ -1079,12 +1111,13 @@ def generar_kml_puntos_libres(df, archivo_salida_kml, config):
 
         # Crear punto KML
         pnt = kml.newpoint(name=nombre, coords=[(lon, lat)])
-        lineas_desc = [str(v).strip() for v in (detalle, direccion) if tiene_valor(v)]
+        lineas_desc = [_esc(str(v).strip()) for v in (detalle, direccion) if tiene_valor(v)]
         if lineas_desc:
             pnt.description = "\n".join(lineas_desc)
             
         # Estilo: ícono blanco y color solo para la etiqueta
-        pnt.style.iconstyle.icon.href = icon_url
+        if icon_url:
+            pnt.style.iconstyle.icon.href = icon_url
         pnt.style.iconstyle.scale = 1.2
         pnt.style.labelstyle.color = abgr_color
         pnt.style.labelstyle.scale = 1.2
