@@ -66,17 +66,17 @@ se omite por ser UI de consola):
                                                         con callbacks que
                                                         devuelven decisiones ya
                                                         tomadas en CaseRequest,
-                                                        en vez de prompts. El
-                                                        nombre candidato se
-                                                        hace único por
-                                                        ejecución antes de
-                                                        llegar a
-                                                        prompt_output_routing
+                                                        en vez de prompts. La
+                                                        unicidad del nombre
+                                                        final (sin sufijo
+                                                        técnico visible) la
+                                                        resuelve de forma
+                                                        atómica
+                                                        OutputTransaction.reserve
                                                         (ver
-                                                        _generate_unique_case_name,
-                                                        exclusivo de tz_web —
-                                                        no toca
-                                                        suggest_case_name).
+                                                        tz_web.output_transaction),
+                                                        sin tocar
+                                                        suggest_case_name.
     write_minimal_filter_log_if_needed               REPLICADO (reuso directo).
     prep_meta_unicos (alias/usuario/abonado)          REPLICADO (reuso directo);
                                                        identity_overrides (si se
@@ -532,42 +532,6 @@ def _apply_mapeo(
     return finalize_manual_mapping_dataframe(mapped)
 
 
-def _generate_unique_case_name(carpeta_base: str, candidate: str) -> str:
-    """Garantiza un nombre de carpeta de caso distinto por ejecución.
-
-    Exclusivo de ``tz_web``: no toca ``tz_core.ui_utils.suggest_case_name``
-    ni ``prompt_case_identity``, cuyo timestamp embebido tiene precisión de
-    minuto — suficiente para una invocación humana del CLI, insuficiente
-    para un servicio que puede recibir dos ``process_case()`` dentro del
-    mismo minuto (ver corrección precommit de unicidad de carpeta).
-
-    Estrategia en dos capas:
-    1. Sufijo de alta resolución (HHMMSS + microsegundos) sobre el nombre
-       candidato — evita la colisión típica entre dos ejecuciones reales.
-    2. Sufijo incremental ``_02``, ``_03``... como red de seguridad final,
-       por si ``carpeta_base/candidato_unico`` ya existiera en disco pese al
-       sufijo de alta resolución (reloj no monotónico en algunos entornos,
-       o el mismo ``output_base_name`` explícito reutilizado a propósito).
-
-    ``candidate`` debe llegar ya saneado (ver ``sanear_nombre_archivo``): la
-    función solo concatena dígitos y guiones bajos, por lo que el resultado
-    permanece válido como nombre de archivo/carpeta.
-    """
-
-    marca = datetime.now().strftime("%H%M%S%f")
-    base_unica = f"{candidate}_{marca}"
-
-    if not os.path.exists(os.path.join(carpeta_base, base_unica)):
-        return base_unica
-
-    intento = 2
-    while True:
-        candidato = f"{base_unica}_{intento:02d}"
-        if not os.path.exists(os.path.join(carpeta_base, candidato)):
-            return candidato
-        intento += 1
-
-
 def _write_execution_log(folder: str, base_name: str, logs: List[str]) -> Optional[str]:
     """Escribe el log de esta ejecución a disco; nunca lanza (I/O best-effort)."""
 
@@ -812,8 +776,7 @@ def process_case(request: CaseRequest) -> CaseResult:
             candidato_base = sanear_nombre_archivo(
                 request.output_base_name or base_auto, base_auto
             )
-            candidato_unico = _generate_unique_case_name(carpeta_salida_abs, candidato_base)
-            transaction = OutputTransaction.reserve(carpeta_salida_abs, candidato_unico)
+            transaction = OutputTransaction.reserve(carpeta_salida_abs, candidato_base)
             nombre_unico = transaction.name
             nombre_salida = nombre_unico
             carpeta_base = transaction.work_dir

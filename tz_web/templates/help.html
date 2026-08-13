@@ -39,11 +39,12 @@
            1. ACERCA DE TZ ANALYZER
       ================================================================== -->
       <section id="acerca" class="tz-help-section">
+        <img class="tz-help-about-logo" src="{{ url_for('tz_web.logo_isotipo_asset') }}" alt="TZ Analyzer">
         <h2>Acerca de TZ Analyzer</h2>
         <p>
           TZ Analyzer es una aplicación de uso local diseñada para asistir el
           análisis de bitácoras telefónicas y la georreferenciación de
-          antenas, celdas y otros puntos de interés relacionados con un caso.
+          antenas y otros puntos de interés relacionados con un caso.
         </p>
         <p>
           Su finalidad es transformar la información disponible —una
@@ -59,6 +60,16 @@
           unidad externa, una carpeta sincronizada u otra ubicación distinta
           del equipo donde corre la aplicación.
         </p>
+        <p>
+          TZ Analyzer no requiere conexión a Internet para procesar los
+          archivos ni para realizar sus análisis. La interfaz se ejecuta
+          localmente y utiliza el navegador como entorno visual.
+        </p>
+        <p>
+          Cuando existe conexión a Internet, determinados recursos externos
+          opcionales, como el fondo cartográfico en línea, pueden estar
+          disponibles. Los archivos del caso no se cargan a dichos servicios.
+        </p>
       </section>
 
       <!-- =================================================================
@@ -68,21 +79,13 @@
         <h2>Antes de comenzar</h2>
 
         <div class="tz-help-warn">
-          <strong>Pendiente de confirmar en la distribución Beta:</strong>
-          el nombre definitivo del archivo que iniciará TZ Analyzer se
-          confirmará junto con la distribución Beta.
+          <strong>Para iniciar TZ Analyzer:</strong> ejecute únicamente
+          "TZ Analyzer.exe" desde la carpeta de la aplicación. No elimine ni
+          modifique los archivos internos. Para trasladar o copiar TZ
+          Analyzer a otro equipo o ubicación, copie la carpeta completa.
         </div>
 
         <ul>
-          <li>TZ Analyzer se inicia ejecutando únicamente el archivo
-            principal indicado dentro de la carpeta de la aplicación.</li>
-          <li>No deben ejecutarse archivos internos para iniciar el
-            programa.</li>
-          <li>No deben eliminarse, renombrarse, moverse ni modificarse
-            archivos o subcarpetas internas de la carpeta de la
-            aplicación.</li>
-          <li>Para trasladar TZ Analyzer a otro lugar o equipo, debe
-            copiarse o moverse la carpeta completa.</li>
           <li>Al iniciarse, TZ Analyzer abre automáticamente la interfaz en
             el navegador.</li>
           <li>Si ya existe una instancia activa, una segunda ejecución
@@ -332,14 +335,6 @@
         </details>
 
         <details class="tz-help-accordion">
-          <summary>El archivo supera los 200 MB</summary>
-          <div class="tz-help-accordion-body">
-            <p>Reduzca el tamaño del archivo (por ejemplo, dividiendo la
-              bitácora) antes de cargarlo nuevamente.</p>
-          </div>
-        </details>
-
-        <details class="tz-help-accordion">
           <summary>Modo 2: la bitácora no tiene una fecha reconocible</summary>
           <div class="tz-help-accordion-body">
             <p>Sin una fecha reconocible, TZ Analyzer no puede aplicar un
@@ -461,29 +456,52 @@
       <section id="acerca-version" class="tz-help-section">
         <h2>Acerca de / Versión</h2>
 
-        <h3>Desarrollo</h3>
+        <h3>Concepción, desarrollo y autoría</h3>
+        <p>
+          <strong>Concepción, desarrollo y metodología: Omar Arias (Tony
+          Zero).</strong>
+        </p>
         <p>
           TZ Analyzer fue concebido y desarrollado a partir de experiencia
-          práctica y de necesidades reales del análisis forense de registros
-          de telecomunicaciones. La metodología de procesamiento, los
-          criterios funcionales y el diseño orientado al analista responden
-          a esas necesidades operativas.
+          práctica y de necesidades reales del análisis de bitácoras
+          telefónicas y georreferenciación. La concepción del producto, las
+          decisiones funcionales, la metodología de procesamiento y los
+          criterios de trabajo orientados al analista corresponden a su
+          autor.
         </p>
 
         <h3>Uso de herramientas de inteligencia artificial en el desarrollo</h3>
         <p>
           Durante el diseño, desarrollo, codificación, pruebas y revisión
           técnica de TZ Analyzer se utilizaron herramientas de inteligencia
-          artificial como apoyo al proceso de desarrollo de software.
+          artificial como asistencia técnica al proceso de desarrollo.
         </p>
         <p>
           TZ Analyzer no incorpora inteligencia artificial para efectuar sus
-          análisis. Los resultados que genera provienen de procedimientos y
-          operaciones programadas y reproducibles.
+          análisis. Sus resultados se generan mediante procedimientos
+          técnicos y criterios metodológicos previamente definidos,
+          implementados mediante operaciones programadas y reproducibles.
         </p>
 
         <h3>Versión</h3>
         <p>{{ help_version_label }}</p>
+      </section>
+
+      <!-- =================================================================
+           11. SOPORTE Y SUGERENCIAS
+      ================================================================== -->
+      <section id="soporte" class="tz-help-section">
+        <h2>Soporte y sugerencias</h2>
+        <p>
+          Durante la etapa Beta, TZ Analyzer puede presentar errores,
+          comportamientos inesperados o aspectos susceptibles de mejora. Se
+          invita a los analistas que la utilicen a reportarlos, junto con
+          las sugerencias que consideren pertinentes.
+        </p>
+        <p>
+          El medio de contacto para soporte y sugerencias será indicado en
+          la versión de distribución.
+        </p>
       </section>
 
       <!-- =================================================================
@@ -495,7 +513,6 @@
         <p>Los siguientes puntos todavía no están definidos y se
           confirmarán durante el empaquetado y la distribución Beta:</p>
         <ul>
-          <li>Nombre definitivo del archivo ejecutable.</li>
           <li>Comportamiento del selector de carpetas ya empaquetado
             (ONEDIR).</li>
           <li>Versión Beta definitiva.</li>
@@ -503,6 +520,9 @@
             uno.</li>
           <li>Advertencias adicionales que surjan de las pruebas de humo
             sobre el empaquetado ONEDIR.</li>
+          <li>Medio de contacto definitivo para soporte y sugerencias.</li>
+          <li>Función "Exportar diagnóstico Beta" (pendiente de
+            implementación, no disponible todavía).</li>
         </ul>
       </section>
 

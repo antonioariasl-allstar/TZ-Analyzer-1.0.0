@@ -27,6 +27,7 @@ HELP_SECTIONS: Tuple[Tuple[str, str], ...] = (
     ("problemas-frecuentes", "Problemas frecuentes"),
     ("consideraciones", "Consideraciones de uso"),
     ("acerca-version", "Acerca de / Versión"),
+    ("soporte", "Soporte y sugerencias"),
     ("pendientes", "Pendiente de confirmar para la distribución Beta"),
 )
 

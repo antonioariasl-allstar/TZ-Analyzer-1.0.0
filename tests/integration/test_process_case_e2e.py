@@ -120,6 +120,75 @@ def test_process_case_completo_sin_interaccion_genera_productos_reales(monkeypat
     assert result.summary["capacidades_procesable"] is True
 
 
+def test_process_case_nombre_de_salida_sin_sufijo_tecnico(monkeypatch, output_dir):
+    """Corrección UX de nombre de carpeta: el nombre visible final es
+    exactamente el candidato saneado (caso/alias/fecha/hora), sin ningún
+    sufijo técnico añadido (ver eliminación de ``_generate_unique_case_name``
+    en ``tz_web.services`` — la unicidad la resuelve por completo
+    ``OutputTransaction.reserve``, que sigue intacto)."""
+
+    request = CaseRequest(
+        ruta_archivo=DATA_PATH,
+        carpeta_salida=output_dir,
+        mapeo=dict(_MAPEO_COMPLETO),
+        duration_unit_decision="segundos",
+        output_base_name="TEL_61758498_chepe_20260812_0641",
+    )
+    resultado = _run_with_canaries(monkeypatch, request)
+
+    assert resultado.success is True
+    assert os.path.basename(resultado.output_dir) == "TEL_61758498_chepe_20260812_0641"
+
+
+def test_process_case_segunda_ejecucion_mismo_nombre_no_sobrescribe(monkeypatch, output_dir):
+    """Una segunda ejecución con el mismo nombre explícito no pisa la
+    primera: OutputTransaction.reserve aplica el sufijo incremental
+    (contrato MB3 ya existente, sin overwrite) sobre el nombre visible
+    limpio."""
+
+    def _make_request() -> CaseRequest:
+        return CaseRequest(
+            ruta_archivo=DATA_PATH,
+            carpeta_salida=output_dir,
+            mapeo=dict(_MAPEO_COMPLETO),
+            duration_unit_decision="segundos",
+            output_base_name="TEL_61758498_chepe_20260812_0641",
+        )
+
+    resultado1 = _run_with_canaries(monkeypatch, _make_request())
+    resultado2 = _run_with_canaries(monkeypatch, _make_request())
+    resultado3 = _run_with_canaries(monkeypatch, _make_request())
+
+    assert resultado1.success and resultado2.success and resultado3.success
+    assert os.path.basename(resultado1.output_dir) == "TEL_61758498_chepe_20260812_0641"
+    assert os.path.basename(resultado2.output_dir) == "TEL_61758498_chepe_20260812_0641_02"
+    assert os.path.basename(resultado3.output_dir) == "TEL_61758498_chepe_20260812_0641_03"
+    assert os.path.isdir(resultado1.output_dir)
+    assert os.path.isdir(resultado2.output_dir)
+    assert os.path.isdir(resultado3.output_dir)
+    # Ninguna ejecución posterior pisó los productos de la anterior.
+    assert set(os.listdir(resultado1.output_dir)).isdisjoint(os.listdir(resultado2.output_dir))
+
+
+def test_process_case_nombre_con_espacios_y_acentos_queda_saneado_y_sin_sufijo(monkeypatch, output_dir):
+    """Un nombre de caso con espacios/acentos se limpia (misma sanitización
+    existente, ``sanear_nombre_archivo``) y tampoco lleva sufijo técnico."""
+
+    request = CaseRequest(
+        ruta_archivo=DATA_PATH,
+        carpeta_salida=output_dir,
+        mapeo=dict(_MAPEO_COMPLETO),
+        duration_unit_decision="segundos",
+        output_base_name="Caso José Peña 2026",
+    )
+    resultado = _run_with_canaries(monkeypatch, request)
+
+    assert resultado.success is True
+    nombre = os.path.basename(resultado.output_dir)
+    assert nombre == "Caso_Jose_Pena_2026"
+    assert " " not in nombre
+
+
 def test_process_case_ningun_systemexit_escapa(monkeypatch, base_request):
     """Ninguna ruta de process_case() debe dejar escapar SystemExit hacia el
     llamador (a diferencia de main(), que históricamente usaba sys.exit(0))."""

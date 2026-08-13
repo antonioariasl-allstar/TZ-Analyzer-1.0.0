@@ -109,7 +109,11 @@ TZ-Analyzer/
 │   ├── utils.py                             # Utilidades generales
 │   ├── validation_utils.py                  # Validaciones y normalización
 │   ├── assets/
-│   │   └── Logo TZ.png                      # Logo para branding
+│   │   ├── Logo TZ.png                      # Legacy — ya no es dependencia activa
+│   │   └── branding/                        # Ubicación canónica de identidad visual (Fase 2)
+│   │       ├── TZ_Analyzer_icono_app.png        # Header, portada, AYUDA (pequeño); futuro icono .exe
+│   │       ├── TZ_Analyzer_isotipo_principal.png # AYUDA "Acerca de", informe HTML (espacio suficiente)
+│   │       └── TZ_Analyzer_logo_horizontal.png   # Disponible; sin uso forzado en espacios pequeños
 │   └── html/                                # Submódulos de generación HTML
 │       ├── assembler.py                     # Ensamblador del informe completo
 │       ├── antennas.py                      # Sección de antenas

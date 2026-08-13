@@ -78,6 +78,32 @@ function tzMappingPrev() {
   }
 }
 
+// UX posterior a un error de validación del mapeo (server-side sigue
+// siendo la fuente de verdad: esta función solo desplaza la vista al
+// primer campo ya señalado como conflictivo por el servidor).
+function tzMappingFocusConflict(camposConflictivos) {
+  if (!camposConflictivos || !camposConflictivos.length) {
+    return;
+  }
+  var fila = document.querySelector('.tz-mapping-row[data-campo="' + camposConflictivos[0] + '"]');
+  if (!fila) {
+    return;
+  }
+  var grupo = fila.closest('.tz-mapping-group');
+  if (grupo) {
+    var indice = parseInt(grupo.getAttribute('data-group-index'), 10);
+    if (!isNaN(indice)) {
+      tzMappingCurrentGroup = indice;
+      tzMappingRender();
+    }
+  }
+  fila.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  var foco = fila.querySelector('select, input[type="text"]');
+  if (foco && foco.focus) {
+    foco.focus();
+  }
+}
+
 function tzToggleFiltro() {
   var tipo = document.getElementById("filtro_tipo");
   if (!tipo) {

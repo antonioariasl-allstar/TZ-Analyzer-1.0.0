@@ -285,3 +285,139 @@ def test_placeholder_de_version_no_inventa_version_final(client):
     assert HELP_VERSION_LABEL in html
     assert "1.1 Beta" not in html
     assert "1.0.0-beta.1" not in html
+
+
+# ---------------------------------------------------------------------------
+# Fase 2 — identidad visual + AYUDA (editorial).
+# ---------------------------------------------------------------------------
+# G — definición general usa "antenas y otros puntos de interés" (sin
+# "celdas") en la descripción general de la sección "Acerca de".
+# ---------------------------------------------------------------------------
+
+
+def test_definicion_general_usa_antenas_y_otros_puntos_de_interes(client):
+    html = help_html(client)
+    assert "georreferenciación de antenas y otros puntos de interés" in html
+
+
+# ---------------------------------------------------------------------------
+# H — atribución de concepción/desarrollo/metodología a Omar Arias (Tony
+# Zero), no presentado simplemente como "programador".
+# ---------------------------------------------------------------------------
+
+
+def test_ayuda_contiene_atribucion_del_desarrollo(client):
+    html = help_html(client)
+    assert "Concepción, desarrollo y metodología: Omar Arias (Tony Zero)." in html
+    assert "programador" not in html.lower()
+
+
+# ---------------------------------------------------------------------------
+# I/J — distingue IA de desarrollo vs. IA en el análisis, con la fórmula
+# aprobada "procedimientos técnicos y criterios metodológicos previamente
+# definidos".
+# ---------------------------------------------------------------------------
+
+
+def test_ayuda_distingue_ia_de_desarrollo_de_ia_en_analisis(client):
+    html = help_html(client)
+    assert "asistencia técnica al proceso de desarrollo" in html
+    assert "TZ Analyzer no incorpora inteligencia artificial" in html
+    assert (
+        "procedimientos técnicos y criterios metodológicos previamente definidos"
+        in html
+    )
+
+
+# ---------------------------------------------------------------------------
+# K — funcionamiento local descrito sin promesa falsa de aislamiento
+# absoluto de Internet (fondo cartográfico OSM opcional).
+# ---------------------------------------------------------------------------
+
+
+def test_funcionamiento_local_sin_promesa_de_aislamiento_absoluto(client):
+    html = help_html(client)
+    assert (
+        "no requiere conexión a Internet para procesar los archivos ni para "
+        "realizar sus análisis" in html
+    )
+    assert "nunca se conecta a Internet" not in html
+    assert "fondo cartográfico en línea, pueden estar" in html
+
+
+# ---------------------------------------------------------------------------
+# M — Soporte y sugerencias: sección presente, sin correo/teléfono/URL
+# inventados.
+# ---------------------------------------------------------------------------
+
+
+def test_soporte_presente_sin_contacto_inventado(client):
+    html = help_html(client)
+    assert "Soporte y sugerencias" in html
+    assert (
+        "El medio de contacto para soporte y sugerencias será indicado en "
+        "la versión de distribución." in html
+    )
+    assert "@" not in html.split('id="soporte"', 1)[1].split("</section>", 1)[0]
+    assert "mailto:" not in html
+    assert "tel:" not in html
+    assert "Exportar diagnóstico Beta" in html
+    assert "pendiente de implementación" in html
+
+
+# ---------------------------------------------------------------------------
+# N — Modo 3 descrito correctamente: no se inventa un producto HTML.
+# ---------------------------------------------------------------------------
+
+
+def test_modo3_no_incluye_informe_html_entre_sus_productos(client):
+    html = help_html(client)
+    modo3_block = html.split('id="modo-3"', 1)[1].split("</details>", 1)[0]
+    assert "Informe HTML" not in modo3_block
+    assert "KMZ (obligatorio)" in modo3_block
+    assert "Archivo de datos del análisis (Modo 3):" in modo3_block
+    assert "Archivo de verificación:" in modo3_block
+
+
+# ---------------------------------------------------------------------------
+# Fase 2C — limpieza editorial final de AYUDA: retiro de textos obsoletos de
+# "pendiente" ya decididos (nombre del ejecutable, límite de 200 MB) y
+# redacción operativa (no futura) de "Antes de comenzar".
+# ---------------------------------------------------------------------------
+
+
+def test_ayuda_no_menciona_limite_de_200_mb(client):
+    html = help_html(client)
+    assert "200 MB" not in html
+
+
+def test_ayuda_no_contiene_pendiente_de_nombre_de_ejecutable(client):
+    html = help_html(client)
+    assert "Pendiente de confirmar en la distribución Beta" not in html
+    assert "el nombre definitivo del archivo que iniciará TZ Analyzer" not in html
+    assert "Nombre definitivo del archivo ejecutable." not in html
+
+
+def test_ayuda_declara_el_ejecutable_definitivo(client):
+    html = help_html(client)
+    assert '"TZ Analyzer.exe"' in html
+    assert "tz_launcher.exe" not in html.lower()
+    assert "tzanalyzer.exe" not in html.lower()
+
+
+def test_antes_de_comenzar_no_habla_en_futuro_del_empaquetado(client):
+    html = help_html(client)
+    assert "cuando tz analyzer se distribuya" not in html.lower()
+    assert (
+        '<strong>Para iniciar TZ Analyzer:</strong> ejecute únicamente '
+        '"TZ Analyzer.exe" desde la carpeta de la aplicación.' in html
+    )
+
+
+def test_antes_de_comenzar_sin_bullets_redundantes_sobre_archivos_internos(client):
+    html = help_html(client)
+    assert (
+        "TZ Analyzer se inicia ejecutando únicamente el archivo principal "
+        "indicado dentro de la carpeta de la aplicación." not in html
+    )
+    assert "No deben ejecutarse archivos internos para iniciar el programa." not in html

@@ -39,7 +39,6 @@ from tz_web.services import (
     CaseResult,
     OutputDirectoryError,
     ProgressUpdate,
-    _generate_unique_case_name,
     _write_execution_log,
 )
 
@@ -257,8 +256,7 @@ def process_case_modo3(request: Modo3Request) -> CaseResult:
             if request.output_base_name
             else sugerir_nombre_modo3(request.tipo, request.registros)
         )
-        candidato_unico = _generate_unique_case_name(carpeta_base, candidato_base)
-        transaction = OutputTransaction.reserve(carpeta_base, candidato_unico)
+        transaction = OutputTransaction.reserve(carpeta_base, candidato_base)
         nombre_salida = transaction.name
         carpeta_caso = transaction.work_dir
 

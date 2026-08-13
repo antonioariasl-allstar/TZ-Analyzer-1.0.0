@@ -308,6 +308,7 @@ def _reset_sheet_state(case: state.Session) -> None:
     case.mapping = None
     case.mapping_draft = None
     case.mapping_stage = "form"
+    case.mapping_conflicts = []
     case.capabilities_preview = None
 
 
@@ -552,38 +553,56 @@ def _build_samples(df: pd.DataFrame, limit: int = 3) -> Dict[str, List[str]]:
 # ---------------------------------------------------------------------------
 
 
-def _parse_mapping_form(case: state.Session) -> Tuple[Dict[str, Tuple[str, Any]], Optional[str]]:
+def _parse_mapping_form(
+    case: state.Session,
+) -> Tuple[Dict[str, Tuple[str, Any]], List[str], Optional[str]]:
     """Construye el dict de mapeo desde el formulario.
 
-    Devuelve ``(mapeo, error)``; ``error`` no es None si hay una asignación
-    de columna duplicada (impedida aquí, de forma más estricta que el aviso
-    no bloqueante del motor) o un valor fijo vacío.
+    Devuelve ``(mapeo, campos_conflictivos, error)``. ``mapeo`` conserva
+    una entrada por cada campo canónico tal como llegó del formulario —
+    incluidas las inválidas — para que, si hay error, la pantalla de mapeo
+    pueda volver a mostrarse con todo lo ya elegido en vez de perderlo
+    (ver corrección UX de recuperación de mapeo). ``campos_conflictivos``
+    lista, en el orden de ``CANONICAL_FIELDS``, los campos a resaltar
+    (columna duplicada, columna inválida o valor fijo vacío); el primero de
+    la lista es el que la pantalla debe enfocar. ``error`` es ``None``
+    cuando no hay ningún problema.
     """
     mapeo: Dict[str, Tuple[str, Any]] = {}
     columnas_usadas: Dict[str, List[str]] = {}
+    conflictivos: List[str] = []
+    mensajes: List[str] = []
 
     for campo in CANONICAL_FIELDS:
         tipo = request.form.get(f"tipo_{campo}", "omitido")
         if tipo == "col":
             columna = (request.form.get(f"col_{campo}") or "").strip()
+            mapeo[campo] = ("col", columna or None)
             if not columna or columna not in case.columns:
-                return {}, f"Seleccione una columna válida para '{campo}'."
-            mapeo[campo] = ("col", columna)
-            columnas_usadas.setdefault(columna, []).append(campo)
+                conflictivos.append(campo)
+                mensajes.append(f"Seleccione una columna válida para '{campo}'.")
+            else:
+                columnas_usadas.setdefault(columna, []).append(campo)
         elif tipo == "fijo":
             valor = (request.form.get(f"fijo_{campo}") or "").strip()
+            mapeo[campo] = ("fijo", valor or None)
             if not valor:
-                return {}, f"Indique un valor fijo para '{campo}' o cambie la asignación a 'Omitir'."
-            mapeo[campo] = ("fijo", valor)
+                conflictivos.append(campo)
+                mensajes.append(f"Indique un valor fijo para '{campo}' o cambie la asignación a 'Omitir'.")
         else:
             mapeo[campo] = ("omitido", None)
 
     duplicadas = {col: campos for col, campos in columnas_usadas.items() if len(campos) > 1}
     if duplicadas:
+        for campos in duplicadas.values():
+            conflictivos.extend(campos)
         detalle = "; ".join(f"'{col}' → {', '.join(campos)}" for col, campos in duplicadas.items())
-        return {}, f"Una misma columna no puede asignarse a más de un campo: {detalle}."
+        mensajes.append(f"Una misma columna no puede asignarse a más de un campo: {detalle}.")
 
-    return mapeo, None
+    orden = {campo: indice for indice, campo in enumerate(CANONICAL_FIELDS)}
+    campos_conflictivos = sorted(set(conflictivos), key=lambda campo: orden.get(campo, 0))
+    error = " ".join(mensajes) if mensajes else None
+    return mapeo, campos_conflictivos, error
 
 
 _DURACION_ESTADO_WEB_LABELS: Dict[str, str] = {
@@ -682,6 +701,7 @@ def mapping_screen():
         duration_unit_labels=_DURATION_UNIT_LABELS,
         duracion_estado_web=_resolver_estado_duracion_web(case),
         mapping_review=_build_mapping_review(case, CANONICAL_FIELDS),
+        mapping_conflicts=case.mapping_conflicts,
     )
 
 
@@ -693,8 +713,16 @@ def mapping_submit():
         flash("Primero cargue un archivo y seleccione una hoja.", "error")
         return redirect(url_for("tz_web.index"))
 
-    mapeo, error = _parse_mapping_form(case)
+    mapeo, conflictos, error = _parse_mapping_form(case)
     if error:
+        # Conserva lo ya elegido: la pantalla de mapeo vuelve a mostrarse con
+        # todas las asignaciones previas intactas y solo los campos
+        # conflictivos señalados, en vez de forzar a repetir el mapeo
+        # completo (ver corrección UX de recuperación de mapeo).
+        case.mapping_draft = mapeo
+        case.mapping_conflicts = conflictos
+        case.mapping_stage = "form"
+        state.touch(case)
         flash(error, "error")
         return redirect(url_for("tz_web.mapping_screen"))
 
@@ -713,6 +741,13 @@ def mapping_submit():
         df, _hoja = cargar_excel_con_normalizacion(case.temp_path, case.sheet)
         _validate_mapeo(df, mapeo)
     except InvalidMappingError as exc:
+        # Validación server-side de forma (p. ej. mapeo vacío): también
+        # conserva el borrador para no perder lo ya elegido, aunque aquí el
+        # motor no distingue campos individuales a resaltar.
+        case.mapping_draft = mapeo
+        case.mapping_conflicts = []
+        case.mapping_stage = "form"
+        state.touch(case)
         flash(state.translate_error(exc), "error")
         return redirect(url_for("tz_web.mapping_screen"))
     except Exception as exc:  # noqa: BLE001 - archivo dejó de ser legible entre pasos
@@ -728,6 +763,7 @@ def mapping_submit():
         capabilities = None
 
     case.mapping_draft = mapeo
+    case.mapping_conflicts = []
     case.capabilities_preview = _serialize_capabilities(capabilities) if capabilities else None
     case.mapping_stage = "review"
     state.touch(case)
@@ -757,6 +793,7 @@ def mapping_confirm():
     case.mapping = case.mapping_draft
     case.mapping_draft = None
     case.mapping_stage = "form"
+    case.mapping_conflicts = []
     state.touch(case)
 
     if case.modo == state.MODO_2:
@@ -2409,10 +2446,23 @@ def help_screen():
 # ---------------------------------------------------------------------------
 # Activos estáticos controlados (logo reutilizado sin duplicar, sección 3)
 # ---------------------------------------------------------------------------
-
-_LOGO_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tz_core", "assets", "Logo TZ.png"
+# Fase 2 (identidad visual): el logo anterior ("Logo TZ.png") llevaba el
+# texto "TZ ANALYZER" incorporado en la propia imagen, lo que lo volvía
+# ilegible al reducirse en el header. Se reemplaza por los assets aprobados
+# en tz_core/assets/branding/ (sin texto incorporado): el icono de app para
+# superficies pequeñas (header, portada, encabezado de AYUDA) y el isotipo
+# principal para superficies con más espacio (sección "Acerca de" de AYUDA).
+# "Logo TZ.png" se conserva como asset legacy sin eliminarse, pero deja de
+# ser una dependencia activa de estas rutas.
+#
+# TZ_Analyzer_icono_app.png es además la fuente canónica identificada para
+# el futuro icono del ejecutable empaquetado ("TZ Analyzer.exe"), pendiente
+# de MB7/ONEDIR — no se genera ningún .ico en esta fase.
+_BRANDING_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tz_core", "assets", "branding"
 )
+_LOGO_PATH = os.path.join(_BRANDING_DIR, "TZ_Analyzer_icono_app.png")
+_LOGO_ISOTIPO_PATH = os.path.join(_BRANDING_DIR, "TZ_Analyzer_isotipo_principal.png")
 
 
 @bp.route("/assets/logo", methods=["GET"])
@@ -2420,6 +2470,13 @@ def logo_asset():
     if not os.path.isfile(_LOGO_PATH):
         abort(404)
     return send_file(_LOGO_PATH, mimetype="image/png", max_age=3600)
+
+
+@bp.route("/assets/logo-isotipo", methods=["GET"])
+def logo_isotipo_asset():
+    if not os.path.isfile(_LOGO_ISOTIPO_PATH):
+        abort(404)
+    return send_file(_LOGO_ISOTIPO_PATH, mimetype="image/png", max_age=3600)
 
 
 # ---------------------------------------------------------------------------

@@ -147,8 +147,15 @@ def build_logo_html(config: dict | None = None) -> str:
             if p:
                 _candidates.append(p)
         # a.1) subdirectorio assets/ (ubicación canónica del logo)
+        # Fase 2 (identidad visual): el isotipo principal aprobado
+        # (tz_core/assets/branding/) tiene prioridad sobre el legacy
+        # "Logo TZ.png" (que llevaba texto incorporado); el legacy se
+        # conserva como candidato de respaldo, no se elimina.
         _assets_dir = os.path.join(_script_dir, "assets")
-        for _logo_name in ["Logo TZ.png", "logo_tz.png", "Logo_TZ.png", "logo.png", "logo.svg", "Logo.png", "Logo.svg"]:
+        for _logo_name in [
+            os.path.join("branding", "TZ_Analyzer_isotipo_principal.png"),
+            "Logo TZ.png", "logo_tz.png", "Logo_TZ.png", "logo.png", "logo.svg", "Logo.png", "Logo.svg",
+        ]:
             _candidates.append(os.path.join(_assets_dir, _logo_name))
         # a.2) mismo directorio tz_core/ (legacy)
         _candidates.extend([

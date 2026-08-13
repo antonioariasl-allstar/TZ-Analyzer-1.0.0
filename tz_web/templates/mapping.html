@@ -100,8 +100,12 @@
       {% for campo in group_fields %}
         {% set ctx = field_context.get(campo, {}) %}
         {% set draft_tipo, draft_valor = (case.mapping_draft.get(campo, ('omitido', None)) if case.mapping_draft else ('omitido', None)) %}
-        <div class="tz-mapping-row" data-campo="{{ campo }}">
+        {% set en_conflicto = campo in mapping_conflicts %}
+        <div class="tz-mapping-row{% if en_conflicto %} tz-conflict{% endif %}" data-campo="{{ campo }}">
           <h3>{{ field_labels.get(campo, campo) }}</h3>
+          {% if en_conflicto %}
+            <p class="tz-conflict-badge" role="alert">Revise esta asignación: entra en conflicto con el mapeo actual.</p>
+          {% endif %}
           {% if field_descriptions.get(campo) %}<div class="tz-help">{{ field_descriptions.get(campo) }}</div>{% endif %}
           {% if ctx.get('desc') %}<div class="tz-help">{{ ctx.get('desc') }}</div>{% endif %}
           {% if ctx.get('hint') %}<div class="tz-samples">{{ ctx.get('hint') }}</div>{% endif %}
@@ -122,8 +126,8 @@
           </div>
 
           <div class="tz-field" id="col_wrap_{{ campo }}" style="display:none">
-            <label>Columna</label>
-            <select name="col_{{ campo }}">
+            <label for="col_{{ campo }}">Columna</label>
+            <select name="col_{{ campo }}" id="col_{{ campo }}" {% if en_conflicto %}aria-invalid="true"{% endif %}>
               <option value="">-- Seleccione --</option>
               {% for col in case.columns %}
                 <option value="{{ col }}" {% if draft_tipo == 'col' and draft_valor == col %}selected{% endif %}>{{ col }}</option>
@@ -167,6 +171,9 @@
     if (campo) tzToggleMappingRow(campo);
   });
   tzMappingInit({{ field_groups|map(attribute=0)|list|tojson }});
+  {% if mapping_conflicts %}
+  tzMappingFocusConflict({{ mapping_conflicts|tojson }});
+  {% endif %}
   {% endif %}
 </script>
 {% endblock %}

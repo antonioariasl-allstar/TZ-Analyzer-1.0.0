@@ -67,7 +67,7 @@ a {
 }
 
 .tz-header img.tz-logo {
-  height: 34px;
+  height: 40px;
   width: auto;
   display: block;
 }
@@ -413,6 +413,19 @@ table.tz-table th {
 .tz-mapping-row .tz-samples {
   color: var(--tz-muted);
   font-size: 12.5px;
+}
+
+.tz-mapping-row.tz-conflict {
+  border-color: var(--tz-red-border);
+  border-width: 2px;
+  background: var(--tz-red-bg);
+}
+
+.tz-conflict-badge {
+  color: var(--tz-red-text);
+  font-weight: 600;
+  font-size: 13px;
+  margin: 2px 0 8px;
 }
 
 .tz-assign-toggle {

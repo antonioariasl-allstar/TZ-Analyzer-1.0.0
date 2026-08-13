@@ -1,6 +1,7 @@
 """FASE 2 WEB — Pantalla 2: mapeo de columnas."""
 from __future__ import annotations
 
+import json
 import re
 
 from tz_web import state as tz_web_state
@@ -45,6 +46,10 @@ def test_mapeo_valido_calcula_capacidades_previstas(client):
 
 
 def test_mapeo_duplicado_es_rechazado(client):
+    """Corrección UX: la validación rechaza la columna duplicada, pero ya no
+    descarta el resto del mapeo — el borrador y los campos no conflictivos
+    se conservan para que el usuario solo corrija lo señalado (ver
+    tz_web.routes._parse_mapping_form)."""
     _reach_mapping_screen(client)
     form = dict(REAL_MAPPING_FORM)
     # 'hora' apunta a la misma columna que 'fecha' -> asignación duplicada.
@@ -53,11 +58,90 @@ def test_mapeo_duplicado_es_rechazado(client):
     resp = client.post("/mapping", data=form, follow_redirects=True)
     assert resp.status_code == 200
     assert "no puede asignarse a más de un campo".encode("utf-8") in resp.data
+    # No se retrocede a la Revisión: se vuelve a mostrar el formulario.
+    assert "Revisión del mapeo".encode("utf-8") not in resp.data
 
     with client.session_transaction() as flask_sess:
         case_id = flask_sess["case_id"]
     case = tz_web_state.get_session(case_id)
-    assert case.mapping_draft is None
+    assert case.mapping_draft is not None
+    assert case.mapping_stage == "form"
+    # Los dos campos implicados en el conflicto quedan señalados...
+    assert case.mapping_conflicts == ["fecha", "hora"]
+    assert case.mapping_draft["fecha"] == ("col", "FECHA_INICIAL")
+    assert case.mapping_draft["hora"] == ("col", "FECHA_INICIAL")
+    # ...y el resto de las asignaciones ya hechas permanece intacto.
+    assert case.mapping_draft["tel"] == ("col", "NUMERO_ORIGEN")
+    assert case.mapping_draft["imei"] == ("col", "IMEI_ORIGEN")
+    assert case.mapping_draft["duracion"] == ("col", "DURACION_SEG")
+
+
+def test_mapeo_duplicado_repuebla_formulario_y_marca_campos_conflictivos(client):
+    """La pantalla vuelta a mostrar debe traer los valores ya elegidos
+    seleccionados en el HTML (no en blanco) y resaltar solo los campos
+    conflictivos."""
+    _reach_mapping_screen(client)
+    form = dict(REAL_MAPPING_FORM)
+    form["tipo_hora"] = "col"
+    form["col_hora"] = "FECHA_INICIAL"
+    resp = client.post("/mapping", data=form, follow_redirects=True)
+    html = re.sub(r"\s+", " ", resp.data.decode("utf-8"))
+
+    # Asignaciones correctas ya elegidas (p. ej. tel) siguen preseleccionadas.
+    assert re.search(r'<input type="radio" name="tipo_tel" value="col" id="tipo_col_tel"\s+checked', html)
+    assert re.search(r'<option value="NUMERO_ORIGEN"\s+selected>NUMERO_ORIGEN</option>', html)
+
+    # Los dos campos del conflicto están marcados como tal.
+    assert 'class="tz-mapping-row tz-conflict" data-campo="fecha"' in html
+    assert 'class="tz-mapping-row tz-conflict" data-campo="hora"' in html
+    # Un campo no implicado no lleva la marca de conflicto.
+    assert 'class="tz-mapping-row" data-campo="tel"' in html
+
+    # El JS recibe la lista de campos a enfocar, en orden.
+    match = re.search(r"tzMappingFocusConflict\((\[.*?\])\)", resp.data.decode("utf-8"))
+    assert match is not None
+    assert json.loads(match.group(1)) == ["fecha", "hora"]
+
+
+def test_mapeo_corrige_conflicto_y_confirma(client):
+    """Tras el error, el usuario corrige solo el campo conflictivo y puede
+    completar el flujo normalmente."""
+    _reach_mapping_screen(client)
+    form = dict(REAL_MAPPING_FORM)
+    form["tipo_hora"] = "col"
+    form["col_hora"] = "FECHA_INICIAL"
+    client.post("/mapping", data=form, follow_redirects=True)
+
+    form["col_hora"] = "HORA_INICIAL"
+    resp = client.post("/mapping", data=form, follow_redirects=True)
+    assert resp.status_code == 200
+    assert "Revisión del mapeo".encode("utf-8") in resp.data
+
+    with client.session_transaction() as flask_sess:
+        case_id = flask_sess["case_id"]
+    case = tz_web_state.get_session(case_id)
+    assert case.mapping_conflicts == []
+    assert case.mapping_draft["hora"] == ("col", "HORA_INICIAL")
+    assert case.mapping_draft["fecha"] == ("col", "FECHA_INICIAL")
+
+
+def test_mapeo_multiples_conflictos_marca_todos_los_campos(client):
+    """Varias columnas duplicadas a la vez: todos los campos implicados
+    quedan en mapping_conflicts, no solo el primero detectado."""
+    _reach_mapping_screen(client)
+    form = dict(REAL_MAPPING_FORM)
+    form["col_hora"] = "FECHA_INICIAL"  # fecha/hora -> misma columna
+    form["col_contacto"] = "NUMERO_ORIGEN"  # tel/contacto -> misma columna
+    resp = client.post("/mapping", data=form, follow_redirects=True)
+    assert resp.status_code == 200
+
+    with client.session_transaction() as flask_sess:
+        case_id = flask_sess["case_id"]
+    case = tz_web_state.get_session(case_id)
+    assert set(case.mapping_conflicts) == {"fecha", "hora", "tel", "contacto"}
+    # Orden estable según CANONICAL_FIELDS, para que el foco vaya siempre
+    # al primer campo del formulario (no al primero detectado).
+    assert case.mapping_conflicts.index("fecha") < case.mapping_conflicts.index("tel")
 
 
 def test_mapeo_vacio_es_rechazado(client):

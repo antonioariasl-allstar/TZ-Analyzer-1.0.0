@@ -6,6 +6,17 @@
 
 .tz-help-body {
   background: var(--tz-bg);
+  /* app.css fija "overflow-x: hidden" en <body> sin declarar overflow-y;
+     el navegador ajusta entonces overflow-y a "auto" (la especificación
+     obliga a que un eje no-"visible" fuerce al otro a dejar de serlo),
+     y eso convierte a <body> en su propio contenedor de scroll. Al ser un
+     contenedor de scroll intermedio, rompe "position: sticky" en sus
+     descendientes (el índice deja de quedar fijo y se pierde de pantalla
+     al hacer scroll). Declarar ambos ejes en "visible" evita que <body>
+     se convierta en ese contenedor; el recorte horizontal de la página lo
+     sigue aportando <html>, que ya trae su propio overflow-x: hidden y sí
+     actúa correctamente como raíz de scroll. */
+  overflow: visible;
 }
 
 html {
@@ -39,10 +50,17 @@ html {
 }
 
 .tz-help-logo {
-  height: 36px;
+  height: 40px;
   width: auto;
   display: block;
   flex: 0 0 auto;
+}
+
+.tz-help-about-logo {
+  height: 96px;
+  width: auto;
+  display: block;
+  margin: 0 0 14px;
 }
 
 .tz-help-header-text h1 {
@@ -77,6 +95,9 @@ html {
 .tz-help-nav {
   position: sticky;
   top: 84px;
+  align-self: start;
+  max-height: calc(100vh - 84px - 24px);
+  overflow-y: auto;
   background: var(--tz-card);
   border: 1px solid var(--tz-border);
   border-radius: var(--tz-radius);
@@ -226,6 +247,8 @@ html {
   .tz-help-nav {
     position: static;
     display: none;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .tz-help-nav.tz-help-nav-open {

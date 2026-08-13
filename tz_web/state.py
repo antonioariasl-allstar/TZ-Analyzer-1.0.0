@@ -251,6 +251,12 @@ class Session:
     # pulsar "Volver a editar" el borrador se conserva intacto y solo cambia
     # esta vista (ver mapping_edit en tz_web.routes).
     mapping_stage: str = "form"
+    # Campos del mapeo que la última validación (tz_web.routes._parse_mapping_form)
+    # marcó como conflictivos (columna duplicada o valor faltante). Se usa
+    # únicamente para resaltar/enfocar esos campos al re-mostrar el
+    # formulario tras un error; no participa en la validación en sí, que
+    # sigue siendo server-side.
+    mapping_conflicts: List[str] = field(default_factory=list)
     identity_overrides: Dict[str, str] = field(default_factory=dict)
     capabilities_preview: Optional[Dict[str, Any]] = None
 
