@@ -15,8 +15,7 @@
     </dl>
   </div>
 
-  <form action="{{ url_for('tz_web.modo3_preparar_submit') }}" method="post" id="modo3_preparar_form"
-        onkeydown="return event.key !== 'Enter';">
+  <form action="{{ url_for('tz_web.modo3_preparar_submit') }}" method="post" id="modo3_preparar_form">
     <h3>Nombre de salida</h3>
     <input type="hidden" name="nombre_modo" id="nombre_modo" value="{{ 'manual' if case.output_base_name else 'sugerido' }}">
 
@@ -37,8 +36,8 @@
     </div>
 
     <p class="tz-help">
-      El sistema añadirá automáticamente un identificador de ejecución para
-      evitar sobrescribir análisis anteriores.
+      Si ya existe una carpeta con el mismo nombre, TZ Analyzer añadirá automáticamente
+      un sufijo para evitar sobrescribir resultados anteriores.
     </p>
 
     <h3>Carpeta base de salida</h3>
@@ -51,7 +50,7 @@
     <p class="tz-help">El sistema creará automáticamente una carpeta independiente para este análisis dentro de la carpeta elegida.</p>
 
     <div class="tz-actions">
-      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="button" name="accion" value="anterior" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">← Anterior</button>
       <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Continuar al resumen</button>
     </div>
   </form>

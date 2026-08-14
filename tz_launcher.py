@@ -33,10 +33,36 @@ Uso: ``python tz_launcher.py`` (o el ejecutable empaquetado que lo invoque).
 
 from __future__ import annotations
 
+import sys
+
+from tz_folder_dialog_ipc import (
+    EXIT_ERROR,
+    INTERNAL_MODE_ARGUMENT,
+    cleanup_stale_dialog_ipc,
+)
+
+
+def _dispatch_internal_folder_dialog(argv: list[str]) -> int | None:
+    """Despacha el hijo Tk antes de importar el backend normal."""
+    if argv[1:2] != [INTERNAL_MODE_ARGUMENT]:
+        return None
+    if len(argv) != 3:
+        return EXIT_ERROR
+
+    from tz_folder_dialog_helper import run_internal_folder_dialog
+
+    return run_internal_folder_dialog(argv[2])
+
+
+if __name__ == "__main__":
+    _internal_exit_code = _dispatch_internal_folder_dialog(sys.argv)
+    if _internal_exit_code is not None:
+        raise SystemExit(_internal_exit_code)
+
+
 import logging
 import os
 import secrets
-import sys
 import time
 import uuid
 import webbrowser
@@ -44,6 +70,7 @@ import webbrowser
 from tz_web import instance, lifecycle, state
 from tz_web.app import APP_VERSION, HOST, create_app
 from tz_web.server import ManagedServer, ServerStartError
+from tz_core.folder_dialog import shutdown_dialog_children
 
 _LOGGER = logging.getLogger("tz_launcher")
 
@@ -113,56 +140,68 @@ def _generate_instance_token() -> str:
 
 
 def _run_new_instance(lock: instance.InstanceLock) -> int:
-    token = _generate_instance_token()
-    # instance_id no es secreto, solo necesita ser distinto entre
-    # instancias: uuid4 sigue siendo la herramienta correcta para eso.
-    instance_id = uuid.uuid4().hex
-
-    app = create_app(instance_token=token, instance_id=instance_id)
-    managed = ManagedServer(app, host=HOST, port=0)
-
+    managed = None
+    server_started = False
+    normal_shutdown = False
+    controlled_failure = False
     try:
-        managed.start()
-    except ServerStartError as exc:
-        _LOGGER.error("fallo al iniciar el servidor WSGI: %s", exc)
-        print(f"[ERROR] No se pudo iniciar el servidor local: {exc}")
-        lock.release()
-        return 1
+        # Solo la instancia nueva barre residuos IPC propios >24 h. El cleanup
+        # es best-effort y no se ejecuta en create_app ni en el proceso Tk.
+        try:
+            cleanup_stale_dialog_ipc()
+        except Exception:  # noqa: BLE001 - housekeeping nunca impide arrancar
+            pass
 
-    metadata = instance.InstanceMetadata(
-        schema_version=instance.INSTANCE_SCHEMA_VERSION,
-        instance_id=instance_id,
-        pid=os.getpid(),
-        port=managed.port,
-        token=token,
-        created_at=time.time(),
-        app_version=APP_VERSION,
-        launcher_version=instance.LAUNCHER_VERSION,
-    )
-    lock.write_metadata(metadata)
-    _LOGGER.info(
-        "instancia iniciada: pid=%s port=%s instance_id=%s… app_version=%s",
-        metadata.pid,
-        metadata.port,
-        metadata.instance_id[:8],
-        metadata.app_version,
-    )
+        token = _generate_instance_token()
+        # instance_id no es secreto, solo necesita ser distinto entre
+        # instancias: uuid4 sigue siendo la herramienta correcta para eso.
+        instance_id = uuid.uuid4().hex
 
-    lifecycle.set_shutdown_hook(managed.stop)
-    lifecycle.start_watchdog()
+        app = create_app(instance_token=token, instance_id=instance_id)
+        managed = ManagedServer(app, host=HOST, port=0)
 
-    url = f"http://{HOST}:{managed.port}/"
-    if managed.wait_until_ready(token):
-        if not _open_browser(url):
-            _LOGGER.warning("el servidor está listo pero el navegador no pudo abrirse (%s)", url)
-            print(f"[AVISO] TZ Analyzer sigue activo en {url}; ábralo manualmente si hace falta.")
+        try:
+            managed.start()
+        except ServerStartError as exc:
+            controlled_failure = True
+            _LOGGER.error("fallo al iniciar el servidor WSGI: %s", exc)
+            print(f"[ERROR] No se pudo iniciar el servidor local: {exc}")
+            return 1
+        server_started = True
+
+        metadata = instance.InstanceMetadata(
+            schema_version=instance.INSTANCE_SCHEMA_VERSION,
+            instance_id=instance_id,
+            pid=os.getpid(),
+            port=managed.port,
+            token=token,
+            created_at=time.time(),
+            app_version=APP_VERSION,
+            launcher_version=instance.LAUNCHER_VERSION,
+        )
+        lock.write_metadata(metadata)
+        _LOGGER.info(
+            "instancia iniciada: pid=%s port=%s instance_id=%s… app_version=%s",
+            metadata.pid,
+            metadata.port,
+            metadata.instance_id[:8],
+            metadata.app_version,
+        )
+
+        lifecycle.set_shutdown_hook(managed.stop)
+        lifecycle.start_watchdog()
+
+        url = f"http://{HOST}:{managed.port}/"
+        if managed.wait_until_ready(token):
+            if not _open_browser(url):
+                _LOGGER.warning("el servidor está listo pero el navegador no pudo abrirse (%s)", url)
+                print(f"[AVISO] TZ Analyzer sigue activo en {url}; ábralo manualmente si hace falta.")
+            else:
+                print(f"TZ Analyzer — servidor local en {url}")
         else:
-            print(f"TZ Analyzer — servidor local en {url}")
-    else:
-        _LOGGER.warning("no se pudo confirmar que el servidor respondiera a tiempo; se intenta abrir igual")
-        _open_browser(url)
+            _LOGGER.warning("no se pudo confirmar que el servidor respondiera a tiempo; se intenta abrir igual")
+            _open_browser(url)
 
-    try:
         # El proceso debe permanecer vivo indefinidamente mientras no se
         # haya pedido ningún cierre real (RUNNING normal) NI mientras haya
         # un cierre diferido por un análisis todavía activo (CLOSE_WHEN_
@@ -181,33 +220,75 @@ def _run_new_instance(lock: instance.InstanceLock) -> int:
         # lo que se está esperando, no la vida normal del proceso.
         while managed.is_running() and lifecycle.get_state() != lifecycle.SHUTTING_DOWN:
             managed.wait_for_shutdown(timeout=_SHUTDOWN_WAIT_SAFETY_POLL_SECONDS)
-
-        managed.wait_for_shutdown(timeout=_WAITRESS_JOIN_TIMEOUT_SECONDS)
-        if managed.is_running():
-            # No se pudo confirmar el cierre limpio del hilo de Waitress
-            # dentro del plazo, con un cierre ya solicitado de verdad (p. ej.
-            # una carrera conocida de Windows en el trigger interno de
-            # Waitress cuando el cierre coincide con pedidos concurrentes en
-            # curso — heartbeat, recursos estáticos — ver
-            # docs/LAUNCHER_LIFECYCLE.md). Es un hilo daemon sin estado de
-            # aplicación propio: seguir esperando indefinidamente no protege
-            # nada que la red de seguridad de abajo no proteja ya, y sí
-            # puede dejar el proceso colgado para siempre.
-            _LOGGER.warning(
-                "el hilo del servidor no confirmó su cierre en %ss; se continúa de todas formas",
-                _WAITRESS_JOIN_TIMEOUT_SECONDS,
+        if lifecycle.get_state() != lifecycle.SHUTTING_DOWN:
+            controlled_failure = True
+            _LOGGER.error(
+                "el servidor WSGI termino sin una solicitud de cierre de lifecycle"
             )
+            return 1
+        normal_shutdown = True
+        return 0
     finally:
-        # Red de seguridad final (sección M): nunca salir del proceso —y
-        # matar así, de un daemon thread, cualquier worker— mientras un
-        # análisis siga activo, sin importar cómo se llegó hasta aquí.
-        while state.is_any_run_active():
-            time.sleep(_SHUTDOWN_WAIT_SAFETY_POLL_SECONDS)
-        lifecycle.stop_watchdog()
-        lock.release()
+        body_exception_active = sys.exc_info()[0] is not None
+        server_wait_error = None
+        try:
+            # El selector no forma parte del análisis. Su cleanup es
+            # best-effort: un fallo aquí nunca puede saltarse la espera de la
+            # corrida activa ni el resto de la liberación de recursos.
+            try:
+                shutdown_dialog_children()
+            except Exception:  # noqa: BLE001 - frontera de cleanup final
+                _LOGGER.exception("fallo al terminar hijos del selector de carpetas")
 
-    _LOGGER.info("apagado limpio completo (motivo=%s)", lifecycle.get_shutdown_reason())
-    return 0
+            # Red de seguridad final (sección M): nunca detener el servidor y
+            # matar así un worker daemon mientras su análisis siga activo.
+            while state.is_any_run_active():
+                time.sleep(_SHUTDOWN_WAIT_SAFETY_POLL_SECONDS)
+        finally:
+            try:
+                lifecycle.stop_watchdog()
+            except Exception:  # noqa: BLE001 - no impedir otros cleanups
+                _LOGGER.exception("fallo al detener el watchdog de lifecycle")
+
+            if managed is not None:
+                try:
+                    managed.stop()
+                except Exception:  # noqa: BLE001 - continuar hasta liberar lock
+                    _LOGGER.exception("fallo al solicitar el cierre del servidor WSGI")
+                try:
+                    managed.wait_for_shutdown(timeout=_WAITRESS_JOIN_TIMEOUT_SECONDS)
+                    if managed.is_running():
+                        # Un hilo daemon sin estado propio no debe colgar el
+                        # proceso indefinidamente tras el plazo de seguridad.
+                        _LOGGER.warning(
+                            "el hilo del servidor no confirmó su cierre en %ss; "
+                            "se continúa de todas formas",
+                            _WAITRESS_JOIN_TIMEOUT_SECONDS,
+                        )
+                except Exception as exc:  # noqa: BLE001 - liberar lock primero
+                    _LOGGER.exception("fallo al esperar el cierre del servidor WSGI")
+                    # Conserva la semantica previa: un fallo de la espera
+                    # terminal se propaga si no hay ya una excepcion mas
+                    # temprana (readiness/metadata/etc.) que deba preservarse.
+                    if (
+                        not body_exception_active
+                        and server_started
+                        and not controlled_failure
+                    ):
+                        server_wait_error = exc
+
+            try:
+                lock.release()
+            except Exception:  # noqa: BLE001 - conservar la excepción original
+                _LOGGER.exception("fallo al liberar el lock de instancia")
+
+        if server_wait_error is not None:
+            raise server_wait_error
+        if normal_shutdown:
+            _LOGGER.info(
+                "apagado limpio completo (motivo=%s)",
+                lifecycle.get_shutdown_reason(),
+            )
 
 
 def main() -> int:

@@ -2,6 +2,94 @@
 // No usa WebSocket ni Server-Sent Events: el progreso se obtiene por
 // sondeo (polling) periódico de /status, tal como pide el encargo.
 
+// Política transversal de teclado para formularios operativos. Enter en un
+// campo de datos no elige un submitter implícito; las acciones siguen
+// disponibles mediante sus botones explícitos. No se interceptan textarea,
+// botones, Space ni controles ajenos a un formulario.
+function tzIsExplicitEnterAction(target) {
+  if (!target) {
+    return false;
+  }
+  var tagName = String(target.tagName || "").toLowerCase();
+  if (tagName === "button") {
+    return true;
+  }
+  if (target.closest && target.closest("button")) {
+    return true;
+  }
+  if (tagName !== "input") {
+    return false;
+  }
+  var inputType = String(target.type || "text").toLowerCase();
+  // file y color abren selectores nativos con Enter; no son campos que
+  // deban producir un submit implícito y conservarlos evita perder teclado.
+  return ["button", "submit", "reset", "image", "file", "color"].indexOf(inputType) !== -1;
+}
+
+function tzShouldBlockFormEnter(target) {
+  if (!target || tzIsExplicitEnterAction(target)) {
+    return false;
+  }
+  var tagName = String(target.tagName || "").toLowerCase();
+  if (tagName === "textarea") {
+    return false;
+  }
+  if (tagName !== "input" && tagName !== "select") {
+    return false;
+  }
+  var form = target.form;
+  if (!form && target.closest) {
+    form = target.closest("form");
+  }
+  return Boolean(form);
+}
+
+function tzHandleFormKeydown(event) {
+  if (!event || event.key !== "Enter" || event.isComposing || event.defaultPrevented) {
+    return;
+  }
+  if (tzShouldBlockFormEnter(event.target)) {
+    event.preventDefault();
+  }
+}
+
+function tzInstallFormEnterGuard(root) {
+  if (!root || typeof root.addEventListener !== "function") {
+    return;
+  }
+  root.addEventListener("keydown", tzHandleFormKeydown);
+}
+
+// Los botones de navegación regresiva son type=button para que nunca puedan
+// convertirse en el submitter implícito. Al activarlos con clic, Enter o Space,
+// este helper reproduce su POST explícito y conserva la validación nativa.
+function tzSubmitExplicitFormAction(button) {
+  var form = button && button.form;
+  if (!form) {
+    return;
+  }
+
+  var submitter = document.createElement("button");
+  submitter.type = "submit";
+  submitter.hidden = true;
+  submitter.tabIndex = -1;
+  submitter.setAttribute("aria-hidden", "true");
+  if (button.name) {
+    submitter.name = button.name;
+    submitter.value = button.value;
+  }
+  form.appendChild(submitter);
+  try {
+    if (typeof form.requestSubmit === "function") {
+      form.requestSubmit(submitter);
+    } else {
+      submitter.click();
+    }
+  } finally {
+    form.removeChild(submitter);
+  }
+}
+
 function tzHandleFileSelect(input) {
   var wrap = document.getElementById("archivo_seleccionado");
   var nameEl = document.getElementById("archivo_nombre");

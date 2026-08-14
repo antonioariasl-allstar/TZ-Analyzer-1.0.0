@@ -1,88 +1,119 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""tz_folder_dialog_helper.py — proceso auxiliar aislado del selector nativo
-de carpetas (MICROBLOQUE 6).
+"""Selector Tk callable para el modo interno de TZ Analyzer.
 
-No es un entrypoint de la aplicación: ``tz_core.folder_dialog.pick_folder``
-lo invoca como subproceso independiente (``sys.executable
-tz_folder_dialog_helper.py [--title=...] [carpeta_inicial]``) para que el
-diálogo modal de Tkinter nunca comparta hilo ni proceso con el servidor
-Waitress (ver el docstring de ``tz_core.folder_dialog`` para el porqué).
-
-Este script deliberadamente no importa nada de ``tz_web``/``tz_core`` más
-allá de la biblioteca estándar: debe arrancar rápido y no arrastrar Flask,
-pandas ni el resto de dependencias pesadas de la aplicación solo para
-mostrar un diálogo.
-
-Contrato de salida (única fuente de verdad; ``tz_core.folder_dialog`` lo
-replica como constantes para interpretarlo):
-- exit 0, ruta elegida en stdout: selección exitosa.
-- exit 3, sin salida: el usuario canceló el diálogo.
-- exit 4, mensaje en stderr: sin interfaz gráfica disponible (Tkinter
-  ausente o el diálogo no pudo abrirse).
-- exit 1, mensaje en stderr: cualquier otro error inesperado.
+No importa Flask, Waitress, ``tz_web`` ni ``tz_core``. El launcher lo llama
+unicamente cuando fue reinvocado con ``--tz-internal-folder-dialog``.
 """
 
 from __future__ import annotations
 
-import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Optional
 
-EXIT_OK = 0
-EXIT_ERROR = 1
-EXIT_CANCELLED = 3
-EXIT_NO_GUI = 4
+from tz_folder_dialog_ipc import (
+    EXIT_CANCELLED,
+    EXIT_ERROR,
+    EXIT_NO_GUI,
+    EXIT_OK,
+    STATUS_CANCELLED,
+    STATUS_ERROR,
+    STATUS_SUCCESS,
+    STATUS_UNAVAILABLE,
+    DialogProtocolError,
+    read_request,
+    validate_request_id,
+    write_result,
+)
 
 _DEFAULT_TITLE = "Seleccionar carpeta de salida"
 
 
-def _parse_args(argv):
-    title = _DEFAULT_TITLE
-    initial_dir = None
-    for arg in argv[1:]:
-        if arg.startswith("--title="):
-            title = arg[len("--title="):] or _DEFAULT_TITLE
-        elif initial_dir is None:
-            initial_dir = arg
-    return title, initial_dir
+@dataclass(frozen=True)
+class DialogOutcome:
+    status: str
+    path: Optional[str] = None
+    error_code: Optional[str] = None
 
 
-def main(argv) -> int:
-    title, initial_dir = _parse_args(argv)
-
+def select_folder(*, title: Optional[str] = None, initial_dir: Optional[str] = None) -> DialogOutcome:
+    """Muestra un unico ``Tk()`` y devuelve un resultado estructurado."""
     try:
-        from tkinter import Tk, TclError, filedialog
-    except ImportError as exc:
-        print(f"Tkinter no está disponible en este intérprete: {exc}", file=sys.stderr)
-        return EXIT_NO_GUI
+        from tkinter import TclError, Tk, filedialog
+    except ImportError:
+        return DialogOutcome(STATUS_UNAVAILABLE, error_code="TKINTER_UNAVAILABLE")
 
     try:
         root = Tk()
         root.withdraw()
-        # -topmost: sin esto, en algunos entornos Windows el diálogo puede
-        # abrirse detrás de la ventana del navegador que disparó la
-        # petición, dando la falsa impresión de que "no pasó nada".
         root.attributes("-topmost", True)
         try:
             folder = filedialog.askdirectory(
-                title=title,
+                title=title or _DEFAULT_TITLE,
                 initialdir=initial_dir or None,
                 mustexist=True,
             )
         finally:
             root.destroy()
-    except TclError as exc:
-        print(f"No se pudo abrir el selector gráfico: {exc}", file=sys.stderr)
-        return EXIT_NO_GUI
-    except Exception as exc:  # noqa: BLE001 - cualquier fallo inesperado del diálogo
-        print(f"Error inesperado en el selector de carpetas: {exc}", file=sys.stderr)
-        return EXIT_ERROR
+    except TclError:
+        return DialogOutcome(STATUS_UNAVAILABLE, error_code="TK_UNAVAILABLE")
+    except Exception:  # noqa: BLE001 - frontera tecnica del proceso hijo
+        return DialogOutcome(STATUS_ERROR, error_code="UNEXPECTED_DIALOG_ERROR")
 
     if not folder:
-        return EXIT_CANCELLED
-
-    print(folder)
-    return EXIT_OK
+        return DialogOutcome(STATUS_CANCELLED)
+    return DialogOutcome(STATUS_SUCCESS, path=str(folder))
 
 
-if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+def run_internal_folder_dialog(
+    request_id: object,
+    *,
+    dialog_dir: Optional[Path] = None,
+    select_folder_fn: Callable[..., DialogOutcome] = select_folder,
+) -> int:
+    """Consume la solicitud derivada del ID y publica el resultado atomico."""
+    try:
+        validated_id = validate_request_id(request_id)
+    except DialogProtocolError:
+        return EXIT_ERROR
+
+    try:
+        request = read_request(validated_id, dialog_dir=dialog_dir)
+    except DialogProtocolError:
+        try:
+            write_result(
+                validated_id,
+                status=STATUS_ERROR,
+                error_code="INVALID_REQUEST",
+                dialog_dir=dialog_dir,
+            )
+        except (DialogProtocolError, OSError):
+            pass
+        return EXIT_ERROR
+
+    try:
+        outcome = select_folder_fn(
+            title=request["title"],
+            initial_dir=request["initial_dir"],
+        )
+    except Exception:  # noqa: BLE001 - el hijo siempre debe cerrar con estado tecnico
+        outcome = DialogOutcome(STATUS_ERROR, error_code="UNEXPECTED_DIALOG_ERROR")
+
+    try:
+        write_result(
+            validated_id,
+            status=outcome.status,
+            path=outcome.path,
+            error_code=outcome.error_code,
+            dialog_dir=dialog_dir,
+        )
+    except (DialogProtocolError, OSError):
+        return EXIT_ERROR
+
+    return {
+        STATUS_SUCCESS: EXIT_OK,
+        STATUS_CANCELLED: EXIT_CANCELLED,
+        STATUS_UNAVAILABLE: EXIT_NO_GUI,
+        STATUS_ERROR: EXIT_ERROR,
+    }.get(outcome.status, EXIT_ERROR)

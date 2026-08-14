@@ -6,8 +6,7 @@
   <h2>3. Configuración</h2>
   <p class="tz-help">Paso 5 de 5 · Preparar análisis</p>
 
-  <form action="{{ url_for('tz_web.configure_final_submit') }}" method="post" id="configure_final_form"
-        onkeydown="return event.key !== 'Enter';">
+  <form action="{{ url_for('tz_web.configure_final_submit') }}" method="post" id="configure_final_form">
 
     <h3>Tipo de bitácora</h3>
     <div class="tz-field">
@@ -40,8 +39,8 @@
     </div>
 
     <p class="tz-help">
-      El sistema añadirá automáticamente un identificador de ejecución para
-      evitar sobrescribir análisis anteriores.
+      Si ya existe una carpeta con el mismo nombre, TZ Analyzer añadirá automáticamente
+      un sufijo para evitar sobrescribir resultados anteriores.
     </p>
 
     <h3>Ubicación de salida</h3>
@@ -54,7 +53,7 @@
     <p class="tz-help">El sistema creará automáticamente una carpeta independiente para este análisis dentro de la carpeta elegida.</p>
 
     <div class="tz-actions">
-      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="button" name="accion" value="anterior" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">← Anterior</button>
       <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Continuar al resumen</button>
     </div>
   </form>

@@ -42,7 +42,12 @@ from tz_core.bitacora_io import cargar_excel_con_normalizacion, listar_todas_hoj
 from tz_core.capabilities import detectar_capacidades
 from tz_core.config_loader import get_config
 from tz_core.field_roles import WIZARD_ORDER_PRIMARY, WIZARD_ORDER_SECONDARY
-from tz_core.folder_dialog import FolderDialogUnavailableError, pick_folder
+from tz_core.folder_dialog import (
+    FolderDialogBusyError,
+    FolderDialogInterruptedError,
+    FolderDialogUnavailableError,
+    pick_folder,
+)
 from tz_core.mapping_wizard import FIELD_CONTEXT
 from tz_core.user_paths import resolve_default_output_dir
 from tz_web import help_content
@@ -79,6 +84,13 @@ from tz_web.services import (
 )
 
 bp = Blueprint("tz_web", __name__)
+
+# Puerta de proceso dedicada al selector. Se adquiere sin espera. Mientras
+# esta tomada solo se lee lifecycle (selector -> lifecycle); lifecycle nunca
+# adquiere esta puerta, por lo que no existe el orden inverso. Se libera antes
+# de mutation_guard/state.run_lock().
+_OUTPUT_FOLDER_SELECTOR_LOCK = threading.Lock()
+_OUTPUT_FOLDER_SELECTOR_BUSY_MESSAGE = "Ya existe un selector de carpeta abierto."
 
 CANONICAL_FIELDS: Tuple[str, ...] = WIZARD_ORDER_PRIMARY + WIZARD_ORDER_SECONDARY
 
@@ -254,11 +266,38 @@ def select_output_folder():
     if reason is not None:
         return jsonify({"status": "error", "message": _message_for_rejection(reason)}), 409
 
-    carpeta_inicial = case.carpeta_salida or resolve_default_output_dir(warn=lambda _msg: None)
+    if not _OUTPUT_FOLDER_SELECTOR_LOCK.acquire(blocking=False):
+        return jsonify({
+            "status": "error",
+            "message": _OUTPUT_FOLDER_SELECTOR_BUSY_MESSAGE,
+        }), 409
+
     try:
-        seleccionada = pick_folder(initial_dir=carpeta_inicial)
-    except FolderDialogUnavailableError as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 502
+        carpeta_inicial = case.carpeta_salida or resolve_default_output_dir(
+            warn=lambda _msg: None
+        )
+        try:
+            seleccionada = pick_folder(
+                initial_dir=carpeta_inicial,
+                cancel_requested=lambda: lifecycle.get_state() != lifecycle.RUNNING,
+            )
+        except FolderDialogInterruptedError:
+            return jsonify({
+                "status": "error",
+                "message": state.MSG_SHUTDOWN_PENDING,
+            }), 409
+        except FolderDialogBusyError:
+            # Defensa secundaria del registro para el caso extremo en que el
+            # SO no confirme la muerte de un hijo anterior. El mutex cubre el
+            # camino normal y este rechazo conserva la misma semantica HTTP.
+            return jsonify({
+                "status": "error",
+                "message": _OUTPUT_FOLDER_SELECTOR_BUSY_MESSAGE,
+            }), 409
+        except FolderDialogUnavailableError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 502
+    finally:
+        _OUTPUT_FOLDER_SELECTOR_LOCK.release()
 
     if seleccionada is None:
         # Cancelado: la selección existente (si la había) no se toca.

@@ -27,7 +27,7 @@
     </div>
 
     <div class="tz-actions">
-      <button type="submit" form="configure_back_form" class="tz-btn tz-btn-secondary">← Volver al mapeo</button>
+      <button type="button" form="configure_back_form" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">← Volver al mapeo</button>
       <button type="submit" name="accion" value="omitir" class="tz-btn tz-btn-secondary">Omitir</button>
       <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Siguiente</button>
     </div>
@@ -36,29 +36,4 @@
   <form action="{{ url_for('tz_web.configure_back_to_mapping') }}" method="post" id="configure_back_form"></form>
 </div>
 
-{% endblock %}
-
-{% block scripts %}
-<script>
-  document.addEventListener("DOMContentLoaded", function () {
-    var alias = document.getElementById("identidad_alias");
-    var usuario = document.getElementById("identidad_nombre_usuario");
-    var abonado = document.getElementById("identidad_abonado");
-
-    function noSubmitAdvanceTo(nextEl) {
-      return function (evt) {
-        if (evt.key === "Enter") {
-          evt.preventDefault();
-          if (nextEl) {
-            nextEl.focus();
-          }
-        }
-      };
-    }
-
-    if (alias) alias.addEventListener("keydown", noSubmitAdvanceTo(usuario));
-    if (usuario) usuario.addEventListener("keydown", noSubmitAdvanceTo(abonado));
-    if (abonado) abonado.addEventListener("keydown", noSubmitAdvanceTo(null));
-  });
-</script>
 {% endblock %}

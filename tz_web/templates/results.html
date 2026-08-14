@@ -123,7 +123,7 @@
   <div class="tz-card">
     <div class="tz-actions">
       <form action="{{ url_for('tz_web.results_back_to_products') }}" method="post">
-        <button type="submit" class="tz-btn tz-btn-secondary">Volver a configurar productos</button>
+        <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">Volver a configurar productos</button>
       </form>
     </div>
   </div>
@@ -138,16 +138,16 @@
     <div class="tz-actions">
       {% if mostrar_volver_filtro %}
       <form action="{{ url_for('tz_web.results_back_to_filtro_tiempo') }}" method="post">
-        <button type="submit" class="tz-btn tz-btn-secondary">Volver a revisar filtro temporal</button>
+        <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">Volver a revisar filtro temporal</button>
       </form>
       {% endif %}
       {% if mostrar_volver_modo3 %}
       <form action="{{ url_for('tz_web.modo3_results_back') }}" method="post">
-        <button type="submit" class="tz-btn tz-btn-secondary">Volver a preparar salida</button>
+        <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">Volver a preparar salida</button>
       </form>
       {% else %}
       <form action="{{ url_for('tz_web.results_back_to_mapping') }}" method="post">
-        <button type="submit" class="tz-btn tz-btn-secondary">Volver a revisar mapeo</button>
+        <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">Volver a revisar mapeo</button>
       </form>
       {% endif %}
       <form action="{{ url_for('tz_web.new_case') }}" method="post">

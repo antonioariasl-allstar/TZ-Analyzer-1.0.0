@@ -12,7 +12,7 @@
   </div>
   <div class="tz-actions">
     <form action="{{ url_for('tz_web.configure_back_to_mapping') }}" method="post">
-      <button type="submit" class="tz-btn tz-btn-secondary">← Volver a la revisión del mapeo</button>
+      <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">← Volver a la revisión del mapeo</button>
     </form>
     <a class="tz-btn tz-btn-secondary" href="{{ url_for('tz_web.menu_screen') }}">Volver al menú principal</a>
   </div>
@@ -82,7 +82,7 @@
     </div>
 
     <div class="tz-actions">
-      <button type="submit" name="accion" value="anterior" class="tz-btn tz-btn-secondary">← Anterior</button>
+      <button type="button" name="accion" value="anterior" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">← Anterior</button>
       <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Siguiente</button>
     </div>
   </form>

@@ -15,10 +15,15 @@ cancelación a nivel del propio módulo) viven en
 from __future__ import annotations
 
 import os
-import time
+import threading
 
 import pytest
 
+from tz_core.folder_dialog import (
+    FolderDialogInterruptedError,
+    FolderDialogTimeoutError,
+    FolderDialogUnavailableError,
+)
 from tz_web import lifecycle
 from tz_web import routes as tz_web_routes
 from tz_web import state as tz_web_state
@@ -36,6 +41,14 @@ def current_case(client):
     with client.session_transaction() as flask_sess:
         case_id = flask_sess["case_id"]
     return tz_web_state.get_session(case_id)
+
+
+def _client_for_case(app, case_id):
+    """Crea un cliente independiente que comparte solo el case_id firmado."""
+    test_client = app.test_client()
+    with test_client.session_transaction() as browser_session:
+        browser_session["case_id"] = case_id
+    return test_client
 
 
 def mock_pick_folder(monkeypatch, *, return_value=None, side_effect=None):
@@ -119,6 +132,73 @@ def avanzar_modo3_hasta_preparar(client):
     client.post("/modo3/registros", data=dict(ANTENA_1), follow_redirects=True)
     client.post("/modo3/productos", data={"accion": "siguiente"}, follow_redirects=True)
     return client.post("/modo3/color", data={"accion": "siguiente", "color_hex": "#76ff03"}, follow_redirects=True)
+
+
+# ---------------------------------------------------------------------------
+# Contrato HTTP directo del selector: sesión obligatoria e initial_dir.
+# ---------------------------------------------------------------------------
+
+
+def test_post_sin_sesion_activa_no_abre_dialogo(client, monkeypatch):
+    calls = mock_pick_folder(monkeypatch, return_value="C:\\no_deberia_usarse")
+
+    resp = client.post("/output-folder/select")
+
+    assert resp.status_code == 400
+    assert resp.get_json() == {
+        "status": "error",
+        "message": "No hay una sesión activa.",
+    }
+    assert calls == []
+
+
+def test_selector_usa_seleccion_previa_como_initial_dir(client, monkeypatch, tmp_path):
+    client.post("/modo/1", follow_redirects=True)
+    anterior = tmp_path / "salida anterior"
+    anterior.mkdir()
+    select_output_folder(client, str(anterior))
+    calls = mock_pick_folder(monkeypatch, return_value=None)
+
+    resp = client.post("/output-folder/select")
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {
+        "status": "cancelled",
+        "carpeta_salida": str(anterior),
+    }
+    assert len(calls) == 1
+    assert calls[0]["initial_dir"] == str(anterior)
+    assert callable(calls[0]["cancel_requested"])
+    assert calls[0]["cancel_requested"]() is False
+
+
+def test_selector_usa_fallback_como_initial_dir_sin_seleccion_previa(
+    client, monkeypatch, tmp_path
+):
+    client.post("/modo/1", follow_redirects=True)
+    fallback = str(tmp_path / "fallback sugerido")
+    resolver_calls = []
+
+    def _resolve_default(*, warn):
+        resolver_calls.append(warn)
+        return fallback
+
+    monkeypatch.setattr(tz_web_routes, "resolve_default_output_dir", _resolve_default)
+    calls = mock_pick_folder(monkeypatch, return_value=None)
+
+    resp = client.post("/output-folder/select")
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {
+        "status": "cancelled",
+        "carpeta_salida": None,
+    }
+    assert len(resolver_calls) == 1
+    assert callable(resolver_calls[0])
+    assert len(calls) == 1
+    assert calls[0]["initial_dir"] == fallback
+    assert callable(calls[0]["cancel_requested"])
+    assert calls[0]["cancel_requested"]() is False
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +303,10 @@ def test_cancelar_conservando_seleccion_anterior(client, monkeypatch, tmp_path):
 
 def test_carpeta_no_escribible_es_rechazada_y_permite_reintentar(client, monkeypatch, tmp_path):
     avanzar_modo1_hasta_preparar(client)
+    anterior = tmp_path / "seleccion_anterior"
+    anterior.mkdir()
+    select_output_folder(client, str(anterior))
+    original_ensure_writable_dir = tz_web_state.ensure_writable_dir
 
     def _boom(_path):
         raise OSError("permiso denegado (simulado)")
@@ -234,10 +318,12 @@ def test_carpeta_no_escribible_es_rechazada_y_permite_reintentar(client, monkeyp
     data = resp.get_json()
     assert data["status"] == "error"
     assert "No se pudo usar la carpeta seleccionada" in data["message"]
-    assert current_case(client).carpeta_salida is None
+    assert current_case(client).carpeta_salida == str(anterior)
 
     # Reintento con la carpeta ya escribible (mismo click, sin el mock roto).
-    monkeypatch.undo()
+    monkeypatch.setattr(
+        tz_web_state, "ensure_writable_dir", original_ensure_writable_dir
+    )
     elegida = str(tmp_path / "esta_si_sirve")
     resp = click_seleccionar_carpeta(client, monkeypatch, return_value=elegida)
     assert resp.status_code == 200
@@ -245,8 +331,6 @@ def test_carpeta_no_escribible_es_rechazada_y_permite_reintentar(client, monkeyp
 
 
 def test_dialogo_no_disponible_produce_mensaje_comprensible(client, monkeypatch):
-    from tz_core.folder_dialog import FolderDialogUnavailableError
-
     avanzar_modo1_hasta_preparar(client)
     resp = click_seleccionar_carpeta(
         client, monkeypatch, return_value=None,
@@ -257,6 +341,88 @@ def test_dialogo_no_disponible_produce_mensaje_comprensible(client, monkeypatch)
     assert data["status"] == "error"
     assert "Tkinter" in data["message"]
     assert current_case(client).carpeta_salida is None
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected_status"),
+    [
+        pytest.param("success", 200, id="SUCCESS"),
+        pytest.param("cancelled", 200, id="CANCELLED"),
+        pytest.param("error", 502, id="ERROR"),
+        pytest.param("interrupted", 409, id="Interrupted"),
+        pytest.param("timeout", 502, id="timeout"),
+        pytest.param("spawn_error", 502, id="spawn-error"),
+    ],
+)
+def test_puerta_del_selector_se_libera_en_todas_las_salidas(
+    app, monkeypatch, tmp_path, outcome, expected_status
+):
+    """Cada retorno o excepción controlada permite un POST posterior."""
+    case = tz_web_state.create_session()
+    case.modo = tz_web_state.MODO_1
+    anterior = tmp_path / "seleccion-anterior"
+    anterior.mkdir()
+    case.carpeta_salida = str(anterior)
+    client = _client_for_case(app, case.id)
+    primera = str(tmp_path / f"primera-{outcome}")
+
+    exceptions = {
+        "error": FolderDialogUnavailableError("error tecnico controlado"),
+        "interrupted": FolderDialogInterruptedError("cierre solicitado"),
+        "timeout": FolderDialogTimeoutError("selector agotado"),
+        "spawn_error": FolderDialogUnavailableError("no se pudo iniciar el selector"),
+    }
+
+    def _first_pick(*, initial_dir, cancel_requested):
+        assert initial_dir == str(anterior)
+        assert callable(cancel_requested)
+        assert cancel_requested() is False
+        if outcome == "success":
+            return primera
+        if outcome == "cancelled":
+            return None
+        raise exceptions[outcome]
+
+    monkeypatch.setattr(tz_web_routes, "pick_folder", _first_pick)
+    first_response = client.post("/output-folder/select")
+
+    assert first_response.status_code == expected_status
+    if outcome == "success":
+        assert first_response.get_json()["status"] == "ok"
+        assert case.carpeta_salida == primera
+    elif outcome == "cancelled":
+        assert first_response.get_json() == {
+            "status": "cancelled",
+            "carpeta_salida": str(anterior),
+        }
+        assert case.carpeta_salida == str(anterior)
+    elif outcome == "interrupted":
+        assert first_response.get_json() == {
+            "status": "error",
+            "message": tz_web_state.MSG_SHUTDOWN_PENDING,
+        }
+        assert case.carpeta_salida == str(anterior)
+    else:
+        assert first_response.get_json()["status"] == "error"
+        assert case.carpeta_salida == str(anterior)
+
+    segunda = str(tmp_path / f"segunda-{outcome}")
+
+    def _second_pick(*, initial_dir, cancel_requested):
+        assert initial_dir == case.carpeta_salida
+        assert callable(cancel_requested)
+        assert cancel_requested() is False
+        return segunda
+
+    monkeypatch.setattr(tz_web_routes, "pick_folder", _second_pick)
+    second_response = client.post("/output-folder/select")
+
+    assert second_response.status_code == 200
+    assert second_response.get_json() == {
+        "status": "ok",
+        "carpeta_salida": segunda,
+    }
+    assert case.carpeta_salida == segunda
 
 
 # ---------------------------------------------------------------------------
@@ -391,32 +557,305 @@ def test_rechazo_durante_cierre_pendiente_no_invoca_el_dialogo(client, monkeypat
         lifecycle.reset_for_tests()
 
 
-def test_rechazo_no_bloquea_el_resto_del_backend(client, monkeypatch, tmp_path):
-    """El chequeo previo (sin sostener el lock durante el diálogo) no debe
-    impedir que otras rutas guardadas por el mismo lock sigan respondiendo
-    de inmediato — a diferencia de lo que ocurriría si el endpoint sostuviera
-    ``state.mutation_guard()`` durante toda la espera del diálogo."""
+def test_rechazo_si_analisis_comienza_mientras_dialogo_esta_abierto(
+    client, monkeypatch, tmp_path
+):
     avanzar_modo1_hasta_preparar(client)
-    assert tz_web_state.try_start_run("otra-sesion-activa") is True
-    try:
-        started = time.time()
-        resp = client.post("/output-folder/select")
-        elapsed = time.time() - started
-        assert resp.status_code == 409
-        assert elapsed < 2.0  # nunca esperó nada parecido al timeout del diálogo
+    anterior = tmp_path / "seleccion_anterior"
+    anterior.mkdir()
+    select_output_folder(client, str(anterior))
+    elegida = str(tmp_path / "no_debe_persistirse")
+    run_id = "iniciado-mientras-dialogo-abierto"
 
-        # Otra ruta protegida por el mismo lock responde con su mensaje
-        # propio de "ocupado", sin quedar detrás de una espera indefinida.
-        resp2 = client.post("/modo/2", follow_redirects=True)
-        assert tz_web_state.MSG_ANALYSIS_IN_PROGRESS.encode("utf-8") in resp2.data
+    def _fake_pick_folder(**_kwargs):
+        assert tz_web_state.try_start_run(run_id) is True
+        return elegida
+
+    def _ensure_no_debe_invocarse(_path):
+        pytest.fail("No debe validar/escribir después de detectar el análisis activo")
+
+    monkeypatch.setattr(tz_web_routes, "pick_folder", _fake_pick_folder)
+    monkeypatch.setattr(
+        tz_web_state, "ensure_writable_dir", _ensure_no_debe_invocarse
+    )
+    try:
+        resp = client.post("/output-folder/select")
+
+        assert resp.status_code == 409
+        assert resp.get_json() == {
+            "status": "error",
+            "message": tz_web_state.MSG_ANALYSIS_IN_PROGRESS,
+        }
+        assert current_case(client).carpeta_salida == str(anterior)
     finally:
-        tz_web_state.finish_run("otra-sesion-activa")
+        tz_web_state.finish_run(run_id)
+
+
+def test_rechazo_si_shutdown_comienza_mientras_dialogo_esta_abierto(
+    client, monkeypatch, tmp_path
+):
+    avanzar_modo1_hasta_preparar(client)
+    anterior = tmp_path / "seleccion_anterior"
+    anterior.mkdir()
+    select_output_folder(client, str(anterior))
+    elegida = str(tmp_path / "no_debe_persistirse")
+
+    def _fake_pick_folder(**_kwargs):
+        lifecycle.request_shutdown(reason="test_shutdown_mientras_dialogo_abierto")
+        return elegida
+
+    def _ensure_no_debe_invocarse(_path):
+        pytest.fail("No debe validar/escribir después de detectar el cierre pendiente")
+
+    monkeypatch.setattr(tz_web_routes, "pick_folder", _fake_pick_folder)
+    monkeypatch.setattr(
+        tz_web_state, "ensure_writable_dir", _ensure_no_debe_invocarse
+    )
+    try:
+        resp = client.post("/output-folder/select")
+
+        assert resp.status_code == 409
+        assert resp.get_json() == {
+            "status": "error",
+            "message": tz_web_state.MSG_SHUTDOWN_PENDING,
+        }
+        assert current_case(client).carpeta_salida == str(anterior)
+    finally:
+        lifecycle.reset_for_tests()
+
+
+def test_segundo_post_de_otra_sesion_recibe_409_mientras_el_primero_sigue_abierto(
+    app, monkeypatch, tmp_path
+):
+    case = tz_web_state.create_session()
+    case.modo = tz_web_state.MODO_1
+    competing_case = tz_web_state.create_session()
+    competing_case.modo = tz_web_state.MODO_3
+    first_client = _client_for_case(app, case.id)
+    second_client = _client_for_case(app, competing_case.id)
+    selected = str(tmp_path / "seleccion-del-primer-post")
+
+    picker_entered = threading.Event()
+    release_picker = threading.Event()
+    first_done = threading.Event()
+    picker_calls = []
+    first_result = {}
+    first_errors = []
+
+    def _blocking_pick(**kwargs):
+        picker_calls.append(kwargs)
+        assert callable(kwargs["cancel_requested"])
+        assert kwargs["cancel_requested"]() is False
+        picker_entered.set()
+        assert release_picker.wait(timeout=3), "el test no liberó el selector retenido"
+        return selected
+
+    def _post_first():
+        try:
+            first_result["response"] = first_client.post("/output-folder/select")
+        except BaseException as exc:  # noqa: BLE001 - se propaga al hilo principal
+            first_errors.append(exc)
+        finally:
+            first_done.set()
+
+    monkeypatch.setattr(tz_web_routes, "pick_folder", _blocking_pick)
+    first_thread = threading.Thread(target=_post_first, name="test-selector-owner")
+    first_thread.start()
+    try:
+        assert picker_entered.wait(timeout=3), "el primer POST no entró al picker"
+
+        second_response = second_client.post("/output-folder/select")
+
+        assert second_response.status_code == 409
+        assert second_response.get_json() == {
+            "status": "error",
+            "message": tz_web_routes._OUTPUT_FOLDER_SELECTOR_BUSY_MESSAGE,
+        }
+        # Prueba causal de no bloqueo: el segundo ya terminó aunque el evento
+        # que permite terminar al primer picker sigue sin activarse.
+        assert release_picker.is_set() is False
+        assert first_done.is_set() is False
+        assert len(picker_calls) == 1
+    finally:
+        release_picker.set()
+        first_thread.join(timeout=3)
+
+    assert first_thread.is_alive() is False
+    assert first_errors == []
+    assert first_result["response"].status_code == 200
+    assert first_result["response"].get_json() == {
+        "status": "ok",
+        "carpeta_salida": selected,
+    }
+    assert case.carpeta_salida == selected
+    assert competing_case.carpeta_salida is None
+
+
+def test_rafaga_de_cinco_posts_invoca_un_solo_picker_y_rechaza_los_otros(
+    app, monkeypatch, tmp_path
+):
+    case = tz_web_state.create_session()
+    case.modo = tz_web_state.MODO_1
+    clients = [_client_for_case(app, case.id) for _ in range(5)]
+    selected = str(tmp_path / "seleccion-del-owner")
+
+    picker_entered = threading.Event()
+    release_picker = threading.Event()
+    owner_done = threading.Event()
+    picker_calls = []
+    picker_calls_lock = threading.Lock()
+    owner_result = {}
+    owner_errors = []
+
+    def _blocking_pick(**kwargs):
+        with picker_calls_lock:
+            picker_calls.append(kwargs)
+            ordinal = len(picker_calls)
+        if ordinal != 1:
+            raise AssertionError("más de un POST alcanzó el picker")
+        assert callable(kwargs["cancel_requested"])
+        assert kwargs["cancel_requested"]() is False
+        picker_entered.set()
+        assert release_picker.wait(timeout=3), "el test no liberó el picker owner"
+        return selected
+
+    def _post_owner():
+        try:
+            owner_result["response"] = clients[0].post("/output-folder/select")
+        except BaseException as exc:  # noqa: BLE001 - se propaga al hilo principal
+            owner_errors.append(exc)
+        finally:
+            owner_done.set()
+
+    monkeypatch.setattr(tz_web_routes, "pick_folder", _blocking_pick)
+    owner_thread = threading.Thread(target=_post_owner, name="test-selector-burst-owner")
+    owner_thread.start()
+
+    duplicate_barrier = threading.Barrier(5)
+    duplicate_responses = [None] * 4
+    duplicate_errors = []
+
+    def _post_duplicate(index):
+        try:
+            duplicate_barrier.wait(timeout=3)
+            duplicate_responses[index] = clients[index + 1].post(
+                "/output-folder/select"
+            )
+        except BaseException as exc:  # noqa: BLE001 - se propaga al hilo principal
+            duplicate_errors.append(exc)
+
+    duplicate_threads = [
+        threading.Thread(
+            target=_post_duplicate,
+            args=(index,),
+            name=f"test-selector-burst-{index}",
+        )
+        for index in range(4)
+    ]
+
+    try:
+        assert picker_entered.wait(timeout=3), "el owner no entró al picker"
+        for thread in duplicate_threads:
+            thread.start()
+        duplicate_barrier.wait(timeout=3)
+        for thread in duplicate_threads:
+            thread.join(timeout=3)
+
+        assert all(thread.is_alive() is False for thread in duplicate_threads)
+        assert duplicate_errors == []
+        assert owner_done.is_set() is False
+        assert release_picker.is_set() is False
+        assert len(picker_calls) == 1
+        for response in duplicate_responses:
+            assert response is not None
+            assert response.status_code == 409
+            assert response.get_json() == {
+                "status": "error",
+                "message": tz_web_routes._OUTPUT_FOLDER_SELECTOR_BUSY_MESSAGE,
+            }
+    finally:
+        release_picker.set()
+        owner_thread.join(timeout=3)
+        for thread in duplicate_threads:
+            if thread.ident is not None:
+                thread.join(timeout=3)
+
+    assert owner_thread.is_alive() is False
+    assert owner_errors == []
+    assert owner_result["response"].status_code == 200
+    assert len(picker_calls) == 1
+    assert case.carpeta_salida == selected
 
 
 # ---------------------------------------------------------------------------
 # 12 — Ruta con espacios y caracteres Unicode: se persiste y se usa tal
 # cual, sin normalizarla ni rechazarla.
 # ---------------------------------------------------------------------------
+
+
+def test_close_when_idle_interrumpe_selector_sin_matar_analisis(
+    app, monkeypatch, tmp_path
+):
+    case = tz_web_state.create_session()
+    case.modo = tz_web_state.MODO_1
+    anterior = tmp_path / "seleccion-anterior-close-when-idle"
+    anterior.mkdir()
+    case.carpeta_salida = str(anterior)
+    selector_client = _client_for_case(app, case.id)
+    analysis = tz_web_state.create_session()
+    picker_entered = threading.Event()
+    inspect_cancellation = threading.Event()
+    response_holder = {}
+    errors = []
+
+    def _blocking_pick(*, initial_dir, cancel_requested):
+        assert initial_dir == str(anterior)
+        picker_entered.set()
+        assert inspect_cancellation.wait(timeout=3)
+        assert cancel_requested() is True
+        raise FolderDialogInterruptedError("cierre diferido solicitado")
+
+    def _post_selector():
+        try:
+            response_holder["response"] = selector_client.post(
+                "/output-folder/select"
+            )
+        except BaseException as exc:  # noqa: BLE001 - se afirma abajo
+            errors.append(exc)
+
+    monkeypatch.setattr(tz_web_routes, "pick_folder", _blocking_pick)
+    thread = threading.Thread(target=_post_selector, name="test-selector-close-idle")
+    thread.start()
+    try:
+        assert picker_entered.wait(timeout=3)
+        assert tz_web_state.try_start_run(analysis.id) is True
+        assert lifecycle.request_shutdown(reason="test_close_when_idle_selector") == (
+            lifecycle.CLOSE_WHEN_IDLE
+        )
+        assert tz_web_state.is_any_run_active() is True
+        inspect_cancellation.set()
+        thread.join(timeout=3)
+
+        assert not thread.is_alive()
+        assert errors == []
+        response = response_holder["response"]
+        assert response.status_code == 409
+        assert response.get_json() == {
+            "status": "error",
+            "message": tz_web_state.MSG_SHUTDOWN_PENDING,
+        }
+        assert case.carpeta_salida == str(anterior)
+        assert lifecycle.get_state() == lifecycle.CLOSE_WHEN_IDLE
+        assert tz_web_state.is_any_run_active() is True
+
+        tz_web_state.finish_run(analysis.id)
+        assert lifecycle.get_state() == lifecycle.SHUTTING_DOWN
+    finally:
+        inspect_cancellation.set()
+        thread.join(timeout=3)
+        if tz_web_state.is_any_run_active():
+            tz_web_state.finish_run(analysis.id)
+        lifecycle.reset_for_tests()
 
 
 def test_ruta_con_espacios_y_unicode_se_persiste_y_produce_alli(client, monkeypatch, tmp_path):

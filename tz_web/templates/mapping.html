@@ -79,7 +79,7 @@
 
 <div class="tz-actions">
   <form action="{{ url_for('tz_web.mapping_edit') }}" method="post">
-    <button type="submit" class="tz-btn tz-btn-secondary">Volver a editar</button>
+    <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">Volver a editar</button>
   </form>
   <form action="{{ url_for('tz_web.mapping_confirm') }}" method="post">
     <button type="submit" class="tz-btn tz-btn-primary">Confirmar mapeo</button>

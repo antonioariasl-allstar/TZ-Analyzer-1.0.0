@@ -424,7 +424,12 @@ def test_3e_muestra_nombre_sugerido(client):
     html = resp.data.decode("utf-8")
     assert "Nombre de salida" in html
     assert "CAMBIAR NOMBRE" in html
-    assert "identificador de ejecución" in html
+    assert "identificador de ejecución" not in html
+    assert (
+        "Si ya existe una carpeta con el mismo nombre, TZ Analyzer añadirá "
+        "automáticamente un sufijo para evitar sobrescribir resultados anteriores."
+        in " ".join(html.split())
+    )
 
 
 def test_3e_cambiar_nombre_persiste(client):
