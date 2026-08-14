@@ -23,6 +23,8 @@ BRANDING_DIR = os.path.join(
 
 
 def test_assets_de_branding_disponibles_localmente():
+    from PIL import Image
+
     for filename in (
         "TZ_Analyzer_icono_app.png",
         "TZ_Analyzer_isotipo_principal.png",
@@ -31,6 +33,14 @@ def test_assets_de_branding_disponibles_localmente():
         path = os.path.join(BRANDING_DIR, filename)
         assert os.path.isfile(path), f"falta asset de branding: {path}"
         assert os.path.getsize(path) > 0
+
+        with Image.open(path) as im:
+            im.verify()
+        with Image.open(path) as im:
+            assert im.format == "PNG", f"{filename} no es un PNG válido"
+            assert im.mode in ("RGBA", "LA") or "transparency" in im.info, (
+                f"{filename} debe conservar canal alpha (sin fondo opaco forzado)"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -111,3 +121,29 @@ def test_respuesta_de_logo_no_coincide_con_el_asset_legacy(client):
 def test_sin_referencia_a_favicon_remoto(client):
     html = client.get("/").data.decode("utf-8")
     assert 'rel="icon"' not in html or "http" not in html
+
+
+# ---------------------------------------------------------------------------
+# H — el logo horizontal no se fuerza en superficies pequeñas: ninguna
+# pantalla web actual lo referencia ni existe una ruta que lo sirva.
+# ---------------------------------------------------------------------------
+
+
+def test_logo_horizontal_no_se_fuerza_en_pantallas_pequenas(client):
+    for endpoint in ("/", "/menu", "/help"):
+        html = client.get(endpoint).data.decode("utf-8")
+        assert "logo_horizontal" not in html
+        assert "logo-horizontal" not in html
+    assert not hasattr(tz_web_routes, "logo_horizontal_asset")
+
+
+# ---------------------------------------------------------------------------
+# I — el icono de app queda declarado como fuente canónica para el futuro
+# icono del ejecutable empaquetado (TZ Analyzer.exe); esta fase no genera
+# ningún .ico, solo confirma que la fuente PNG usada por el header ya es
+# el asset correcto.
+# ---------------------------------------------------------------------------
+
+
+def test_icono_app_es_la_fuente_canonica_declarada():
+    assert os.path.basename(tz_web_routes._LOGO_PATH) == "TZ_Analyzer_icono_app.png"
