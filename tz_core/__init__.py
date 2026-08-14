@@ -13,8 +13,8 @@ NOTA: Esqueletos removidos para claridad (data_validator, data_processor,
 kml_generator, ui_helpers). Funcionalidad activa en archivos raíz.
 """
 
-__version__ = "2.0.0"
-__author__ = "Omar Arias (Tony Zero)"
+from tz_version import AUTHOR as __author__
+from tz_version import PEP440_VERSION as __version__
 
 # Imports principales (se irán agregando según se extraigan módulos)
 # from .utils import *

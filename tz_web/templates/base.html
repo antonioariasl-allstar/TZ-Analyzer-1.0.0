@@ -13,7 +13,7 @@
       <img class="tz-logo" src="{{ url_for('tz_web.logo_asset') }}" alt="TZ Analyzer">
       <div>
         <div class="tz-title">TZ Analyzer</div>
-        <div class="tz-subtitle">Versión 1.1 — Aplicación local</div>
+        <div class="tz-subtitle">Versión {{ tz_app_version }} — Aplicación local</div>
       </div>
       <div class="tz-header-actions">
         {% if show_nav|default(true) %}

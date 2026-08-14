@@ -44,6 +44,7 @@ from tz_core.bitacora_normalization import (
 )
 from tz_core.capabilities import CapabilitiesReport, detectar_capacidades
 from tz_core.security_escaping import esc_html, safe_json_for_script
+import tz_version
 from .header import build_logo_html, generate_html_header, generate_body_header
 from .kpi import prepare_report_metrics, generate_kpi_section
 from .metadata import generate_metadata_section, build_identification_rows, inject_technical_metadata
@@ -403,7 +404,7 @@ def generar_informe_html(
     )
 
     html_header = generate_html_header(theme_hex, nombre_salida)
-    body_header = generate_body_header(logo_html, nombre_salida, hoja, gen_dt, config)
+    body_header = generate_body_header(logo_html, nombre_salida, hoja, gen_dt)
     metadata_section = generate_metadata_section(nombre_bitacora, hoja, rango_str, ident_rows)
     kpi_section = generate_kpi_section(total, coord_validas, coord_invalidas, ant_uniq, cel_uniq, cel_label, top_antena, top_count, top_pct, hay_sitio_inferido_kpi)
     
@@ -545,23 +546,6 @@ def generar_informe_html(
 </body>
 </html>
 """
-    # --- TÍTULO H1 desde config.brand (name + version) ---
-    try:
-        _brand = config.get("brand", {}) if isinstance(config, dict) else {}
-        _bname = str(_brand.get("name", "")).strip()
-        _bver  = str(_brand.get("version", "")).strip()
-        if _bname and _bver:
-            _title = f"{_bname} — {_bver}"
-        elif _bname:
-            _title = _bname
-        elif _bver:
-            _title = _bver
-        else:
-            _title = ""
-        _h1 = f'<h1 class="title">{_title}</h1>' if _title else ""
-    except Exception:
-        _h1 = ""
-
     # Índice de navegación: delegar en helper centralizado
     html = apply_toc(html)
 
@@ -1513,7 +1497,12 @@ def generar_informe_html(
         br = (config or {}).get("branding", {}) if config is not None else {}
         _pl_on   = bool(br.get("mostrar_pie_legal", True))
         _pl_txt  = str(br.get("pie_legal_texto", ""))
-        _by_txt  = str(br.get("byline_texto", ""))
+        # Byline: siempre desde tz_version (fuente canónica única), nunca
+        # desde config.json — evita divergencia entre el informe y la app.
+        _by_txt  = (
+            f"Desarrollado por {tz_version.AUTHOR} — {tz_version.PRODUCT_NAME} "
+            f"— Versión {tz_version.VERSION}"
+        )
         _pl_prnt = bool(br.get("pie_legal_en_impresion", True))
 
         if _pl_on and (_pl_txt or _by_txt):
@@ -1551,11 +1540,11 @@ def generar_informe_html(
 
             html = html.replace("</style>", "</style>" + _css_pl, 1)
 
-            # --- FOOTER legal + byline desde config.branding (robusto) ---
+            # --- FOOTER legal (config.branding) + byline (tz_version) ---
             try:
                 _branding = config.get("branding", {}) if isinstance(config, dict) else {}
                 _legal   = str(_branding.get("pie_legal_texto", "")).strip()
-                _byline  = str(_branding.get("byline_texto", "")).strip()
+                _byline  = _by_txt.strip()
 
                 # Construir footer solo si hay algo que mostrar
                 _footer_html = ""

@@ -23,16 +23,12 @@ from typing import Optional
 
 from flask import Flask
 
+from tz_version import VERSION as APP_VERSION
 from tz_web import instance, state
 from tz_web.internal_routes import bp as tz_web_internal_blueprint
 from tz_web.routes import bp as tz_web_blueprint
 
 HOST = "127.0.0.1"
-
-# Sin fuente central de versión de app todavía (tz_core.__version__ es la
-# del motor, no la de la aplicación completa); se fija aquí como el único
-# lugar que la conoce, igual que ya hacía tz_web/templates/base.html.
-APP_VERSION = "1.1"
 
 
 def create_app(
@@ -70,7 +66,10 @@ def create_app(
         # Único canal por el que el token llega a la interfaz (sección L:
         # nunca en la URL). Cadena vacía si no hay token configurado — la
         # UI simplemente no manda heartbeat ni ofrece "Cerrar TZ Analyzer".
-        return {"tz_instance_token": app.config.get("TZ_INSTANCE_TOKEN") or ""}
+        return {
+            "tz_instance_token": app.config.get("TZ_INSTANCE_TOKEN") or "",
+            "tz_app_version": app.config.get("TZ_APP_VERSION") or "",
+        }
 
     state.cleanup_stale_uploads()
 

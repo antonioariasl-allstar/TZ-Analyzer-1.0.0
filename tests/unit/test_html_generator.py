@@ -17,6 +17,7 @@ from tz_core.html.antennas import (
 )
 import pandas as pd
 import tz_core.runtime_utils as runtime_utils
+import tz_version
 
 
 def test_inject_metadata_disabled_noop(tmp_path):
@@ -118,7 +119,7 @@ def test_inject_block_fallbacks_to_body_and_append():
     assert appended.endswith(block)
 
 
-def test_collect_env_snapshot_prefers_config(monkeypatch):
+def test_collect_env_snapshot_usa_tz_version_e_ignora_config(monkeypatch):
     class FixedDatetime(datetime):
         @classmethod
         def now(cls):
@@ -131,6 +132,10 @@ def test_collect_env_snapshot_prefers_config(monkeypatch):
     monkeypatch.setattr(runtime_utils.platform, "node", lambda: "unit-host")
     monkeypatch.setattr(runtime_utils.getpass, "getuser", lambda: "ci-user")
 
+    # Valores deliberadamente distintos de tz_version.VERSION: prueban que
+    # "tz_analysis" ya no puede leerse de config.json (fuente única:
+    # tz_version). "version_config" sigue siendo config-driven a propósito
+    # (identifica la versión del archivo de configuración, no del producto).
     config = {"version": "2.0.0", "version_config": "cfg-x", "brand": {"version": "0.1"}}
 
     snapshot = runtime_utils.collect_env_snapshot(config)
@@ -138,7 +143,7 @@ def test_collect_env_snapshot_prefers_config(monkeypatch):
     assert snapshot["so"] == "UnitOS 11"
     assert snapshot["tz"] == "UnitTZ"
     assert snapshot["fecha_hora"] == "2026-01-03 12:00:00"
-    assert snapshot["tz_analysis"] == "2.0.0"
+    assert snapshot["tz_analysis"] == tz_version.VERSION
     assert snapshot["version_config"] == "cfg-x"
     assert snapshot["hostname"] == "unit-host"
     assert snapshot["usuario"] == "ci-user"

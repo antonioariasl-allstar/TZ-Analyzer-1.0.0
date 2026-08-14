@@ -1,7 +1,6 @@
 {
   "brand": {
     "name": "TZ Analyzer",
-    "version": "Versión 1.1",
     "logo": {
       "path": "assets/branding/TZ_Analyzer_isotipo_principal.png",
       "width_px": 120,
@@ -15,7 +14,6 @@
     "marca_agua_en_impresion": true,
     "mostrar_pie_legal": true,
     "pie_legal_texto": "El presente informe es de carácter confidencial y ha sido generado mediante el software TZ Analyzer, exclusivamente para el equipo asignado a la investigación. Su divulgación o reproducción no autorizada a personas ajenas podría acarrear consecuencias legales.",
-    "byline_texto": "by: Omar Arias - TZ Analyzer - Versión 1.1",
     "pie_legal_en_impresion": true,
     "logo_path": "logo_tz.png",
     "logo_width": "120px",
