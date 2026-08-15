@@ -139,6 +139,26 @@ class TestSinHora:
         assert report.capacidad("antenas_por_horario").disponible is False
         assert report.bloqueos_globales == ()
 
+    def test_datetime_evento_a_medianoche_no_sustituye_hora_ausente(self):
+        """MICROBLOQUE F3.1 — datetime_evento no debe leerse como "hora disponible".
+
+        Tras normalize_temporal_fields (CASO C), una bitácora con fecha pero
+        sin hora mapeada trae ``datetime_evento`` poblado a medianoche, solo
+        como ancla de orden interna. Antes de esta corrección,
+        ``antenas_por_horario`` trataba ese ``datetime_evento`` como
+        evidencia alterna de hora real ("dt_ok"), habilitando por error el
+        análisis por rango horario con datos inventados.
+        """
+        df = _bitacora_completa().drop(columns=["hora"])
+        df["datetime_evento"] = pd.to_datetime(df["fecha"], dayfirst=True).dt.normalize()
+
+        report = detectar_capacidades(df)
+
+        antenas_horario = report.capacidad("antenas_por_horario")
+        assert antenas_horario.disponible is False
+        assert antenas_horario.estado == "no_disponible"
+        assert "hora" in antenas_horario.faltantes
+
 
 class TestSinContacto:
     def test_contactos_no_disponible_resto_intacto(self):

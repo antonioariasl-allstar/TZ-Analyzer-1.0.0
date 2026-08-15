@@ -145,10 +145,18 @@ def normalize_wizard_datetime_fields(
 
     try:
         fecha_dt: Optional[pd.Series] = None
+        # True solo en filas donde el texto original de 'fecha' trae un
+        # componente de hora explícito (ej. "04/01/2026 14:35:00"). Sirve
+        # para distinguir una hora real embebida en la columna fecha de la
+        # medianoche que pd.to_datetime asigna por defecto a una fecha pura
+        # (ej. "04/01/2026" -> 00:00:00): esa medianoche es un artefacto del
+        # parseo, no un dato observado, y no debe reconstruirse como 'hora'.
+        fecha_tiene_componente_horario: Optional[pd.Series] = None
 
         if "fecha" in df.columns:
             fecha_text = df["fecha"].astype(str).str.strip()
             fecha_dt = pd.Series(pd.NaT, index=fecha_text.index, dtype="datetime64[ns]")
+            fecha_tiene_componente_horario = fecha_text.str.contains(":", regex=False)
 
             mask_iso = fecha_text.str.match(r"^\d{4}-\d{2}-\d{2}$")
             if mask_iso.any():
@@ -220,14 +228,15 @@ def normalize_wizard_datetime_fields(
                 mask_empty = hora_out.eq("")
                 if mask_empty.any():
                     hora_from_fecha = fecha_dt.dt.strftime("%H:%M:%S")
-                    fill_mask = mask_empty & fecha_dt.notna()
+                    fill_mask = mask_empty & fecha_dt.notna() & fecha_tiene_componente_horario
                     hora_out.loc[fill_mask] = hora_from_fecha.loc[fill_mask]
 
             df["hora"] = hora_out.replace("", "Sin Inf.")
         else:
             if fecha_dt is not None:
                 hora_from_fecha = fecha_dt.dt.strftime("%H:%M:%S")
-                df["hora"] = hora_from_fecha.where(fecha_dt.notna(), "Sin Inf.")
+                usar_hora_de_fecha = fecha_dt.notna() & fecha_tiene_componente_horario
+                df["hora"] = hora_from_fecha.where(usar_hora_de_fecha, "Sin Inf.")
             else:
                 df["hora"] = "Sin Inf."
 

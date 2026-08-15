@@ -10,10 +10,74 @@ import os
 import pandas as pd
 from pathlib import Path
 
-from tz_core.bitacora_normalization import parse_date_series, sanitize_latlon
+from tz_core.bitacora_normalization import (
+    es_valor_significativo,
+    parse_date_series,
+    sanitize_latlon,
+)
 from tz_core.html_helpers import fmt_datetime as fmt_dt
 from tz_core.logging_utils import log
 from tz_core.security_escaping import esc_html
+from tz_core.time_utils import normalize_hour_to_hhmmss
+
+
+def _fmt_date_only(ts: pd.Timestamp) -> str:
+    """Formatea timestamp a dd/mm/aaaa, sin componente de hora."""
+    return ts.strftime("%d/%m/%Y")
+
+
+def _calcular_rango_temporal(df: pd.DataFrame) -> str:
+    """Calcula el string de "Periodo analizado" sin fabricar horas.
+
+    ``datetime_evento`` se usa únicamente para ubicar la FECHA de las filas
+    relevantes (ordenar/agrupar por fecha) — nunca para decidir si existe
+    precisión horaria real. Cuando falta hora, ``datetime_evento`` la ancla
+    internamente a medianoche solo como referencia de orden (ver
+    ``normalize_temporal_fields``, CASO C); esa medianoche sintética no debe
+    filtrarse a este campo visible como si fuera una hora observada.
+
+    Se muestra precisión horaria (HH:MM) únicamente cuando TODAS las filas
+    con fecha válida tienen, en la columna 'hora' real, un valor
+    significativo (mismo criterio que el resto de F3.1,
+    ``es_valor_significativo``) y parseable como hora. En cualquier otro
+    caso — sin columna 'hora', hora ausente/vacía en alguna fila, o no
+    parseable — se degrada a precisión de fecha solamente.
+    """
+    if "fecha" not in df.columns:
+        return "Sin datos"
+
+    try:
+        if "datetime_evento" in df.columns and df["datetime_evento"].notna().any():
+            fechas_validas = pd.to_datetime(df["datetime_evento"], errors="coerce")
+        else:
+            fechas_validas = parse_date_series(df["fecha"], dayfirst=True)
+
+        mask_fecha_ok = fechas_validas.notna()
+        if not mask_fecha_ok.any():
+            return "Sin datos"
+
+        fechas_solo = fechas_validas[mask_fecha_ok].dt.normalize()
+
+        hora_real_completa = False
+        horas_td = None
+        if "hora" in df.columns:
+            hora_col = df.loc[mask_fecha_ok, "hora"]
+            hora_significativa = hora_col.map(es_valor_significativo)
+            if bool(hora_significativa.all()):
+                horas_norm = hora_col.map(normalize_hour_to_hhmmss)
+                horas_td = pd.to_timedelta(horas_norm, errors="coerce")
+                hora_real_completa = bool(horas_td.notna().all())
+
+        if hora_real_completa:
+            dt_completo = fechas_solo + horas_td
+            fmin, fmax = dt_completo.min(), dt_completo.max()
+            return f"{fmt_dt(fmin)} — {fmt_dt(fmax)}"
+
+        fmin_d, fmax_d = fechas_solo.min(), fechas_solo.max()
+        return f"{_fmt_date_only(fmin_d)} — {_fmt_date_only(fmax_d)}"
+    except Exception as e:
+        log(f"[WARN] generar_informe_html: Error procesando rango de fechas: {e}")
+        return "Sin datos"
 
 
 def prepare_report_metrics(
@@ -125,46 +189,9 @@ def prepare_report_metrics(
     except Exception as e:
         log(f"[WARN] generar_informe_html: Error calculando celdas únicas: {e}")
 
-    # rango de fechas/horas (visual dd/mm/aaaa HH:MM — dd/mm/aaaa HH:MM)
-    rango_str = "Sin datos"
-
-    if "fecha" in df.columns:
-        # Preferir combinar fecha+hora si existe 'hora'
-        dt = None
-        try:
-            if "datetime_evento" in df.columns and df["datetime_evento"].notna().any():
-                dt = pd.to_datetime(
-                    df["datetime_evento"],
-                    errors="coerce",
-                ).dropna()
-            elif "hora" in df.columns and df["hora"].notna().any():
-                fechas = parse_date_series(df["fecha"], dayfirst=True).dt.normalize()
-                horas = pd.to_timedelta(
-                    df["hora"].astype(str).str.strip(),
-                    errors="coerce",
-                )
-                dt = (fechas + horas).dropna()
-            else:
-                # Solo fecha: tomar 00:00 para el inicio y 23:59 para el fin
-                fechas = parse_date_series(df["fecha"], dayfirst=True).dropna()
-                if not fechas.empty:
-                    fmin = fechas.min().normalize()                        # 00:00
-                    fmax = (fechas.max().normalize() + pd.Timedelta(hours=23, minutes=59))
-                    rango_str = f"{fmt_dt(fmin)} — {fmt_dt(fmax)}"
-                else:
-                    rango_str = "Sin datos"
-        except Exception as e:
-            log(f"[WARN] generar_informe_html: Error procesando rango de fechas: {e}")
-            dt = None
-
-        if dt is not None and not dt.empty:
-            min_ts, max_ts = dt.min(), dt.max()
-            rango_str = f"{fmt_dt(min_ts)} — {fmt_dt(max_ts)}"
-        elif dt is None:
-            # ya se resolvió arriba (solo fecha) o quedó Sin datos
-            rango_str = rango_str if "rango_str" in locals() else "Sin datos"
-    else:
-        rango_str = "Sin datos"
+    # rango de fechas/horas: HH:MM solo si TODAS las filas relevantes tienen
+    # hora real; en caso contrario, solo fecha (ver _calcular_rango_temporal).
+    rango_str = _calcular_rango_temporal(df)
 
     # color tema para acentos (del CONFIG si está)
     try:

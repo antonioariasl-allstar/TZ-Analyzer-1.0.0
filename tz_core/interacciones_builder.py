@@ -510,16 +510,20 @@ def construir_seccion_interacciones(
                 return s if s else "—"
 
         def _fmt_hora(row):
-            """Formatea hora de fila extrayendo de columna hora o datetime, retorna '—' si falla."""
+            """Formatea hora de fila desde la columna hora; 'No disponible' si está ausente/vacía.
+
+            No debe derivarse de ``_dt``/``datetime_evento``: cuando la bitácora
+            solo trae fecha (sin hora mapeada), ese timestamp interno se ancla a
+            medianoche únicamente para poder ordenar por fecha (ver
+            normalize_temporal_fields, CASO C) y no representa una hora real
+            observada. Formatearlo aquí fabricaría un "00:00:00" inexistente.
+            """
             try:
-                if col_hora and (col_hora in row.index):
-                    s = str(row[col_hora]).strip()
-                    return s if s else "—"
-                if pd.notna(row.get("_dt")):
-                    return pd.to_datetime(row["_dt"]).strftime("%H:%M:%S")
+                if col_hora and (col_hora in row.index) and es_valor_significativo(row[col_hora]):
+                    return str(row[col_hora]).strip()
             except Exception:
                 pass
-            return "—"
+            return "No disponible"
 
         def _ant_fmt_link(ant, lt, lg):
             """Formatea nombre de antena como enlace HTML a Google Maps si tiene coordenadas válidas."""

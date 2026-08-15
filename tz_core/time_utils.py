@@ -295,6 +295,11 @@ def to_datetime_series(df: Any) -> pd.Series:
             horas_norm = df["hora"].map(normalize_hour_to_hhmmss)
             horas = pd.to_timedelta(horas_norm, errors="coerce")
             combined = fechas + horas
+            # Fila con fecha válida pero hora ausente/no parseable: usar la
+            # fecha sola (medianoche, solo como ancla de orden) en vez de
+            # NaT, para no perder la fila de las agrupaciones por fecha. La
+            # hora ausente se preserva en la columna 'hora' original.
+            combined = combined.where(combined.notna(), fechas)
             result = event_dt.combine_first(combined)
             if result.notna().any():
                 return result

@@ -120,21 +120,6 @@ def _hora_valida_presente(df: pd.DataFrame) -> bool:
     return _columna_tiene_valor_significativo(df, "hora")
 
 
-def _datetime_evento_usable(df: pd.DataFrame) -> bool:
-    if "datetime_evento" not in df.columns:
-        return False
-    serie = df["datetime_evento"]
-    if serie.empty:
-        return False
-    try:
-        if pd.api.types.is_datetime64_any_dtype(serie):
-            return bool(serie.notna().any())
-        parsed = pd.to_datetime(serie, errors="coerce")
-        return bool(parsed.notna().any())
-    except Exception:
-        return False
-
-
 def _azimut_utilizable(df: pd.DataFrame) -> bool:
     if "azimut" not in df.columns or df["azimut"].empty:
         return False
@@ -272,25 +257,32 @@ def _detectar_antenas(df: pd.DataFrame) -> Capacidad:
 
 
 def _detectar_antenas_por_horario(df: pd.DataFrame) -> Capacidad:
+    """``datetime_evento`` no se usa como señal alterna de hora disponible:
+
+    cuando la bitácora solo trae fecha (sin hora mapeada), ese campo se
+    ancla a medianoche únicamente para poder ordenar por fecha (ver
+    normalize_temporal_fields, CASO C), no porque exista una hora real.
+    Tratarlo como equivalente a "hora disponible" habilitaría este análisis
+    horario con datos inventados. La única fuente válida es la columna
+    'hora' con al menos un valor significativo.
+    """
     antena_ok = _columna_tiene_valor_significativo(df, "antena")
     antena_analitica_ok = _columna_tiene_valor_significativo(df, "antena_analitica")
     hora_ok = _hora_valida_presente(df)
-    dt_ok = _datetime_evento_usable(df)
 
     if antena_ok:
-        if hora_ok or dt_ok:
-            motivo = "antena_y_hora_disponibles" if hora_ok else "antena_y_datetime_evento_disponibles"
-            return Capacidad(True, "disponible", (), motivo)
-        return Capacidad(False, "no_disponible", ("hora",), "antena_presente_sin_hora_ni_datetime_evento")
+        if hora_ok:
+            return Capacidad(True, "disponible", (), "antena_y_hora_disponibles")
+        return Capacidad(False, "no_disponible", ("hora",), "antena_presente_sin_hora")
 
     if antena_analitica_ok:
-        if hora_ok or dt_ok:
+        if hora_ok:
             return Capacidad(
                 True, "parcial", ("antena",), "sitios_inferidos_por_coordenadas_con_hora"
             )
-        return Capacidad(False, "no_disponible", ("hora",), "sitio_inferido_sin_hora_ni_datetime_evento")
+        return Capacidad(False, "no_disponible", ("hora",), "sitio_inferido_sin_hora")
 
-    faltantes = ("antena",) if (hora_ok or dt_ok) else ("antena", "hora")
+    faltantes = ("antena",) if hora_ok else ("antena", "hora")
     return Capacidad(False, "no_disponible", faltantes, "sin_antena")
 
 

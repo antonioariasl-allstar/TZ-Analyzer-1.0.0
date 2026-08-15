@@ -374,6 +374,15 @@ def normalize_temporal_fields(
         combined = pd.to_datetime(combined_str, errors="coerce", dayfirst=False)
         mask_valid = fecha_parsed.notna() & combined.notna()
         datetime_evento[mask_valid] = combined[mask_valid]
+        # Fila con fecha válida pero hora ausente/no combinable (celda vacía,
+        # NaN o formato no parseable): anclar datetime_evento a la fecha sola
+        # (medianoche, solo como referencia de orden) en vez de dejarla NaT.
+        # Dejarla NaT hacía desaparecer la fila entera de las agrupaciones
+        # por fecha aguas abajo (p.ej. la tabla de interacciones); la
+        # ausencia real de hora se preserva en la columna 'hora' original,
+        # que ningún consumidor debe inferir a partir de este timestamp.
+        mask_fecha_sola = fecha_parsed.notna() & ~mask_valid
+        datetime_evento[mask_fecha_sola] = fecha_parsed[mask_fecha_sola].dt.normalize()
 
     # --- CASO C: solo fecha ---
     elif fecha_col:
