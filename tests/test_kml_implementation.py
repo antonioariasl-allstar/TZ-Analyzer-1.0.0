@@ -217,6 +217,10 @@ _CFG = {
 def _reset_and_import():
     import tz_core.kml_generator as kml_mod
     kml_mod._REUSABLE_STYLES = None
+    # _crear_feature_kml() no pasa por generar_kml(), que es quien resetea
+    # _ICON_HREF por documento; sin este reset, un test previo que sí haya
+    # llamado a generar_kml() dejaría aquí un href embebido en OTRO KMZ.
+    kml_mod._ICON_HREF = None
     from tz_core.kml_generator import _crear_feature_kml
     return _crear_feature_kml
 

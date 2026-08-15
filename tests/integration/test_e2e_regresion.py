@@ -34,6 +34,7 @@ from tests.normalize_outputs import (
     canonicalize_normalized_kml,
     normalize_html,
     normalize_kml_from_kmz,
+    renumber_simplekml_ids,
 )
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -140,6 +141,54 @@ def test_kml_canonicalization_rejects_semantic_change():
     changed_coordinates = baseline.replace("-89.200000", "-88.200000")
 
     assert canonicalize_normalized_kml(baseline) != canonicalize_normalized_kml(changed_coordinates)
+
+
+def _kml_con_ids_simplekml(id_document, id_style, id_placemark, id_point):
+    """Construye un KML sintético con la forma que emite simplekml: cada
+    objeto Kmlable lleva un id="N" absoluto (asignado por su contador
+    global _globalid) y el Placemark referencia su Style vía
+    <styleUrl>#N</styleUrl>."""
+    return (
+        '<kml xmlns="http://www.opengis.net/kml/2.2">'
+        f'<Document id="{id_document}">'
+        f'<Style id="{id_style}"><LineStyle><color>ff0000ff</color></LineStyle></Style>'
+        f'<Placemark id="{id_placemark}"><name>Sitio</name>'
+        f'<styleUrl>#{id_style}</styleUrl>'
+        f'<Point id="{id_point}"><coordinates>-89.200000,13.700000,0</coordinates></Point>'
+        '</Placemark>'
+        '</Document></kml>'
+    )
+
+
+def test_renumber_simplekml_ids_es_independiente_del_orden_de_ejecucion():
+    """Dos KML semánticamente idénticos, pero con IDs absolutos distintos
+    de simplekml.base.Kmlable._globalid (como ocurre al variar el orden de
+    tests dentro del mismo proceso), deben normalizar al mismo resultado.
+
+    Reproduce el escenario de la falla intermitente: A→B incrementaba el
+    contador global de simplekml antes de generar el KML de B, produciendo
+    IDs absolutos distintos aunque el contenido geoespacial fuera idéntico.
+    """
+    kml_ids_bajos = _kml_con_ids_simplekml(1, 2, 3, 4)
+    kml_ids_altos = _kml_con_ids_simplekml(501, 502, 503, 504)
+
+    assert kml_ids_bajos != kml_ids_altos, "Precondición: los IDs absolutos deben diferir"
+    assert renumber_simplekml_ids(kml_ids_bajos) == renumber_simplekml_ids(kml_ids_altos)
+    assert canonicalize_normalized_kml(renumber_simplekml_ids(kml_ids_bajos)) == (
+        canonicalize_normalized_kml(renumber_simplekml_ids(kml_ids_altos))
+    )
+
+
+def test_renumber_simplekml_ids_preserva_relacion_styleurl_a_estilo():
+    """La renumeración no debe enmascarar un cambio semántico real: si un
+    Placemark pasa a referenciar un Style distinto, el resultado normalizado
+    debe seguir siendo distinto."""
+    referencia = _kml_con_ids_simplekml(1, 2, 3, 4)
+    # Mismos IDs absolutos, pero el Placemark ahora referencia un styleUrl
+    # que no corresponde al Style definido (cambio semántico real).
+    referencia_rota = referencia.replace('<styleUrl>#2</styleUrl>', '<styleUrl>#99</styleUrl>')
+
+    assert renumber_simplekml_ids(referencia) != renumber_simplekml_ids(referencia_rota)
 
 
 def test_kmz_estructura_basica_sintetica():
