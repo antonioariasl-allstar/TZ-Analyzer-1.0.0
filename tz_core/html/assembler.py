@@ -56,6 +56,7 @@ from .antennas import (
     build_antennas_by_hour_section,
     NOTA_SITIOS_INFERIDOS,
     _BADGE_SITIO_INFERIDO,
+    _resolver_columna_antena,
 )
 
 def _construir_resumen_ejecutivo(
@@ -680,7 +681,12 @@ def generar_informe_html(
     #     y manda "Todas las antenas..." hasta el final, ANTES de escribir el archivo.
     try:
         # Columnas y validadores reutilizados por heatmap/rangos
-        col_ant = pick_first_existing_column(df, ["antena", "nombre_antena", "cell_name"])
+        # HITO 2A: misma resolución canónica que build_top_antennas_section/
+        # build_antennas_table (antena_analitica prioriza antena real cuando
+        # es significativa, o el SITIO_<lat>_<long> inferido por coordenadas
+        # cuando no la hay), para que los marcadores del mapa del Top usen la
+        # misma identidad de antena/sitio que la tabla ya muestra.
+        col_ant = _resolver_columna_antena(df, "antena", "nombre_antena", "cell_name")
         col_lat = pick_first_existing_column(df, ["lat", "latitud", "latitude"])
         col_lon = pick_first_existing_column(df, ["long", "lon", "longitud", "lng", "longitude"])
         col_az  = pick_first_existing_column(df, ["azimut", "azimuth", "azi", "angulo"])

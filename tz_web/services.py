@@ -825,6 +825,7 @@ def process_case(request: CaseRequest) -> CaseResult:
                 carpeta_base=carpeta_base,
                 carpeta_salida=carpeta_salida_caso,
                 archivo_entrada=ruta,
+                archivo_entrada_nombre_display=input_original_name,
                 hoja=hoja,
                 error_report_path=None,
                 discarded_coords=desc_coords,

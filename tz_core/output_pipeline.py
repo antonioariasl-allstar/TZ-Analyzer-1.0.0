@@ -56,6 +56,7 @@ def produce_case_outputs(
     carpeta_base: str,
     carpeta_salida: str,
     archivo_entrada: Optional[str],
+    archivo_entrada_nombre_display: Optional[str] = None,
     hoja: Optional[str],
     error_report_path: Optional[str],
     discarded_coords: int,
@@ -138,7 +139,16 @@ def produce_case_outputs(
         pass
 
     informe_html: Optional[str] = None
-    nombre_bitacora = os.path.basename(archivo_entrada) if archivo_entrada else None
+    # `archivo_entrada` es la ruta física usada para procesar (puede ser un
+    # snapshot interno tipo .execution-input-*). El nombre mostrado en los
+    # productos (Metadatos, etc.) debe preferir el nombre original explícito
+    # cuando el llamador lo provee, en vez de inferirlo desde esa ruta.
+    if archivo_entrada_nombre_display:
+        nombre_bitacora = os.path.basename(archivo_entrada_nombre_display)
+    elif archivo_entrada:
+        nombre_bitacora = os.path.basename(archivo_entrada)
+    else:
+        nombre_bitacora = None
     try:
         _html_kwargs: Dict[str, Any] = dict(
             df=df,
