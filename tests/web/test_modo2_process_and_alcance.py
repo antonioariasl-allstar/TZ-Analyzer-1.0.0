@@ -36,9 +36,19 @@ def advance_modo2_to_filtro(client, mapeo_form=None):
 
 
 def submit_filtro(client, filtro_form, accion="siguiente"):
+    """Completa las dos pantallas reales del Filtro temporal de Modo 2:
+    Pantalla 1 (selección del tipo, ``filtro_tipo``) y Pantalla 2
+    (parámetros exclusivos de ese tipo, el resto de ``filtro_form``)."""
+    filtro_form = dict(filtro_form)
+    tipo = filtro_form.pop("filtro_tipo")
+    client.post(
+        "/configure/filtro-tiempo",
+        data={"accion": "siguiente", "filtro_tipo": tipo},
+        follow_redirects=True,
+    )
     data = {"accion": accion}
     data.update(filtro_form)
-    return client.post("/configure/filtro-tiempo", data=data, follow_redirects=True)
+    return client.post("/configure/filtro-tiempo/parametros", data=data, follow_redirects=True)
 
 
 def advance_to_resumen_desde_filtro(client, *, nombre_modo="sugerido", output_base_name="", tipo_bitacora=""):

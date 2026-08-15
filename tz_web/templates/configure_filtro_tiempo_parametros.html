@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}TZ Analyzer — Filtro temporal{% endblock %}
+{% block content %}
+
+<div class="tz-card">
+  <h2>Filtro temporal</h2>
+  <p class="tz-help">Paso 2 de 2 · {{ entry.label }}</p>
+  <div class="tz-help">Qué hará: {{ entry.hara }}</div>
+  <div class="tz-samples">Ejemplo: {{ entry.ejemplo }}</div>
+
+  <form action="{{ url_for('tz_web.configure_filtro_tiempo_parametros_submit') }}" method="post" id="filtro_tiempo_parametros_form">
+
+    {% if tipo == 'dia' %}
+    <div class="tz-field">
+      <label for="filtro_dia">Fecha</label>
+      <input type="date" id="filtro_dia" name="filtro_dia" value="{{ prefill.dia or '' }}">
+    </div>
+    {% endif %}
+
+    {% if tipo == 'rango_dias' %}
+    <div class="tz-inline">
+      <div class="tz-field">
+        <label for="filtro_desde">Fecha inicial</label>
+        <input type="date" id="filtro_desde" name="filtro_desde" value="{{ prefill.desde or '' }}">
+      </div>
+      <div class="tz-field">
+        <label for="filtro_hasta">Fecha final</label>
+        <input type="date" id="filtro_hasta" name="filtro_hasta" value="{{ prefill.hasta or '' }}">
+      </div>
+    </div>
+    {% endif %}
+
+    {% if tipo == 'rango_horas' %}
+    <div class="tz-inline">
+      <div class="tz-field">
+        <label for="filtro_hora_ini">Hora inicial</label>
+        <input type="time" id="filtro_hora_ini" name="filtro_hora_ini" value="{{ prefill.hora_ini or '' }}">
+      </div>
+      <div class="tz-field">
+        <label for="filtro_hora_fin">Hora final</label>
+        <input type="time" id="filtro_hora_fin" name="filtro_hora_fin" value="{{ prefill.hora_fin or '' }}">
+      </div>
+    </div>
+    {% endif %}
+
+    {% if tipo == 'rango_horas_dia' %}
+    <div class="tz-field">
+      <label for="filtro_dia">Fecha</label>
+      <input type="date" id="filtro_dia" name="filtro_dia" value="{{ prefill.dia or '' }}">
+    </div>
+    <div class="tz-inline">
+      <div class="tz-field">
+        <label for="filtro_hora_ini">Hora inicial</label>
+        <input type="time" id="filtro_hora_ini" name="filtro_hora_ini" value="{{ prefill.hora_ini or '' }}">
+      </div>
+      <div class="tz-field">
+        <label for="filtro_hora_fin">Hora final</label>
+        <input type="time" id="filtro_hora_fin" name="filtro_hora_fin" value="{{ prefill.hora_fin or '' }}">
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="tz-actions">
+      <button type="button" name="accion" value="anterior" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">← Anterior</button>
+      <button type="submit" name="accion" value="siguiente" class="tz-btn tz-btn-primary">Siguiente</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

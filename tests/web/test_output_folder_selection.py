@@ -107,7 +107,10 @@ def avanzar_modo2_hasta_preparar(client):
     client.post("/mapping", data=dict(REAL_MAPPING_FORM), follow_redirects=True)
     client.post("/mapping/confirm", follow_redirects=True)
     client.post("/configure/filtro-tiempo", data={
-        "accion": "siguiente", "filtro_tipo": "dia", "filtro_dia": "2020-01-02",
+        "accion": "siguiente", "filtro_tipo": "dia",
+    }, follow_redirects=True)
+    client.post("/configure/filtro-tiempo/parametros", data={
+        "accion": "siguiente", "filtro_dia": "2020-01-02",
     }, follow_redirects=True)
     client.post("/configure", data={"accion": "omitir"}, follow_redirects=True)
     client.post("/configure/opciones", data={

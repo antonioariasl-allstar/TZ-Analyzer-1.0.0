@@ -896,13 +896,17 @@ def _filtro_tiempo_tipos_habilitados(case: state.Session) -> Tuple[str, ...]:
 
 
 def _parse_filtro_tiempo_modo2(
+    tipo: str,
     tipos_habilitados: Tuple[str, ...],
 ) -> Tuple[Optional[Dict[str, Optional[str]]], Optional[str]]:
     """Como ``_parse_filtro_tiempo()``, pero para el Modo 2: no admite
     "ninguno" (sección 5, el Modo 2 no ofrece "Sin filtro") y rechaza
     cualquier tipo que la capacidad de esta bitácora no habilite (defensa
-    adicional a que el HTML ya deshabilite esas opciones)."""
-    tipo = request.form.get("filtro_tipo", "")
+    adicional a que el HTML ya deshabilite esas opciones).
+
+    ``tipo`` llega de ``case.filtro_tiempo_tipo`` (decidido en la Pantalla 1
+    de selección), no del formulario de la Pantalla 2: esta última solo
+    envía los parámetros correspondientes a ese tipo, ya fijado en sesión."""
     if tipo not in ("dia", "rango_dias", "rango_horas_dia", "rango_horas"):
         return None, "Seleccione un tipo de filtro temporal válido."
     if tipo not in tipos_habilitados:
@@ -949,8 +953,22 @@ def _parse_filtro_tiempo_modo2(
     }, None
 
 
+def _filtro_tiempo_tipo_actual(case: state.Session, tipos_habilitados: Tuple[str, ...]) -> Optional[str]:
+    """Tipo que la Pantalla 1 debe mostrar preseleccionado: la última
+    elección en curso (``filtro_tiempo_tipo``) si sigue habilitada; si no,
+    la del filtro ya confirmado; si tampoco, el primer tipo habilitado."""
+    if case.filtro_tiempo_tipo in tipos_habilitados:
+        return case.filtro_tiempo_tipo
+    if case.filtro_tiempo and case.filtro_tiempo.get("tipo") in tipos_habilitados:
+        return case.filtro_tiempo["tipo"]
+    return tipos_habilitados[0] if tipos_habilitados else None
+
+
 @bp.route("/configure/filtro-tiempo", methods=["GET"])
 def configure_filtro_tiempo_screen():
+    """Pantalla 1 (Modo 2) — selección del tipo de filtro temporal,
+    únicamente. Los parámetros de ese tipo se piden en la Pantalla 2
+    (``configure_filtro_tiempo_parametros_screen``)."""
     case = _current_session(create=False)
     if case is None or not case.mapping:
         flash("Primero confirme el mapeo de columnas.", "error")
@@ -966,6 +984,7 @@ def configure_filtro_tiempo_screen():
         tipos_habilitados=tipos_habilitados,
         filtro_catalog=FILTRO_TIEMPO_CATALOG,
         filtro_orden=FILTRO_TIEMPO_ORDER,
+        tipo_seleccionado=_filtro_tiempo_tipo_actual(case, tipos_habilitados),
     )
 
 
@@ -979,6 +998,12 @@ def configure_filtro_tiempo_submit():
     if case.modo != state.MODO_2:
         return redirect(url_for("tz_web.configure_screen"))
 
+    if request.form.get("accion", "siguiente") == "anterior":
+        case.mapping_draft = case.mapping
+        case.mapping_stage = "review"
+        state.touch(case)
+        return redirect(url_for("tz_web.mapping_screen"))
+
     tipos_habilitados = _filtro_tiempo_tipos_habilitados(case)
     if not tipos_habilitados:
         flash(
@@ -987,20 +1012,81 @@ def configure_filtro_tiempo_submit():
         )
         return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
 
-    filtro, error = _parse_filtro_tiempo_modo2(tipos_habilitados)
+    tipo = request.form.get("filtro_tipo", "")
+    if tipo not in ("dia", "rango_dias", "rango_horas_dia", "rango_horas"):
+        flash("Seleccione un tipo de filtro temporal válido.", "error")
+        return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
+    if tipo not in tipos_habilitados:
+        flash("El tipo de filtro seleccionado no está disponible para esta bitácora.", "error")
+        return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
+
+    case.filtro_tiempo_tipo = tipo
+    state.touch(case)
+    return redirect(url_for("tz_web.configure_filtro_tiempo_parametros_screen"))
+
+
+@bp.route("/configure/filtro-tiempo/parametros", methods=["GET"])
+def configure_filtro_tiempo_parametros_screen():
+    """Pantalla 2 (Modo 2) — parámetros exclusivos del tipo de filtro ya
+    elegido en la Pantalla 1 (``case.filtro_tiempo_tipo``). Todavía NO
+    aplica el filtro; solo lo persiste en ``case.filtro_tiempo`` al validar
+    (``configure_filtro_tiempo_parametros_submit``)."""
+    case = _current_session(create=False)
+    if case is None or not case.mapping:
+        flash("Primero confirme el mapeo de columnas.", "error")
+        return redirect(url_for("tz_web.mapping_screen"))
+    if case.modo != state.MODO_2:
+        return redirect(url_for("tz_web.configure_screen"))
+
+    tipos_habilitados = _filtro_tiempo_tipos_habilitados(case)
+    tipo = case.filtro_tiempo_tipo
+    if not tipos_habilitados or tipo not in tipos_habilitados:
+        flash("Seleccione primero el tipo de filtro temporal.", "error")
+        return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
+
+    # Los parámetros ya confirmados solo se reutilizan como precarga cuando
+    # corresponden al MISMO tipo: evita aplicar en silencio valores de un
+    # tipo de filtro distinto al que se está configurando ahora.
+    if case.filtro_tiempo and case.filtro_tiempo.get("tipo") == tipo:
+        prefill = case.filtro_tiempo
+    else:
+        prefill = {"dia": None, "desde": None, "hasta": None, "hora_ini": None, "hora_fin": None}
+
+    return render_template(
+        "configure_filtro_tiempo_parametros.html",
+        case=case,
+        tipo=tipo,
+        entry=FILTRO_TIEMPO_CATALOG[tipo],
+        prefill=prefill,
+    )
+
+
+@bp.route("/configure/filtro-tiempo/parametros", methods=["POST"])
+@_mutation_guard("tz_web.configure_filtro_tiempo_parametros_screen")
+def configure_filtro_tiempo_parametros_submit():
+    case = _current_session(create=False)
+    if case is None or not case.mapping:
+        flash("Primero confirme el mapeo de columnas.", "error")
+        return redirect(url_for("tz_web.mapping_screen"))
+    if case.modo != state.MODO_2:
+        return redirect(url_for("tz_web.configure_screen"))
+
+    tipos_habilitados = _filtro_tiempo_tipos_habilitados(case)
+    tipo = case.filtro_tiempo_tipo
+    if not tipos_habilitados or tipo not in tipos_habilitados:
+        flash("Seleccione primero el tipo de filtro temporal.", "error")
+        return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
+
+    if request.form.get("accion", "siguiente") == "anterior":
+        return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
+
+    filtro, error = _parse_filtro_tiempo_modo2(tipo, tipos_habilitados)
     if error:
         flash(error, "error")
-        return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
+        return redirect(url_for("tz_web.configure_filtro_tiempo_parametros_screen"))
 
     case.filtro_tiempo = filtro
     state.touch(case)
-
-    if request.form.get("accion", "siguiente") == "anterior":
-        case.mapping_draft = case.mapping
-        case.mapping_stage = "review"
-        state.touch(case)
-        return redirect(url_for("tz_web.mapping_screen"))
-
     return redirect(url_for("tz_web.configure_screen"))
 
 
@@ -2390,9 +2476,11 @@ def results_back_to_filtro_tiempo():
     """"Volver a revisar filtro temporal" desde un resultado FAILED por
     filtro temporal sin registros (sección 9 del microbloque Modo 2 parte
     2): a diferencia de ``results_back_to_mapping``, no repuebla
-    ``mapping_draft`` ni toca la etapa de mapeo — vuelve directo a Filtro
-    temporal para que el usuario corrija solo la selección temporal, sin
-    repetir archivo/mapeo/configuración."""
+    ``mapping_draft`` ni toca la etapa de mapeo — vuelve directo a la
+    Pantalla 2 (parámetros) de Filtro temporal, ya que el tipo de filtro que
+    produjo el resultado sin registros es conocido (``case.filtro_tiempo``):
+    el usuario corrige solo el parámetro equivocado, sin repetir
+    archivo/mapeo/configuración ni tener que reelegir el tipo de filtro."""
     case = _current_session(create=False)
     if case is None or not case.mapping or case.modo != state.MODO_2:
         flash("Primero confirme el mapeo de columnas.", "error")
@@ -2405,7 +2493,11 @@ def results_back_to_filtro_tiempo():
         return redirect(url_for("tz_web.results_screen"))
 
     _reset_terminal_run_state(case)
+    if case.filtro_tiempo:
+        case.filtro_tiempo_tipo = case.filtro_tiempo.get("tipo")
     state.touch(case)
+    if case.filtro_tiempo_tipo:
+        return redirect(url_for("tz_web.configure_filtro_tiempo_parametros_screen"))
     return redirect(url_for("tz_web.configure_filtro_tiempo_screen"))
 
 

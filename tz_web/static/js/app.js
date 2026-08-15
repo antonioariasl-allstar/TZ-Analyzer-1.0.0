@@ -207,24 +207,6 @@ function tzToggleFiltro() {
   if (horasWrap) horasWrap.style.display = (valor === "rango_horas_dia" || valor === "rango_horas") ? "" : "none";
 }
 
-function tzToggleFiltroModo2() {
-  var radios = document.getElementsByName("filtro_tipo");
-  var valor = null;
-  for (var i = 0; i < radios.length; i++) {
-    if (radios[i].checked) {
-      valor = radios[i].value;
-      break;
-    }
-  }
-  var diaWrap = document.getElementById("filtro_wrap_dia");
-  var rangoDiasWrap = document.getElementById("filtro_wrap_rango_dias");
-  var horasWrap = document.getElementById("filtro_wrap_horas");
-
-  if (diaWrap) diaWrap.style.display = (valor === "dia" || valor === "rango_horas_dia") ? "" : "none";
-  if (rangoDiasWrap) rangoDiasWrap.style.display = valor === "rango_dias" ? "" : "none";
-  if (horasWrap) horasWrap.style.display = (valor === "rango_horas_dia" || valor === "rango_horas") ? "" : "none";
-}
-
 // ---------------------------------------------------------------------------
 // Selector de carpeta de salida (MICROBLOQUE 6) — configure_final.html
 // (Modo 1/2) y modo3_preparar.html comparten este mismo botón/endpoint.

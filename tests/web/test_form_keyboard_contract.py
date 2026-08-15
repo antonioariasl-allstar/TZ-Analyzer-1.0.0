@@ -163,6 +163,7 @@ def test_hay_una_sola_politica_transversal_sin_bloqueos_locales() -> None:
                 "preview.html",
                 "mapping.html",
                 "configure_filtro_tiempo.html",
+                "configure_filtro_tiempo_parametros.html",
                 "configure_identity.html",
                 "configure_options.html",
                 "configure_outputs.html",

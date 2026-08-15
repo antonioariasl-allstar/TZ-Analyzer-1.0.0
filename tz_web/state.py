@@ -270,6 +270,11 @@ class Session:
     output_base_name: Optional[str] = None
     tipo_bitacora: str = ""
     filtro_tiempo: Optional[Dict[str, Optional[str]]] = None
+    # Tipo elegido en la Pantalla 1 (selección) del Filtro temporal de Modo 2,
+    # antes de que la Pantalla 2 (parámetros) valide y confirme el filtro
+    # completo en ``filtro_tiempo``. Permite mostrar la Pantalla 2 correcta y
+    # que la Pantalla 1 recuerde la última elección al regresar a ella.
+    filtro_tiempo_tipo: Optional[str] = None
     date_order_decision: str = "1"
     duration_unit_decision: str = "desconocida"
     qc_bloqueante_decision: str = "S"
