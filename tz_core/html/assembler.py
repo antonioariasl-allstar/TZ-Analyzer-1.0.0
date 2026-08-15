@@ -71,6 +71,7 @@ def _construir_resumen_ejecutivo(
     rango_str: str = "",
     tel_val: Optional[str] = None,
     imei_val: Optional[str] = None,
+    top_count: int = 0,
 ) -> str:
     """
     Construye el bloque HTML del resumen ejecutivo narrativo.
@@ -163,31 +164,96 @@ def _construir_resumen_ejecutivo(
         # --- Antena/sitio con mayor número de activaciones ---
         try:
             if top_antena and str(top_antena).strip() not in ("", "nan", "N/A", "—"):
+                _col_ant_kpi = (
+                    "antena_analitica" if "antena_analitica" in df.columns else "antena"
+                )
+                _mask_top = pd.Series(False, index=df.index)
                 _es_sitio_inferido = False
                 try:
-                    _col_ant_kpi = (
-                        "antena_analitica" if "antena_analitica" in df.columns else "antena"
-                    )
-                    if "sitio_inferido" in df.columns and _col_ant_kpi in df.columns:
+                    if _col_ant_kpi in df.columns:
                         _mask_top = (
                             df[_col_ant_kpi].astype(str).str.strip() == str(top_antena).strip()
                         )
+                    if "sitio_inferido" in df.columns and _mask_top.any():
                         _es_sitio_inferido = bool(
                             df.loc[_mask_top, "sitio_inferido"].fillna(False).astype(bool).any()
                         )
                 except Exception:
                     _es_sitio_inferido = False
+                    _mask_top = pd.Series(False, index=df.index)
 
-                if _es_sitio_inferido:
-                    _oraciones.append(
-                        f"El sitio inferido con mayor número de activaciones fue "
-                        f"<strong>{esc_html(top_antena)}</strong>."
-                    )
-                else:
-                    _oraciones.append(
-                        f"La antena con mayor número de activaciones fue "
-                        f"<strong>{esc_html(top_antena)}</strong>."
-                    )
+                _articulo_ant, _sujeto_ant = (
+                    ("El", "sitio inferido") if _es_sitio_inferido else ("La", "antena")
+                )
+                _frase_ant = (
+                    f"{_articulo_ant} {_sujeto_ant} con mayor número de activaciones fue "
+                    f"<strong>{esc_html(top_antena)}</strong>"
+                )
+
+                # Coordenadas: promedio de lat/lon válidas entre las filas de esta antena/sitio.
+                _lat_v = _lon_v = None
+                try:
+                    _col_lat = pick_first_existing_column(df, ["lat", "latitud", "latitude"])
+                    _col_lon = pick_first_existing_column(df, ["long", "lon", "longitud", "lng", "longitude"])
+                    if _col_lat and _col_lon and _mask_top.any():
+                        _lat_num = pd.to_numeric(df.loc[_mask_top, _col_lat], errors="coerce").dropna()
+                        _lon_num = pd.to_numeric(df.loc[_mask_top, _col_lon], errors="coerce").dropna()
+                        if not _lat_num.empty and not _lon_num.empty:
+                            _lat_v = float(_lat_num.mean())
+                            _lon_v = float(_lon_num.mean())
+                except Exception:
+                    _lat_v = _lon_v = None
+
+                if _lat_v is not None and _lon_v is not None:
+                    _frase_ant += f", ubicada en las coordenadas {_lat_v:.6f}, {_lon_v:.6f}"
+
+                if top_count and int(top_count) > 0:
+                    _frase_ant += f", con {int(top_count)} activaciones"
+
+                _oraciones.append(_frase_ant + ".")
+
+                # Azimut dominante: mayor conteo; empate se resuelve por azimut menor (determinista).
+                try:
+                    _col_az = pick_first_existing_column(df, ["azimut", "azimuth", "azi", "angulo"])
+                    if _col_az and _mask_top.any():
+                        _az_num = (
+                            pd.to_numeric(df.loc[_mask_top, _col_az], errors="coerce")
+                            .round()
+                            .dropna()
+                        )
+                        if not _az_num.empty:
+                            _az_counts = _az_num.astype(int).value_counts()
+                            _az_dom, _az_cnt = sorted(
+                                _az_counts.items(), key=lambda kv: (-kv[1], kv[0])
+                            )[0]
+                            _oraciones.append(
+                                f"El azimut con mayor frecuencia de activación fue "
+                                f"<strong>{int(_az_dom)}°</strong>, registrado en "
+                                f"{int(_az_cnt)} ocasiones."
+                            )
+                except Exception as exc:
+                    _log(f"[WARN] resumen_ejecutivo_azimut: {exc}")
+
+                # Dirección: primer valor no vacío del grupo; se omite si coincide con la
+                # antena/sitio (misma regla de no-redundancia usada en tz_core.kml_generator).
+                try:
+                    _col_dir = pick_first_existing_column(df, ["direccion"])
+                    if _col_dir and _mask_top.any():
+                        _dir_vals = df.loc[_mask_top, _col_dir].astype(str).str.strip()
+                        _dir_vals = _dir_vals[
+                            ~_dir_vals.str.lower().isin(
+                                {"", "nan", "none", "sin inf", "sin inf.", "s/i"}
+                            )
+                        ]
+                        if not _dir_vals.empty:
+                            _direccion_v = _dir_vals.iloc[0]
+                            if _direccion_v.strip().lower() != str(top_antena).strip().lower():
+                                _oraciones.append(
+                                    f"La dirección asociada corresponde a "
+                                    f"<strong>{esc_html(_direccion_v)}</strong>."
+                                )
+                except Exception as exc:
+                    _log(f"[WARN] resumen_ejecutivo_direccion: {exc}")
         except Exception as exc:
             _log(f"[WARN] resumen_ejecutivo_antena: {exc}")
         if _oraciones:
@@ -398,6 +464,7 @@ def generar_informe_html(
         rango_str=rango_str,
         tel_val=tel_val,
         imei_val=imei_val,
+        top_count=top_count,
     )
 
     logo_html = build_logo_html(

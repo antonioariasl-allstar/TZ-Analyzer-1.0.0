@@ -656,7 +656,11 @@ def construir_seccion_interacciones(
                         a1, a2 = str(top2.loc[0, col_antena]), str(top2.loc[1, col_antena])
                         dist_km = _haversine_km(top2.loc[0, "lat"], top2.loc[0, "lon"], top2.loc[1, "lat"], top2.loc[1, "lon"])
                         if dist_km >= 2.0:
-                            alertas.append(f"Movilidad: '{a1}' ↔ '{a2}' ≈ {dist_km:.1f} km (top 2 celdas del día).")
+                            alertas.append(
+                                "Referencia geográfica: las dos antenas con mayor número de "
+                                f"activaciones del día fueron {a1} y {a2}, ubicadas a una "
+                                f"distancia aproximada de {dist_km:.1f} km entre sí."
+                            )
         except Exception:
             pass
 
