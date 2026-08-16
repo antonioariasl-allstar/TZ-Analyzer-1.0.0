@@ -462,15 +462,6 @@ def upload():
         flash("No se pudo guardar el archivo subido.", "error")
         return redirect(url_for("tz_web.index"))
 
-    if os.path.getsize(dest_path) > state.MAX_UPLOAD_BYTES:
-        _reject_staged_upload()
-        flash(
-            f"El archivo supera el límite permitido de "
-            f"{state.MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
-            "error",
-        )
-        return redirect(url_for("tz_web.index"))
-
     try:
         hojas = _list_sheets(dest_path)
     except Exception as exc:  # noqa: BLE001 - error de lectura de un archivo ajeno, se traduce
@@ -2623,18 +2614,3 @@ def logo_isotipo_asset():
     if not os.path.isfile(_LOGO_ISOTIPO_PATH):
         abort(404)
     return send_file(_LOGO_ISOTIPO_PATH, mimetype="image/png", max_age=3600)
-
-
-# ---------------------------------------------------------------------------
-# Errores HTTP
-# ---------------------------------------------------------------------------
-
-
-@bp.app_errorhandler(413)
-def request_entity_too_large(_exc):
-    flash(
-        f"El archivo supera el límite permitido de "
-        f"{state.MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
-        "error",
-    )
-    return redirect(url_for("tz_web.index"))

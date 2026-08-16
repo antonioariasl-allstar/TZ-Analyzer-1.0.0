@@ -48,7 +48,6 @@ def create_app(
     # guarda el identificador de caso (sección 5/6) — no se persiste entre
     # arranques, no hay nada sensible que proteja más allá de eso.
     app.config["SECRET_KEY"] = os.urandom(32)
-    app.config["MAX_CONTENT_LENGTH"] = state.MAX_UPLOAD_BYTES
 
     app.config["TZ_INSTANCE_TOKEN"] = instance_token
     app.config["TZ_INSTANCE_ID"] = instance_id

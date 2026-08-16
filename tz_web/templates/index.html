@@ -35,9 +35,9 @@
 <div class="tz-card">
   <h2>Paso 1: Cargar archivo</h2>
   <p class="tz-help">
-    Seleccione la bitácora en formato Excel (.xlsx). Límite de tamaño:
-    {{ 200 }} MB. El archivo se guarda temporalmente en este equipo con un
-    nombre seguro; el nombre original solo se muestra como referencia.
+    Seleccione la bitácora en formato Excel (.xlsx). El archivo se guarda
+    temporalmente en este equipo con un nombre seguro; el nombre original
+    solo se muestra como referencia.
   </p>
   <form action="{{ url_for('tz_web.upload') }}" method="post" enctype="multipart/form-data">
     <div class="tz-field">

@@ -115,7 +115,6 @@ MODO_3 = "3"
 UPLOAD_ROOT = os.path.join(tempfile.gettempdir(), "TZ_Analyzer_Web_Uploads")
 _LOG_DIR = os.path.join(tempfile.gettempdir(), "TZ_Analyzer_Web_Logs")
 ALLOWED_UPLOAD_EXTENSIONS: Tuple[str, ...] = (".xlsx",)
-MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB (sección 4, límite inicial configurable)
 _STALE_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60  # 24h
 
 _TECH_LOGGER = logging.getLogger("tz_web.technical")

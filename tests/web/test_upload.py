@@ -69,14 +69,52 @@ def test_extension_xls_legacy_es_rechazada_y_la_ui_declara_solo_xlsx(client):
     assert case.temp_path is None
 
 
-def test_archivo_demasiado_grande_es_rechazado(app, client, monkeypatch):
-    client.post("/modo/1")
-    monkeypatch.setattr(tz_web_state, "MAX_UPLOAD_BYTES", 100)
-    app.config["MAX_CONTENT_LENGTH"] = 100
-    data = {"archivo": (io.BytesIO(b"x" * 1000), "grande.xlsx")}
-    resp = client.post("/upload", data=data, content_type="multipart/form-data", follow_redirects=True)
+# ---------------------------------------------------------------------------
+# MB7-B2 — el límite fijo de 200 MB (protección provisional) fue eliminado.
+# No se sustituye por otro número arbitrario: ver tz_web/state.py (ya no
+# define MAX_UPLOAD_BYTES) y tz_web/app.py (ya no fija MAX_CONTENT_LENGTH).
+# Estas pruebas demuestran la ausencia de la regla, sin crear archivos
+# físicamente grandes: se simula el tamaño monkeypencheando os.path.getsize.
+# ---------------------------------------------------------------------------
+
+
+def test_pantalla_de_carga_no_menciona_200_mb(client):
+    resp = client.post("/modo/1", follow_redirects=True)
     assert resp.status_code == 200
-    assert "supera el límite permitido".encode("utf-8") in resp.data
+    assert b"200 MB" not in resp.data
+    assert "Máximo 200".encode("utf-8") not in resp.data
+
+
+def test_no_existe_constante_de_limite_fijo_de_tamano():
+    assert not hasattr(tz_web_state, "MAX_UPLOAD_BYTES")
+
+
+def test_app_no_configura_max_content_length(app):
+    assert app.config["MAX_CONTENT_LENGTH"] is None
+
+
+def test_archivo_grande_no_es_rechazado_por_una_regla_de_tamano(client, monkeypatch):
+    """Con el tamaño reportado por el sistema de archivos simulado en más de
+    200 MB (sin escribir ese contenido a disco), la subida de un .xlsx real
+    y válido debe completarse igual: nada rechaza únicamente por tamaño."""
+    from tz_web import routes as tz_web_routes
+
+    client.post("/modo/1")
+    original_getsize = os.path.getsize
+
+    def _fake_getsize(path):
+        if str(path).endswith(".xlsx"):
+            return 500 * 1024 * 1024  # > 200 MB, tamaño simulado
+        return original_getsize(path)
+
+    monkeypatch.setattr(tz_web_routes.os.path, "getsize", _fake_getsize)
+
+    resp = upload_real_file(client)
+    assert resp.status_code == 200
+    assert "supera el límite".encode("utf-8") not in resp.data
+    assert "demasiado grande".encode("utf-8") not in resp.data
+    # La subida llegó hasta el listado real de hojas — no fue interrumpida.
+    assert SHEET_NAME.encode() in resp.data
 
 
 def test_reemplazo_invalido_no_deja_ruta_digest_o_mapeo_obsoletos(client):

@@ -9,7 +9,14 @@ from tz_web.app import HOST, create_app
 def test_create_app_devuelve_una_app_flask_configurada(app):
     assert app is not None
     assert app.config["SECRET_KEY"]
-    assert app.config["MAX_CONTENT_LENGTH"] > 0
+
+
+def test_no_configura_un_limite_fijo_de_tamano_de_archivo(app):
+    """MB7-B2: TZ Analyzer ya no impone un límite fijo de tamaño de subida
+    (el de 200 MB era una protección provisional). No se sustituye por otro
+    número arbitrario: MAX_CONTENT_LENGTH queda en su valor por defecto de
+    Flask (None, sin límite propio de la aplicación)."""
+    assert app.config["MAX_CONTENT_LENGTH"] is None
 
 
 def test_host_configurado_como_127_0_0_1():
