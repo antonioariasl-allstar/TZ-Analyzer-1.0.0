@@ -223,14 +223,58 @@ html {
   padding-bottom: 10px;
 }
 
-.tz-help-pending {
-  border-style: dashed;
-  border-color: var(--tz-amber-border);
-  background: var(--tz-amber-bg);
+/* Bloque de nota neutral (no advertencia): aclaraciones, definiciones o
+   contexto adicional que no requieren el tono ámbar de .tz-help-warn. */
+.tz-help-note {
+  background: var(--tz-bg);
+  border: 1px solid var(--tz-border);
+  border-left: 3px solid var(--tz-blue);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 12px 0 18px;
+  font-size: 14px;
 }
 
-.tz-help-pending h2 {
-  color: var(--tz-amber-text);
+.tz-help-note p:last-child {
+  margin-bottom: 0;
+}
+
+/* Tabla de campos canónicos (grupo + campo + para qué se utiliza). */
+.tz-help-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 14px;
+}
+
+.tz-help-table th,
+.tz-help-table td {
+  border: 1px solid var(--tz-border);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.tz-help-table thead th {
+  background: var(--tz-bg);
+  color: var(--tz-navy);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.tz-help-table .tz-help-table-group th {
+  background: var(--tz-bg);
+  color: var(--tz-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.tz-help-table td:first-child {
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* Pantallas anchas: barra lateral fija visible; el botón de índice no hace

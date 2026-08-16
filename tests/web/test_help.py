@@ -1,11 +1,19 @@
-"""tz_web /help — Manual de Usuario (MICROBLOQUE 6-2).
+"""tz_web /help — Manual de Usuario (FASE 4B: reestructuración y reescritura
+integral, sobre la base de MICROBLOQUE 6-2).
 
 Cubre: accesibilidad sin caso activo, no interferencia con Session/lifecycle,
 presencia y posición de AYUDA en el encabezado, apertura en ventana/pestaña
-nombrada estable, ausencia de CDN, y contenido aprobado del manual (índice,
-Modos 1/2/3, advertencias, aclaración de IA, revisión por el analista, límite
-de OSM offline, carpeta de salida explícita, Modo 3 (archivo de datos +
-verificación) y placeholder de versión).
+nombrada estable, ausencia de CDN, y contratos semánticos del contenido
+aprobado (índice de 14 secciones, Preparación de la bitácora, Modos 1/2/3
+reflejando el flujo real, los 14 campos canónicos, geometría de cobertura
+1.5 km / 70° (±35°) coherente con F3.6, distinción inferencia vs. hecho
+observado, complementariedad, carpeta de salida con sufijo _02/_03, versión
+Beta visible, autoría, uso de IA, y ausencia de la sección de soporte).
+
+Deliberadamente NO se comparan bloques de texto completos byte a byte: las
+aserciones son contratos semánticos (presencia/ausencia de fragmentos y de
+términos prohibidos) para no volver la prueba frágil ante mejoras de
+redacción futuras.
 """
 from __future__ import annotations
 
@@ -13,7 +21,9 @@ import pytest
 
 from tz_web import lifecycle, state
 from tz_web.app import create_app
-from tz_web.help_content import HELP_SECTIONS, HELP_VERSION_LABEL
+from tz_web.field_catalog import CANONICAL_FIELDS, FIELD_LABELS
+from tz_web.help_content import HELP_SECTIONS
+from tz_version import AUTHOR, BETA_USAGE_NOTICE, VERSION
 from tests.web.conftest import REAL_MAPPING_FORM, SHEET_NAME, upload_real_file
 
 TOKEN = "token-ayuda-prueba-1234567890"
@@ -120,9 +130,6 @@ def test_ayuda_junto_a_salir_con_instance_token(token_client):
     html = resp.data.decode("utf-8")
     assert "AYUDA" in html
     assert "SALIR" in html
-    # Orden conceptual: Volver al menú | AYUDA | SALIR (aquí sin "volver al
-    # menú" porque menu_screen usa show_nav=False; se valida el orden
-    # AYUDA -> SALIR, que sí aplican ambos en esta pantalla).
     assert html.index("AYUDA") < html.index("SALIR")
 
 
@@ -187,7 +194,8 @@ def test_manual_no_contiene_datos_de_caso(client):
 
 
 # ---------------------------------------------------------------------------
-# K/L — índice con las secciones aprobadas; Modos 1/2/3 documentados.
+# Índice — 14 secciones aprobadas en FASE 4B, en el orden fijado por
+# HELP_SECTIONS (única fuente de verdad para índice + anclas).
 # ---------------------------------------------------------------------------
 
 
@@ -198,125 +206,204 @@ def test_indice_contiene_las_secciones_aprobadas(client):
         assert label in html
 
 
+def test_indice_tiene_las_14_secciones_esperadas():
+    assert len(HELP_SECTIONS) == 14
+    anchors = [anchor for anchor, _ in HELP_SECTIONS]
+    assert len(anchors) == len(set(anchors)), "anclas del índice no deben repetirse"
+
+
+# ---------------------------------------------------------------------------
+# Modos 1/2/3 — reflejan el flujo real (mapeo, revisión, confirmación,
+# configuración; dos pantallas de filtro; solo lo que Modo 3 genera hoy).
+# ---------------------------------------------------------------------------
+
+
 def test_modos_1_2_3_documentados(client):
     html = help_html(client)
-    assert "Modo 1 — Procesar bitácora completa" in html
-    assert "Modo 2 — Procesar bitácora filtrada por tiempo" in html
-    assert "Modo 3 — Mapear antenas y ubicaciones manualmente" in html
+    assert "Modo 1 — Análisis completo" in html
+    assert "Modo 2 — Análisis con filtro temporal" in html
+    assert "Modo 3 — Mapeo manual" in html
 
 
-# ---------------------------------------------------------------------------
-# M — advertencia de carpeta ONEDIR presente.
-# ---------------------------------------------------------------------------
+def test_modo1_documenta_revision_del_mapeo_y_confirmacion(client):
+    modo1_block = help_html(client).split('id="modo-1"', 1)[1].split("</section>", 1)[0]
+    assert "Revisión del mapeo" in modo1_block
+    assert "Confirmación" in modo1_block
+    assert "Configuración" in modo1_block
+    assert "Procesamiento" in modo1_block
+    assert "Resultados" in modo1_block
 
 
-def test_advertencia_onedir_carpeta_salida_presente(client):
+def test_modo2_refleja_dos_pantallas_de_filtro(client):
+    modo2_block = help_html(client).split('id="modo-2"', 1)[1].split("</section>", 1)[0]
+    assert "dos pantallas" in modo2_block
+    assert "Día específico" in modo2_block
+    assert "Rango de fechas" in modo2_block
+    assert "Rango de horas" in modo2_block
+    assert "Rango de horas en un día específico" in modo2_block
+
+
+def test_modo2_no_indica_que_enter_avanza(client):
     html = help_html(client)
-    assert "PENDIENTE DE CONFIRMAR EN BETA" in html.upper() or "Pendiente de confirmar en Beta" in html
-    assert "ONEDIR" in html
+    assert "Enter" not in html
+
+
+def test_modo3_no_incluye_informe_html_entre_sus_productos(client):
+    modo3_block = help_html(client).split('id="modo-3"', 1)[1].split("</section>", 1)[0]
+    assert "Informe HTML" not in modo3_block
+    assert "KMZ" in modo3_block
+
+
+def test_modo3_no_describe_funciones_futuras(client):
+    """Solo lo que Modo 3 ofrece hoy: nada de importar Excel, exportar tabla
+    estructurada, reabrir análisis, acumular revisiones ni sincronización."""
+    modo3_block = help_html(client).split('id="modo-3"', 1)[1].split("</section>", 1)[0].lower()
+    for termino_futuro in (
+        "importar excel",
+        "exportar tabla",
+        "reabrir análisis",
+        "sincroniz",
+    ):
+        assert termino_futuro not in modo3_block
 
 
 # ---------------------------------------------------------------------------
-# N/O — aclaración de uso de IA en el desarrollo, y que TZ Analyzer no
-# incorpora IA para sus análisis.
+# Preparación de la bitácora — nueva sección (P2), y campos canónicos (P2).
 # ---------------------------------------------------------------------------
 
 
-def test_aclaracion_uso_de_ia_en_desarrollo_presente(client):
+def test_existe_preparacion_de_la_bitacora(client):
     html = help_html(client)
-    assert "herramientas de inteligencia artificial" in html
+    assert "Preparación de la bitácora" in html
+    assert "Número analizado" in html
+    assert "consolidad" in html.lower()
 
 
-def test_aclaracion_no_incorpora_ia_presente(client):
+def test_aparecen_los_14_campos_canonicos(client):
     html = help_html(client)
-    assert "TZ Analyzer no incorpora inteligencia artificial" in html
+    assert len(CANONICAL_FIELDS) == 14
+    campos_block = html.split('id="campos"', 1)[1].split("</section>", 1)[0]
+    for campo in CANONICAL_FIELDS:
+        assert FIELD_LABELS[campo] in campos_block
 
 
 # ---------------------------------------------------------------------------
-# P — consideración de revisión por el analista presente.
+# Interpretación de antenas, cobertura y azimut — geometría F3.6 (P0/P2) y
+# distinción inferencia vs. hecho observado (P0).
 # ---------------------------------------------------------------------------
 
 
-def test_consideracion_revision_por_analista_presente(client):
+def test_explica_radio_grafico_1_5_km(client):
     html = help_html(client)
-    assert "deben ser revisados por el analista antes de su utilización" in html
+    assert "1.5 km" in html
 
 
-# ---------------------------------------------------------------------------
-# Q — offline explica la limitación del mapa base OSM.
-# ---------------------------------------------------------------------------
-
-
-def test_offline_explica_limitacion_osm(client):
+def test_explica_apertura_70_grados_35(client):
     html = help_html(client)
-    assert "OpenStreetMap" in html
-    assert "puede no visualizarse" in html
+    assert "70°" in html
+    assert "±35°" in html
+
+
+def test_distingue_ubicacion_exacta_del_dispositivo(client):
+    html = help_html(client)
+    assert "no representan la ubicación exacta del dispositivo" in html
+
+
+def test_distingue_distancia_entre_antenas_de_desplazamiento_demostrado(client):
+    html = help_html(client)
+    assert (
+        "distancia entre dos antenas no demuestra" in html
+        and "desplazamiento físico del dispositivo" in html
+    )
+
+
+def test_explica_sitio_inferido(client):
+    html = help_html(client)
+    cobertura_block = html.split('id="cobertura"', 1)[1].split("</section>", 1)[0]
+    assert "sitio inferido" in cobertura_block.lower()
 
 
 # ---------------------------------------------------------------------------
-# R — carpeta de salida documentada como selección explícita (refleja MB6-1).
+# Carpeta de salida y productos generados — selección explícita y sufijo
+# _02/_03 (P1/P2), sin lenguaje de "en desarrollo".
 # ---------------------------------------------------------------------------
 
 
 def test_carpeta_salida_refleja_seleccion_explicita(client):
     html = help_html(client)
     assert "Seleccionar carpeta…" in html
-    assert "No existe una salida automática silenciosa" in html
 
 
-# ---------------------------------------------------------------------------
-# S — Modo 3 documenta archivo de datos + archivo de verificación.
-# ---------------------------------------------------------------------------
-
-
-def test_modo3_documenta_archivo_de_datos_y_verificacion(client):
+def test_carpeta_salida_documenta_sufijo(client):
     html = help_html(client)
-    assert "Archivo de datos del análisis (Modo 3):" in html
-    assert "Archivo de verificación:" in html
+    assert "_02" in html
+    assert "_03" in html
 
 
-# ---------------------------------------------------------------------------
-# T — placeholder de versión no inventa una versión final.
-# ---------------------------------------------------------------------------
-
-
-def test_placeholder_de_version_no_inventa_version_final(client):
+def test_carpeta_salida_no_dice_que_esta_en_desarrollo(client):
     html = help_html(client)
-    assert HELP_VERSION_LABEL in html
-    assert "1.1 Beta" not in html
-    assert "1.0.0-beta.1" not in html
+    assert "en desarrollo" not in html.lower()
+    assert "ONEDIR" not in html
 
 
 # ---------------------------------------------------------------------------
-# Fase 2 — identidad visual + AYUDA (editorial).
-# ---------------------------------------------------------------------------
-# G — definición general usa "antenas y otros puntos de interés" (sin
-# "celdas") en la descripción general de la sección "Acerca de".
+# Complementariedad con otras herramientas (P2).
 # ---------------------------------------------------------------------------
 
 
-def test_definicion_general_usa_antenas_y_otros_puntos_de_interes(client):
+def test_complementariedad_menciona_i2_excel_google_earth(client):
     html = help_html(client)
-    assert "georreferenciación de antenas y otros puntos de interés" in html
+    complementariedad_block = html.split('id="complementariedad"', 1)[1].split(
+        "</section>", 1
+    )[0]
+    assert "i2 Analyst's Notebook" in complementariedad_block
+    assert "Excel" in complementariedad_block
+    assert "Google Earth" in complementariedad_block
+    assert "sustituye" not in complementariedad_block.lower()
 
 
 # ---------------------------------------------------------------------------
-# H — atribución de concepción/desarrollo/metodología a Omar Arias (Tony
-# Zero), no presentado simplemente como "programador".
+# Uso local / privacidad — sin promesa falsa de aislamiento absoluto.
 # ---------------------------------------------------------------------------
+
+
+def test_funcionamiento_local_sin_promesa_de_aislamiento_absoluto(client):
+    html = help_html(client)
+    assert "TZ Analyzer se ejecuta localmente" in html
+    assert "El análisis puede ejecutarse sin conexión a Internet" in html
+    assert "nunca se conecta a Internet" not in html
+
+
+# ---------------------------------------------------------------------------
+# Versión Beta, autoría y uso de IA (P1/P3) — sin lenguaje que debilite el
+# producto, y sin sección de soporte (P1).
+# ---------------------------------------------------------------------------
+
+
+def test_version_visible_es_1_0_0_beta_1(client):
+    html = help_html(client)
+    assert VERSION == "1.0.0-beta.1"
+    assert VERSION in html
+
+
+def test_no_aparece_pendiente_de_confirmacion(client):
+    html = help_html(client)
+    assert "pendiente de confirmación" not in html.lower()
+    assert "experimental" not in html.lower()
+    assert "puede presentar errores" not in html.lower()
+
+
+def test_no_existe_seccion_soporte_y_sugerencias(client):
+    html = help_html(client)
+    assert "Soporte y sugerencias" not in html
+    assert "será indicado en la versión de distribución" not in html
+    assert "Exportar diagnóstico Beta" not in html
 
 
 def test_ayuda_contiene_atribucion_del_desarrollo(client):
     html = help_html(client)
-    assert "Concepción, desarrollo y metodología: Omar Arias (Tony Zero)." in html
+    assert f"Concepción, desarrollo y metodología: {AUTHOR}." in html
     assert "programador" not in html.lower()
-
-
-# ---------------------------------------------------------------------------
-# I/J — distingue IA de desarrollo vs. IA en el análisis, con la fórmula
-# aprobada "procedimientos técnicos y criterios metodológicos previamente
-# definidos".
-# ---------------------------------------------------------------------------
 
 
 def test_ayuda_distingue_ia_de_desarrollo_de_ia_en_analisis(client):
@@ -329,73 +416,25 @@ def test_ayuda_distingue_ia_de_desarrollo_de_ia_en_analisis(client):
     )
 
 
-# ---------------------------------------------------------------------------
-# K — funcionamiento local descrito sin promesa falsa de aislamiento
-# absoluto de Internet (fondo cartográfico OSM opcional).
-# ---------------------------------------------------------------------------
-
-
-def test_funcionamiento_local_sin_promesa_de_aislamiento_absoluto(client):
+def test_ayuda_no_menciona_marcas_de_ia_concretas(client):
     html = help_html(client)
-    assert (
-        "no requiere conexión a Internet para procesar los archivos ni para "
-        "realizar sus análisis" in html
-    )
-    assert "nunca se conecta a Internet" not in html
-    assert "fondo cartográfico en línea, pueden estar" in html
+    for marca in ("ChatGPT", "Claude", "Codex"):
+        assert marca not in html
 
 
-# ---------------------------------------------------------------------------
-# M — Soporte y sugerencias: sección presente, sin correo/teléfono/URL
-# inventados.
-# ---------------------------------------------------------------------------
-
-
-def test_soporte_presente_sin_contacto_inventado(client):
+def test_ayuda_incluye_aviso_beta_canonico(client):
     html = help_html(client)
-    assert "Soporte y sugerencias" in html
-    assert (
-        "El medio de contacto para soporte y sugerencias será indicado en "
-        "la versión de distribución." in html
-    )
-    assert "@" not in html.split('id="soporte"', 1)[1].split("</section>", 1)[0]
-    assert "mailto:" not in html
-    assert "tel:" not in html
-    assert "Exportar diagnóstico Beta" in html
-    assert "pendiente de implementación" in html
+    assert BETA_USAGE_NOTICE in html
 
 
 # ---------------------------------------------------------------------------
-# N — Modo 3 descrito correctamente: no se inventa un producto HTML.
-# ---------------------------------------------------------------------------
-
-
-def test_modo3_no_incluye_informe_html_entre_sus_productos(client):
-    html = help_html(client)
-    modo3_block = html.split('id="modo-3"', 1)[1].split("</details>", 1)[0]
-    assert "Informe HTML" not in modo3_block
-    assert "KMZ (obligatorio)" in modo3_block
-    assert "Archivo de datos del análisis (Modo 3):" in modo3_block
-    assert "Archivo de verificación:" in modo3_block
-
-
-# ---------------------------------------------------------------------------
-# Fase 2C — limpieza editorial final de AYUDA: retiro de textos obsoletos de
-# "pendiente" ya decididos (nombre del ejecutable, límite de 200 MB) y
-# redacción operativa (no futura) de "Antes de comenzar".
+# Limpieza editorial ya decidida en fases previas: no debe reaparecer.
 # ---------------------------------------------------------------------------
 
 
 def test_ayuda_no_menciona_limite_de_200_mb(client):
     html = help_html(client)
     assert "200 MB" not in html
-
-
-def test_ayuda_no_contiene_pendiente_de_nombre_de_ejecutable(client):
-    html = help_html(client)
-    assert "Pendiente de confirmar en la distribución Beta" not in html
-    assert "el nombre definitivo del archivo que iniciará TZ Analyzer" not in html
-    assert "Nombre definitivo del archivo ejecutable." not in html
 
 
 def test_ayuda_declara_el_ejecutable_definitivo(client):
@@ -414,10 +453,22 @@ def test_antes_de_comenzar_no_habla_en_futuro_del_empaquetado(client):
     )
 
 
-def test_antes_de_comenzar_sin_bullets_redundantes_sobre_archivos_internos(client):
-    html = help_html(client)
-    assert (
-        "TZ Analyzer se inicia ejecutando únicamente el archivo principal "
-        "indicado dentro de la carpeta de la aplicación." not in html
-    )
-    assert "No deben ejecutarse archivos internos para iniciar el programa." not in html
+# ---------------------------------------------------------------------------
+# Tono — vocabulario interno prohibido fuera del manual para usuarios.
+# ---------------------------------------------------------------------------
+
+
+def test_ayuda_sin_terminos_internos_prohibidos(client):
+    html = help_html(client).lower()
+    for termino in (
+        "no garantiza",
+        "podría fallar",
+        "runtime",
+        "snapshot",
+        "fallback",
+        "frozen",
+        "pipeline",
+        "backend",
+        "frontend",
+    ):
+        assert termino not in html

@@ -41,6 +41,7 @@ from werkzeug.utils import secure_filename
 from tz_core.bitacora_io import cargar_excel_con_normalizacion, listar_todas_hojas, obtener_hojas_visibles
 from tz_core.capabilities import detectar_capacidades
 from tz_core.config_loader import get_config
+from tz_core.config_manager import DEFAULT_CONFIG
 from tz_core.field_roles import WIZARD_ORDER_PRIMARY, WIZARD_ORDER_SECONDARY
 from tz_core.folder_dialog import (
     FolderDialogBusyError,
@@ -48,8 +49,10 @@ from tz_core.folder_dialog import (
     FolderDialogUnavailableError,
     pick_folder,
 )
+from tz_core.geo_utils import resolve_azimuth_cone_geometry
 from tz_core.mapping_wizard import FIELD_CONTEXT
 from tz_core.user_paths import resolve_default_output_dir
+from tz_version import AUTHOR, BETA_USAGE_NOTICE, COPYRIGHT, VERSION
 from tz_web import help_content
 from tz_web import lifecycle
 from tz_web import manual_validators as mv
@@ -2567,10 +2570,20 @@ def new_case():
 
 @bp.route("/help", methods=["GET"])
 def help_screen():
+    az_km, az_half_deg = resolve_azimuth_cone_geometry(DEFAULT_CONFIG)
     return render_template(
         "help.html",
         help_sections=help_content.HELP_SECTIONS,
-        help_version_label=help_content.HELP_VERSION_LABEL,
+        version=VERSION,
+        author=AUTHOR,
+        copyright_notice=COPYRIGHT,
+        beta_notice=BETA_USAGE_NOTICE,
+        field_groups=FIELD_GROUPS,
+        field_labels=FIELD_LABELS,
+        field_descriptions=FIELD_DESCRIPTIONS,
+        az_km=az_km,
+        az_half_deg=az_half_deg,
+        az_total_deg=az_half_deg * 2,
     )
 
 
