@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import colorsys
 import copy
+import logging
 import os
 import threading
 import uuid
@@ -87,6 +88,8 @@ from tz_web.services import (
 )
 
 bp = Blueprint("tz_web", __name__)
+
+_LOGGER = logging.getLogger("tz_web.routes")
 
 # Puerta de proceso dedicada al selector. Se adquiere sin espera. Mientras
 # esta tomada solo se lee lifecycle (selector -> lifecycle); lifecycle nunca
@@ -279,6 +282,7 @@ def select_output_folder():
         carpeta_inicial = case.carpeta_salida or resolve_default_output_dir(
             warn=lambda _msg: None
         )
+        _LOGGER.info("Selector de carpeta de salida abierto")
         try:
             seleccionada = pick_folder(
                 initial_dir=carpeta_inicial,
@@ -304,6 +308,7 @@ def select_output_folder():
 
     if seleccionada is None:
         # Cancelado: la selección existente (si la había) no se toca.
+        _LOGGER.info("Selector de carpeta de salida cancelado")
         return jsonify({"status": "cancelled", "carpeta_salida": case.carpeta_salida}), 200
 
     # Reconfirmar bajo el lock real, acotado a la escritura: el diálogo pudo
@@ -325,6 +330,7 @@ def select_output_folder():
         case.carpeta_salida = carpeta_salida_abs
         state.touch(case)
 
+    _LOGGER.info("Selector de carpeta de salida completado")
     return jsonify({"status": "ok", "carpeta_salida": carpeta_salida_abs}), 200
 
 
@@ -2130,6 +2136,7 @@ def _start_task_modo3(case: state.Session) -> Tuple[bool, Optional[str]]:
 
         def _worker() -> None:
             import time as _time
+            _LOGGER.info("Procesamiento de caso iniciado (modo=3)")
             try:
                 result = process_case_modo3(request_obj)
             except Exception as exc:  # noqa: BLE001 - frontera terminal del worker
@@ -2155,6 +2162,7 @@ def _start_task_modo3(case: state.Session) -> Tuple[bool, Optional[str]]:
                 )
                 case.finished_at = _time.time()
             state.touch(case)
+            _LOGGER.info("Procesamiento de caso finalizado (resultado=%s)", case.status)
 
         thread = threading.Thread(target=_worker, daemon=True)
         thread.start()
@@ -2306,6 +2314,7 @@ def _start_task(case: state.Session) -> Tuple[bool, Optional[str]]:
 
         def _worker() -> None:
             import time as _time
+            _LOGGER.info("Procesamiento de caso iniciado (modo=%s)", case.modo)
             try:
                 result = process_case(request_obj)
             except Exception as exc:  # noqa: BLE001 - frontera terminal del worker
@@ -2331,6 +2340,7 @@ def _start_task(case: state.Session) -> Tuple[bool, Optional[str]]:
                 )
                 case.finished_at = _time.time()
             state.touch(case)
+            _LOGGER.info("Procesamiento de caso finalizado (resultado=%s)", case.status)
 
         thread = threading.Thread(target=_worker, daemon=True)
         thread.start()

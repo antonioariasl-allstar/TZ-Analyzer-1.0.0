@@ -11,8 +11,10 @@ También centraliza:
   precisión falsa, solo los 8 valores fijos correspondientes a las 8 etapas
   reales de ``process_case()``);
 - la traducción de excepciones de dominio a mensajes comprensibles para el
-  usuario (sección 11), con el traceback completo siempre registrado en un
-  log técnico fuera del repositorio (nunca dentro de ``TZ-Analyzer-1.0.0``);
+  usuario (sección 11), con el traceback (con rutas redactadas, ver
+  ``tz_logging.sanitize_log_text``) siempre registrado en el log técnico
+  central (``tz_logging``, fuera del repositorio — nunca dentro de
+  ``TZ-Analyzer-1.0.0``);
 - la limpieza de archivos temporales de subida (al iniciar la app y al
   terminar/abandonar una sesión).
 """
@@ -31,6 +33,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
+import tz_logging
 from tz_web.services import (
     AnalysisInProgressError,
     ArchivoNoProcesableError,
@@ -113,31 +116,27 @@ MODO_3 = "3"
 # ---------------------------------------------------------------------------
 
 UPLOAD_ROOT = os.path.join(tempfile.gettempdir(), "TZ_Analyzer_Web_Uploads")
-_LOG_DIR = os.path.join(tempfile.gettempdir(), "TZ_Analyzer_Web_Logs")
 ALLOWED_UPLOAD_EXTENSIONS: Tuple[str, ...] = (".xlsx",)
 _STALE_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60  # 24h
 
+# Sin Handler propio (MICROBLOQUE 7-B3): se propaga al logger raíz, que
+# ``tz_logging.configure_logging()`` configura una sola vez por proceso
+# (archivo rotado en LOCALAPPDATA + consola) — ver tz_launcher.py/run.py.
 _TECH_LOGGER = logging.getLogger("tz_web.technical")
 
 
-def _ensure_technical_logger() -> logging.Logger:
-    """Configura (una sola vez) el logger técnico fuera del repositorio."""
-    if not _TECH_LOGGER.handlers:
-        os.makedirs(_LOG_DIR, exist_ok=True)
-        handler = logging.FileHandler(
-            os.path.join(_LOG_DIR, "tz_web_technical.log"), encoding="utf-8"
-        )
-        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-        _TECH_LOGGER.addHandler(handler)
-        _TECH_LOGGER.setLevel(logging.INFO)
-    return _TECH_LOGGER
-
-
 def log_technical_error(context: str, exc: BaseException) -> None:
-    """Registra el traceback completo en el log técnico; nunca lo muestra al usuario."""
-    logger = _ensure_technical_logger()
-    detalle = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    logger.error("%s: %s\n%s", context, exc, detalle)
+    """Registra el traceback completo en el log técnico; nunca lo muestra al
+    usuario. Las líneas que no sean encabezados de frame (``File "..."``,
+    siempre código propio del repo, nunca datos del caso) pasan por
+    ``tz_logging.sanitize_log_text`` para redactar cualquier ruta de caso
+    que el mensaje de la excepción pudiera arrastrar (sección 11)."""
+    tb_lines = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    detalle = "".join(
+        line if line.lstrip().startswith('File "') else tz_logging.sanitize_log_text(line)
+        for line in tb_lines
+    )
+    _TECH_LOGGER.error("%s: %s\n%s", context, tz_logging.sanitize_log_text(str(exc)), detalle)
 
 
 # ---------------------------------------------------------------------------

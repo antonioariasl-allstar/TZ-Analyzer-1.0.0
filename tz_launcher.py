@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import sys
 
+import tz_logging
 from tz_folder_dialog_ipc import (
     EXIT_ERROR,
     INTERNAL_MODE_ARGUMENT,
@@ -83,12 +84,8 @@ _WAITRESS_JOIN_TIMEOUT_SECONDS = 8.0
 
 
 def _configure_logging() -> None:
-    if logging.getLogger().handlers:
-        return
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    )
+    tz_logging.configure_logging()
+    _LOGGER.info("TZ Analyzer %s iniciado", APP_VERSION)
 
 
 def _open_browser(url: str) -> bool:
@@ -307,4 +304,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except BaseException:
+        # Red de seguridad final de logging (sección 10): un fallo no
+        # controlado en main() debe quedar en el log técnico con su
+        # traceback, incluso en un futuro build sin consola visible.
+        _LOGGER.exception("fallo no controlado durante el arranque/ejecución")
+        raise

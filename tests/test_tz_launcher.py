@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 import tz_launcher
+import tz_logging
 from tz_folder_dialog_ipc import (
     EXIT_CANCELLED,
     EXIT_ERROR,
@@ -29,10 +30,16 @@ from tz_web import instance, lifecycle, state
 
 
 @pytest.fixture(autouse=True)
-def _isolation(monkeypatch):
+def _isolation(monkeypatch, tmp_path):
     # Ninguna prueba de orquestacion debe barrer el LocalAppData real ni
     # terminar hijos que no haya creado. Las pruebas dirigidas de abajo
-    # reemplazan estos no-op por spies propios.
+    # reemplazan estos no-op por spies propios. tz_launcher.main() configura
+    # logging (tz_logging) como primer paso: redirige LOCALAPPDATA a un
+    # tmp_path y resetea el estado del logger raíz para que ninguna prueba
+    # de este archivo escriba en el LocalAppData real del usuario ni deje
+    # handlers configurados para el resto de la sesión de pytest.
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    tz_logging.reset_logging_for_tests()
     monkeypatch.setattr(tz_launcher, "cleanup_stale_dialog_ipc", lambda: None)
     monkeypatch.setattr(tz_launcher, "shutdown_dialog_children", lambda: None)
     lifecycle.reset_for_tests()
@@ -41,6 +48,7 @@ def _isolation(monkeypatch):
     with state._RUNNING_LOCK:
         state._RUNNING_SESSION_ID = None
     yield
+    tz_logging.reset_logging_for_tests()
     lifecycle.reset_for_tests()
     with state._SESSIONS_LOCK:
         state._SESSIONS.clear()

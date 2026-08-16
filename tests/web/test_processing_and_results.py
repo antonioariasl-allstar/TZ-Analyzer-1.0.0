@@ -89,6 +89,54 @@ def test_resultado_exitoso_con_fixture_real(client, tmp_path):
     assert case.result.kmz_path and os.path.isfile(case.result.kmz_path)
 
 
+def test_eventos_de_procesamiento_no_registran_ruta_ni_nombre_de_archivo(client, tmp_path, caplog):
+    """MICROBLOQUE 7-B3 (sección 12C): inicio/fin de process_case() se
+    registran en el log técnico central sin el nombre del archivo subido ni
+    la carpeta de salida elegida."""
+    advance_to_configure(client)
+
+    with caplog.at_level("INFO", logger="tz_web.routes"):
+        _submit_configure(client, tmp_path)
+        status = wait_for_terminal_status(client)
+    assert status["status"] == "success"
+
+    mensajes = [record.getMessage() for record in caplog.records]
+    assert any("Procesamiento de caso iniciado" in m for m in mensajes)
+    assert any("Procesamiento de caso finalizado" in m for m in mensajes)
+    assert not any("bitacora_test" in m for m in mensajes)
+    assert not any(str(tmp_path) in m for m in mensajes)
+
+
+def test_log_technical_error_real_redacta_ruta_y_conserva_tipo(client, monkeypatch, tmp_path, caplog):
+    """Sin monkeypatchear ``log_technical_error``: verifica el comportamiento
+    real migrado a ``tz_logging`` (secciones 10/11) — el tipo de excepción
+    queda legible, pero una ruta de caso embebida en el mensaje se redacta."""
+    advance_to_configure(client)
+    ruta_sensible = "C:\\CASOS\\Investigacion_Juan_Perez\\bitacora.xlsx"
+
+    def _raise(_req):
+        raise RuntimeError(f"fallo simulado leyendo {ruta_sensible!r}")
+
+    monkeypatch.setattr(tz_web_routes, "process_case", _raise)
+    with caplog.at_level("ERROR", logger="tz_web.technical"):
+        _submit_configure(client, tmp_path)
+        status = wait_for_terminal_status(client)
+        # ``case.status`` pasa a "failed" antes de que el worker llame a
+        # log_technical_error() (ver _mark_run_failed): una espera acotada
+        # evita la carrera con el polling de arriba.
+        import time as _time
+        deadline = _time.time() + 2.0
+        while _time.time() < deadline and not caplog.records:
+            _time.sleep(0.02)
+    assert status["status"] == "failed"
+
+    mensajes = "\n".join(record.getMessage() for record in caplog.records)
+    assert "RuntimeError" in mensajes
+    assert "<ruta_redactada>" in mensajes
+    assert "Juan_Perez" not in mensajes
+    assert ruta_sensible not in mensajes
+
+
 def test_resultado_parcial_muestra_advertencias_y_errores(client, monkeypatch, tmp_path):
     """KML solicitado ausente es PARTIAL con los obligatorios disponibles."""
     advance_to_configure(client)

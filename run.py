@@ -24,23 +24,22 @@ Uso: python run.py
 """
 
 import logging
-import traceback
+
+import tz_logging
 from tz_core.app_runner import run
 
 
 if __name__ == "__main__":
-    # Inicializar logging simple y visible en consola (se mantiene aquí)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s: %(message)s"
-    )
+    # Logging centralizado (ver tz_logging.py): archivo persistente en
+    # LOCALAPPDATA + consola, mismo destino que tz_launcher.py.
+    tz_logging.configure_logging()
+    _logger = logging.getLogger("run")
 
     # Ejecutar flujo principal con manejo de errores
     try:
         run()
     except KeyboardInterrupt:
         print("\n\n[INFO] Proceso cancelado por el usuario.")
-    except Exception as e:
-        logging.error("Error no controlado: %s", e)
-        traceback.print_exc()
+    except Exception:
+        _logger.exception("Error no controlado")
         raise

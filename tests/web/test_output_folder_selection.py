@@ -333,6 +333,26 @@ def test_carpeta_no_escribible_es_rechazada_y_permite_reintentar(client, monkeyp
     assert current_case(client).carpeta_salida == elegida
 
 
+def test_selector_no_registra_la_ruta_elegida_en_el_log(client, monkeypatch, tmp_path, caplog):
+    """MICROBLOQUE 7-B3 (sección 5): el evento técnico del selector se
+    registra sin la ruta elegida, cancelada o no."""
+    avanzar_modo1_hasta_preparar(client)
+    elegida = str(tmp_path / "Carpeta Con Nombre Sensible del Caso")
+
+    with caplog.at_level("INFO", logger="tz_web.routes"):
+        resp = click_seleccionar_carpeta(client, monkeypatch, return_value=elegida)
+        assert resp.status_code == 200
+        resp_cancel = click_seleccionar_carpeta(client, monkeypatch, return_value=None)
+        assert resp_cancel.status_code == 200
+
+    mensajes = [record.getMessage() for record in caplog.records]
+    assert any("Selector de carpeta de salida abierto" in m for m in mensajes)
+    assert any("Selector de carpeta de salida completado" in m for m in mensajes)
+    assert any("Selector de carpeta de salida cancelado" in m for m in mensajes)
+    assert not any(elegida in m for m in mensajes)
+    assert not any("Carpeta Con Nombre Sensible" in m for m in mensajes)
+
+
 def test_dialogo_no_disponible_produce_mensaje_comprensible(client, monkeypatch):
     avanzar_modo1_hasta_preparar(client)
     resp = click_seleccionar_carpeta(
