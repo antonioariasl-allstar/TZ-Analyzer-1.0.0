@@ -168,11 +168,13 @@ def test_referencia_geografica_dos_antenas_explicitas():
     html = construir_seccion_interacciones(df, config={})
 
     assert "Referencia geográfica:" in html
-    assert "las dos antenas con mayor número de activaciones del día fueron" in html
+    assert "considerando todos los registros del día que cuentan con ubicación" in html
     assert "VTRIUN" in html and "PANAM3" in html
+    assert html.count("con 2 activaciones") == 2
     assert "entre sí." in html
 
     # Redacción anterior eliminada por completo.
+    assert "las dos antenas con mayor número de activaciones del día fueron" not in html
     assert "Movilidad" not in html
     assert "top 2 celdas del día" not in html
     assert "↔" not in html
@@ -194,7 +196,9 @@ def test_referencia_geografica_dos_sitios_inferidos():
     html = construir_seccion_interacciones(df, config={})
 
     assert "Referencia geográfica:" in html
+    assert "considerando todos los registros del día que cuentan con ubicación" in html
     assert sitio_a in html and sitio_b in html
+    assert html.count("con 2 activaciones") == 2
     assert "Movilidad" not in html
 
 
@@ -216,3 +220,92 @@ def test_referencia_geografica_distancia_aproximada_se_calcula():
     assert m, "No se encontró la distancia aproximada en la Referencia geográfica"
     dist_km = float(m.group(1))
     assert dist_km > 2.0  # supera el umbral mínimo para mostrarse
+
+
+def test_referencia_geografica_singular_una_activacion():
+    df = pd.DataFrame({
+        "fecha": ["01/03/2024"] * 6,
+        "hora": ["08:00:00", "08:05:00", "08:10:00", "08:15:00", "08:20:00", "09:00:00"],
+        "contacto": [f"70010{i}" for i in range(6)],
+        "duracion": [10] * 6,
+        "antena": ["ANTENA_A"] * 5 + ["ANTENA_B"],
+        "lat": [13.400000] * 5 + [13.900000],
+        "long": [-88.400000] * 5 + [-88.900000],
+    })
+    html = construir_seccion_interacciones(df, config={})
+
+    assert "Referencia geográfica:" in html
+    assert "ANTENA_A, con 5 activaciones" in html
+    assert "ANTENA_B, con 1 activación." in html
+    assert "1 activaciones" not in html
+
+
+def test_referencia_geografica_no_depende_de_filas_visibles_inicialmente():
+    """El ranking usa todas las filas del día con ubicación válida, no solo
+    las primeras 20 visibles antes de pulsar "Ver más registros"."""
+    n_x, n_y = 20, 25
+    horas = [f"06:{i:02d}:00" for i in range(n_x)] + [f"20:{i:02d}:00" for i in range(n_y)]
+    n = n_x + n_y
+    df = pd.DataFrame({
+        "fecha": ["01/03/2024"] * n,
+        "hora": horas,
+        "contacto": [f"7002{i:05d}" for i in range(n)],
+        "duracion": [10] * n,
+        "antena": ["ANTENA_X"] * n_x + ["ANTENA_Y"] * n_y,
+        "lat": [13.400000] * n_x + [13.900000] * n_y,
+        "long": [-88.400000] * n_x + [-88.900000] * n_y,
+    })
+    html = construir_seccion_interacciones(df, config={})
+
+    # ANTENA_Y tiene más activaciones (25) pero todas quedan ubicadas después
+    # de la fila 20 inicialmente visible; el ranking debe seguir detectándola.
+    assert "Referencia geográfica:" in html
+    assert "ANTENA_Y, con 25 activaciones" in html
+    assert "ANTENA_X, con 20 activaciones" in html
+
+
+def test_ver_mas_aclaracion_aparece_con_filas_ocultas():
+    n_x, n_y = 20, 25
+    horas = [f"06:{i:02d}:00" for i in range(n_x)] + [f"20:{i:02d}:00" for i in range(n_y)]
+    n = n_x + n_y
+    df = pd.DataFrame({
+        "fecha": ["01/03/2024"] * n,
+        "hora": horas,
+        "contacto": [f"7003{i:05d}" for i in range(n)],
+        "duracion": [10] * n,
+        "antena": ["ANTENA_X"] * n_x + ["ANTENA_Y"] * n_y,
+        "lat": [13.400000] * n_x + [13.900000] * n_y,
+        "long": [-88.400000] * n_x + [-88.900000] * n_y,
+    })
+    html = construir_seccion_interacciones(df, config={})
+
+    assert "Ver más registros" in html
+    assert (
+        "La tabla muestra inicialmente una parte de los registros; "
+        "seleccione “Ver más registros” para consultar el resto."
+    ) in html
+
+
+def test_ver_mas_aclaracion_no_aparece_sin_filas_ocultas():
+    df = _df_dos_antenas()  # 4 filas, muy por debajo del umbral de paginación
+    html = construir_seccion_interacciones(df, config={})
+
+    assert "Ver más registros" not in html
+    assert "La tabla muestra inicialmente una parte" not in html
+
+
+def test_referencia_geografica_distancia_insuficiente_preserva_omision():
+    """Mismo umbral vigente (>=2 km): si las dos antenas top están a menos de
+    2 km entre sí, la alerta sigue sin generarse (comportamiento preservado)."""
+    df = pd.DataFrame({
+        "fecha": ["01/03/2024"] * 4,
+        "hora": ["08:00:00", "08:05:00", "08:10:00", "08:15:00"],
+        "contacto": ["70011111", "70022222", "70033333", "70044444"],
+        "duracion": [10, 20, 30, 40],
+        "antena": ["VTRIUN", "VTRIUN", "VTRIUNW", "VTRIUNW"],
+        "lat": [13.559339] * 4,
+        "long": [-88.433997] * 4,
+    })
+    html = construir_seccion_interacciones(df, config={})
+
+    assert "Referencia geográfica:" not in html

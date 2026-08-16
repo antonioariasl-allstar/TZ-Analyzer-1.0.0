@@ -577,8 +577,16 @@ def construir_seccion_interacciones(
                 f"<div style='margin:10px 0;'>"
                 f"<button class='ver-mas-btn' data-day='{pd.to_datetime(d).strftime('%Y-%m-%d')}' "
                 f"style='padding:8px 12px;border:1px solid #ccc;border-radius:6px;background:#f8f8f8;cursor:pointer;'>Ver más registros</button>"
+                f"<p class='nota' style='font-size:0.85em;color:#666;margin:6px 0 0 0;'>"
+                f"La tabla muestra inicialmente una parte de los registros; seleccione "
+                f"“Ver más registros” para consultar el resto.</p>"
                 f"</div>"
             )
+
+        def _fmt_activaciones(n):
+            """Formatea un conteo de activaciones con singular/plural correcto."""
+            n_int = int(n)
+            return f"{n_int} activación" if n_int == 1 else f"{n_int} activaciones"
 
         def _haversine_km(lat1, lon1, lat2, lon2):
             """Calcula distancia en kilómetros entre dos puntos usando fórmula haversine."""
@@ -654,12 +662,15 @@ def construir_seccion_interacciones(
                     )
                     if len(top2) >= 2:
                         a1, a2 = str(top2.loc[0, col_antena]), str(top2.loc[1, col_antena])
+                        cnt1, cnt2 = int(top2.loc[0, "cnt"]), int(top2.loc[1, "cnt"])
                         dist_km = _haversine_km(top2.loc[0, "lat"], top2.loc[0, "lon"], top2.loc[1, "lat"], top2.loc[1, "lon"])
                         if dist_km >= 2.0:
                             alertas.append(
-                                "Referencia geográfica: las dos antenas con mayor número de "
-                                f"activaciones del día fueron {a1} y {a2}, ubicadas a una "
-                                f"distancia aproximada de {dist_km:.1f} km entre sí."
+                                "Referencia geográfica: considerando todos los registros del "
+                                "día que cuentan con ubicación, las antenas con mayor número "
+                                f"de activaciones fueron {a1}, con {_fmt_activaciones(cnt1)}, "
+                                f"y {a2}, con {_fmt_activaciones(cnt2)}. Ambas se encuentran a "
+                                f"una distancia aproximada de {dist_km:.1f} km entre sí."
                             )
         except Exception:
             pass
