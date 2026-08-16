@@ -406,10 +406,13 @@ def test_I_dos_pestanas_misma_sesion_crean_un_solo_worker(
         monkeypatch.setattr(routes, "process_case", _slow_process)
 
     cookie_name = client.application.config["SESSION_COOKIE_NAME"]
-    session_cookie = client.get_cookie(cookie_name)
+    # Dominio explícito: el fixture ``app`` de conftest.py fija SERVER_NAME a
+    # 127.0.0.1:<puerto> (MB7-B5-A1, ver configure_test_instance_host) — ya
+    # no es el "localhost" que Werkzeug usaría por defecto sin esa config.
+    session_cookie = client.get_cookie(cookie_name, domain="127.0.0.1")
     assert session_cookie is not None
     second_tab = client.application.test_client()
-    second_tab.set_cookie(cookie_name, session_cookie.value)
+    second_tab.set_cookie(cookie_name, session_cookie.value, domain="127.0.0.1")
 
     try:
         first = client.post(endpoint, data={"accion": "siguiente"})

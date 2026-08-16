@@ -24,7 +24,7 @@ from tz_web.app import create_app
 from tz_web.field_catalog import CANONICAL_FIELDS, FIELD_LABELS
 from tz_web.help_content import HELP_SECTIONS
 from tz_version import AUTHOR, BETA_USAGE_NOTICE, VERSION
-from tests.web.conftest import REAL_MAPPING_FORM, SHEET_NAME, upload_real_file
+from tests.web.conftest import REAL_MAPPING_FORM, SHEET_NAME, configure_test_instance_host, upload_real_file
 
 TOKEN = "token-ayuda-prueba-1234567890"
 
@@ -48,6 +48,7 @@ def token_app(tmp_path, monkeypatch):
     lifecycle.reset_for_tests()
     application = create_app(instance_token=TOKEN, instance_id="instancia-ayuda")
     application.config.update(TESTING=True)
+    configure_test_instance_host(application)
     yield application
     lifecycle.reset_for_tests()
     with state._SESSIONS_LOCK:

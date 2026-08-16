@@ -9,6 +9,7 @@ import pytest
 
 from tz_web import lifecycle, state
 from tz_web.app import create_app
+from tests.web.conftest import configure_test_instance_host
 
 TOKEN = "token-de-prueba-1234567890"
 
@@ -19,6 +20,7 @@ def internal_app(tmp_path, monkeypatch):
     lifecycle.reset_for_tests()
     application = create_app(instance_token=TOKEN, instance_id="instancia-prueba")
     application.config.update(TESTING=True)
+    configure_test_instance_host(application)
     yield application
     lifecycle.reset_for_tests()
     with state._SESSIONS_LOCK:
@@ -61,6 +63,7 @@ def test_health_sin_app_sin_token_configurado_rechaza_igual(tmp_path, monkeypatc
     de tests/web/conftest.py), /internal/* nunca queda abierto por omisión."""
     monkeypatch.setattr(state, "UPLOAD_ROOT", str(tmp_path / "uploads"))
     app = create_app()  # sin instance_token
+    configure_test_instance_host(app)
     client = app.test_client()
     resp = client.get("/internal/health", headers={"X-TZ-Token": ""})
     assert resp.status_code == 403

@@ -36,6 +36,25 @@ REAL_MAPPING_FORM = {
 }
 
 
+def configure_test_instance_host(application, port: int = 51234) -> str:
+    """Simula, para pruebas que usan ``test_client()`` (sin socket real), el
+    Host:puerto que ``tz_web.server.ManagedServer.start()`` deja configurado
+    en producción antes de despachar cualquier request — ver el guard
+    ``tz_web.app._guard_host`` (MB7-B5-A1). Sin esto, el fixture ``app``
+    representaría una instancia que nunca terminó de arrancar (503 por
+    contrato, sección 6 del encargo) para cualquier request de prueba.
+
+    ``SERVER_NAME`` solo fija el Host por defecto que usa el *test client*
+    quien no pasa por ningún socket real y por tanto no tiene Host propio;
+    no reemplaza ni debilita la validación real de ``_guard_host``, que
+    sigue comparando exactamente contra ``TZ_INSTANCE_PORT``.
+    """
+    host = f"127.0.0.1:{port}"
+    application.config["TZ_INSTANCE_PORT"] = port
+    application.config["SERVER_NAME"] = host
+    return host
+
+
 @pytest.fixture()
 def app(tmp_path, monkeypatch):
     # Aísla cada prueba en su propia carpeta de subidas/logs temporales,
@@ -43,6 +62,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setattr(tz_web_state, "UPLOAD_ROOT", str(tmp_path / "uploads"))
     application = create_app()
     application.config.update(TESTING=True)
+    configure_test_instance_host(application)
     yield application
     # Ninguna sesión de una prueba debe filtrarse a la siguiente.
     with tz_web_state._SESSIONS_LOCK:

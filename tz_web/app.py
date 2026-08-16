@@ -12,23 +12,36 @@ original, ahora sección E/L del MICROBLOQUE 5):
   sirve — ``tz_web.server.ManagedServer`` — no esta fábrica);
 - sin reloader, sin modo debug (no aplica: no usa el servidor de Werkzeug);
 - ``/internal/health``, ``/internal/heartbeat`` y ``/internal/shutdown``
-  quedan protegidos por el token de instancia inyectado aquí.
+  quedan protegidos por el token de instancia inyectado aquí;
+- toda la app (blueprint principal e ``/internal/*`` por igual) exige que
+  el ``Host`` de la request coincida exactamente con ``127.0.0.1:<puerto
+  real>`` (MICROBLOQUE 7-B5-A1, defensa contra DNS rebinding — ver
+  ``_guard_host`` más abajo).
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Optional
 
-from flask import Flask
+from flask import Flask, Response, request
 
 from tz_version import VERSION as APP_VERSION
 from tz_web import instance, state
 from tz_web.internal_routes import bp as tz_web_internal_blueprint
 from tz_web.routes import bp as tz_web_blueprint
 
+_LOGGER = logging.getLogger("tz_web.app")
+
 HOST = "127.0.0.1"
+
+# Mensajes deliberadamente genéricos (sección 14 del encargo MB7-B5-A1): no
+# deben revelar el Host recibido, el Host/puerto esperado ni ningún otro
+# estado interno — ver ``_guard_host`` más abajo.
+_HOST_NOT_READY_BODY = "Servicio no disponible."
+_HOST_REJECTED_BODY = "Solicitud no permitida."
 
 
 def create_app(
@@ -59,6 +72,34 @@ def create_app(
 
     app.register_blueprint(tz_web_blueprint)
     app.register_blueprint(tz_web_internal_blueprint)
+
+    def _expected_host() -> Optional[str]:
+        # Nunca construido a partir de la request (sección 3 del encargo
+        # MB7-B5-A1): siempre HOST + el puerto real, que
+        # ``tz_web.server.ManagedServer.start()`` ya escribe en
+        # TZ_INSTANCE_PORT antes de que el hilo de Waitress empiece a
+        # aceptar conexiones.
+        port = app.config.get("TZ_INSTANCE_PORT")
+        if port is None:
+            return None
+        return f"{HOST}:{port}"
+
+    @app.before_request
+    def _guard_host() -> Optional[Response]:
+        """Defensa contra DNS rebinding (MB7-B5-A1): capa central que
+        protege toda la app (blueprint principal e ``/internal/*`` por
+        igual) — Flask ejecuta los ``before_request`` globales (esta
+        función) antes que los de blueprint, así que esto corre siempre
+        antes que el guard de ``X-TZ-Token`` de ``tz_web.internal_routes``.
+        """
+        expected = _expected_host()
+        if expected is None:
+            _LOGGER.warning("request rechazada: host de instancia aún no configurado")
+            return Response(_HOST_NOT_READY_BODY, status=503, mimetype="text/plain")
+        if request.host != expected:
+            _LOGGER.warning("request rechazada por Host no permitido")
+            return Response(_HOST_REJECTED_BODY, status=403, mimetype="text/plain")
+        return None
 
     @app.context_processor
     def _inject_instance_token() -> dict:
