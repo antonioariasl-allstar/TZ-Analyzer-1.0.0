@@ -16,6 +16,7 @@ import pandas as pd
 import numpy as np
 from tz_core.logging_utils import log
 from tz_core.config_manager import cargar_config
+from tz_core.geo_utils import resolve_azimuth_cone_geometry
 from tz_core.dataframe_utils import pick_first_existing_column
 from tz_core.html_helpers import (
     fmt_datetime as fmt_dt,
@@ -955,6 +956,10 @@ def generar_informe_html(
                     if heat_points:
                         _heat_js = safe_json_for_script(heat_points)
                         _markers_js = safe_json_for_script(markers_data)
+                        # Misma fuente de verdad que KML/KMZ para el cono de azimut
+                        # (config["kml"]["azimuth_km"] / config["kml"]["cone"]["half_degrees"]).
+                        _az_dist_km, _az_cone_half_deg = resolve_azimuth_cone_geometry(config)
+                        _az_line_len_m = int(round(_az_dist_km * 1000))
                         # Sección integrada al bloque de "Antenas más activadas":
                         # sin H2 ni nota, para que el mapa se perciba como parte del resumen de antenas.
                         sec_heatmap = f"""
@@ -979,9 +984,9 @@ def generar_informe_html(
       
                     // === Utilidades para dibujar la orientación (azimut principal) ===
                     const AZ_COLOR = '#e74c3c';
-                    const AZ_LINE_LEN_M = 1500;      // longitud de la flecha
+                    const AZ_LINE_LEN_M = { _az_line_len_m };      // longitud de la flecha (config: kml.azimuth_km)
                     const AZ_LINE_WEIGHT = 5;         // grosor de la línea del azimut
-                    const AZ_CONE_HALF_DEG = 30;      // medio ángulo del cono (±30°)
+                    const AZ_CONE_HALF_DEG = { _az_cone_half_deg };      // medio ángulo del cono (config: kml.cone.half_degrees)
                     const AZ_CONE_STEPS = 24;         // discretización del arco
             // Convertir grados a radianes
             const toRad = d => d * Math.PI / 180;

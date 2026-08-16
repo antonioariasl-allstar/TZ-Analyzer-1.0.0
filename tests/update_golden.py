@@ -10,7 +10,7 @@ import pandas as pd
 
 from tz_core.kml_generator import generar_kml
 from tz_core.html.assembler import generar_informe_html
-from script_principal_bitacoras_refactory import bootstrap_config
+import script_principal_bitacoras_refactory as spb
 from tests.normalize_outputs import normalize_kml_from_kmz, normalize_html
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -46,19 +46,21 @@ def _load_df_imei20() -> pd.DataFrame:
 def main() -> None:
     os.makedirs(GOLDEN_DIR, exist_ok=True)
     df = _load_df_imei20()
-    bootstrap_config()
+    spb.bootstrap_config()
+    config = spb.CONFIG
 
     out_dir = tempfile.mkdtemp(prefix='tz_e2e_')
     kmz_base = os.path.join(out_dir, 'e2e.kml')
 
-    generar_kml(df, kmz_base, config={}, flat=False)
+    generar_kml(df, kmz_base, config=config, flat=False)
     html_path = generar_informe_html(
         df=df,
         archivo_kml=kmz_base,
         carpeta_salida=out_dir,
         nombre_salida='e2e_informe',
         hoja=None,
-        nombre_bitacora='E2E_REGRESION_TEST'
+        nombre_bitacora='E2E_REGRESION_TEST',
+        config=config,
     )
 
     kmz_path = os.path.splitext(kmz_base)[0] + '.kmz'

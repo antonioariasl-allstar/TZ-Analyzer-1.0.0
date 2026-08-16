@@ -101,7 +101,35 @@ def generar_coordenadas_circulo(
     return coords
 
 
-def generar_cono(kml, lat: float, lon: float, azimut: float, distancia_km: float, 
+def resolve_azimuth_cone_geometry(config: dict | None) -> Tuple[float, int]:
+    """Resuelve el radio (km) y semiángulo (°) del cono de azimut desde config.
+
+    Misma fuente de verdad y misma cadena de fallback que usa la generación
+    de KML/KMZ (config["kml"]["azimuth_km"] y config["kml"]["cone"]["half_degrees"],
+    con reserva en config["style"]["cone_half_degrees"]), para que cualquier
+    representación gráfica del cono (KML o HTML) use exactamente los mismos
+    valores efectivos.
+
+    Args:
+        config: Diccionario de configuración (o None)
+
+    Returns:
+        Tuple[float, int]: (azimut_distancia_km, cono_semiancho_grados)
+    """
+    try:
+        az_dist_km = float((config or {}).get("kml", {}).get("azimuth_km", 1.0))
+        cone_half = (
+            (config or {}).get("kml", {}).get("cone", {}).get("half_degrees")
+            or (config or {}).get("style", {}).get("cone_half_degrees", 60)
+        )
+        cone_half = int(cone_half)
+    except Exception:
+        az_dist_km = 1.0
+        cone_half = 60
+    return az_dist_km, cone_half
+
+
+def generar_cono(kml, lat: float, lon: float, azimut: float, distancia_km: float,
                 angulo_lateral: int, color: str):
     """Genera un polígono tipo 'cono' direccional en KML.
     

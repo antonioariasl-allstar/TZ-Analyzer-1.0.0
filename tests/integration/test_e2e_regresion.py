@@ -25,9 +25,7 @@ try:
 except ImportError:
     pytest = None
 
-from script_principal_bitacoras_refactory import (
-    bootstrap_config,
-)
+import script_principal_bitacoras_refactory as spb
 from tz_core.html.assembler import generar_informe_html
 from tz_core.kml_generator import generar_kml
 from tests.normalize_outputs import (
@@ -75,21 +73,23 @@ if pytest:
     def test_e2e_outputs_golden_match(tmp_path):
         # Arrange
         df = _load_df_imei20()
-        bootstrap_config()
+        spb.bootstrap_config()
+        config = spb.CONFIG
 
         out_dir = tmp_path if tmp_path else tempfile.mkdtemp()
         out_dir = str(out_dir)
         kmz_base = os.path.join(out_dir, 'e2e.kml')
 
         # Act
-        generar_kml(df, kmz_base, config={}, flat=False)
+        generar_kml(df, kmz_base, config=config, flat=False)
         html_path = generar_informe_html(
             df=df,
             archivo_kml=kmz_base,
             carpeta_salida=out_dir,
             nombre_salida='e2e_informe',
             hoja=None,
-            nombre_bitacora='E2E_REGRESION_TEST'
+            nombre_bitacora='E2E_REGRESION_TEST',
+            config=config,
         )
 
         # Normalize actual outputs
@@ -211,7 +211,7 @@ def test_kmz_estructura_basica_sintetica():
         out_kml = os.path.join(tmp_dir, "test_sintetico.kml")
         
         # Inicializar config y generar KML/KMZ
-        bootstrap_config()
+        spb.bootstrap_config()
         generar_kml(df, out_kml, config={}, flat=False)
         
         # Validar que se generó el KMZ
@@ -292,8 +292,8 @@ def test_kml_business_logic_validation():
                     return z.read(n).decode('utf-8', errors='ignore')
         return ''
     
-    bootstrap_config()
-    
+    spb.bootstrap_config()
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         # Test 1: direccion == antena -> debe ocultarse línea
         df_case1 = pd.DataFrame([{
