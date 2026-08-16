@@ -1,0 +1,27 @@
+{#
+  tz_web/templates/help_manual_standalone.html — envoltorio del manual
+  externo, autocontenido (FASE 4C).
+
+  Renderizado únicamente por tools/generate_user_manual.py, fuera de Flask
+  (sin request, sin servidor, sin localhost). A diferencia de help.html
+  (que enlaza hojas de estilo vía url_for de Flask), aquí el CSS necesario
+  llega ya leído del disco e incrustado en inline_css, y las imágenes de
+  marca llegan como data URI en logo_src/logo_isotipo_src — de modo que el
+  archivo resultante se pueda abrir con doble clic, sin conexión y sin
+  ninguna dependencia externa. El cuerpo del manual es exactamente el mismo
+  fragmento (help_manual.html) que usa el AYUDA interno.
+#}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TZ Analyzer — Manual de Usuario</title>
+  <style>
+{{ inline_css | safe }}
+  </style>
+</head>
+<body class="tz-help-body">
+{% include "help_manual.html" %}
+</body>
+</html>

@@ -2584,6 +2584,8 @@ def help_screen():
         az_km=az_km,
         az_half_deg=az_half_deg,
         az_total_deg=az_half_deg * 2,
+        logo_src=url_for("tz_web.logo_asset"),
+        logo_isotipo_src=url_for("tz_web.logo_isotipo_asset"),
     )
 
 
