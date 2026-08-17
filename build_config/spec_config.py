@@ -37,7 +37,7 @@ DATAS: tuple[tuple[Path, str], ...] = (
 HIDDENIMPORTS: tuple[str, ...] = ()
 EXCLUDES: tuple[str, ...] = ()
 
-CONSOLE = True
+CONSOLE = False
 UPX = False
 STRIP = False
 CONTENTS_DIRECTORY = "_internal"

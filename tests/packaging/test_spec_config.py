@@ -57,7 +57,7 @@ def test_hiddenimports_and_excludes_start_empty():
 
 
 def test_first_build_flags():
-    assert cfg.CONSOLE is True
+    assert cfg.CONSOLE is False
     assert cfg.UPX is False
     assert cfg.STRIP is False
     assert cfg.CONTENTS_DIRECTORY == "_internal"
