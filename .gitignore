@@ -17,6 +17,9 @@ __pycache__/
 dist/
 build/
 *.spec
+# TZ_Analyzer.spec sí se versiona (P1-BUILD-CONFIG): es la configuración
+# reproducible del build PyInstaller ONEDIR, no un artefacto generado.
+!/TZ_Analyzer.spec
 
 # IDEs y editores
 .vscode/

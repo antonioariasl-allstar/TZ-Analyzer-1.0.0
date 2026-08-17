@@ -1,0 +1,9 @@
+# Herramientas de empaquetado (PyInstaller ONEDIR). No incluye dependencias
+# de runtime: esas viven en requirements.txt.
+#
+# Versión fijada tras consultar `pip index versions pyinstaller` en
+# .venv312 (2026-08-16): 6.22.1 es la más reciente estable disponible en el
+# índice (sin sufijo rc/dev), y la línea 6.x soporta Python 3.12 desde su
+# primera versión (6.0.0). pyinstaller-hooks-contrib no se fija aquí:
+# PyInstaller resuelve una versión compatible por sí solo.
+pyinstaller==6.22.1
