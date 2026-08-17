@@ -19,7 +19,7 @@ import pytest
 import tempfile
 import os
 import pandas as pd
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, PropertyMock
 from tz_core.data_loader import (
     obtener_hojas_visibles, 
     listar_todas_hojas,
@@ -75,11 +75,46 @@ class TestObtenerHojasVisibles:
     def test_excepcion_durante_carga(self, mock_openpyxl):
         """Test manejo de excepciones durante carga"""
         mock_openpyxl.load_workbook.side_effect = Exception("Error simulado")
-        
+
         resultado, error = obtener_hojas_visibles("test.xlsx")
-        
+
         assert resultado is None
         assert error == "LOAD_FAIL"
+
+    @patch('tz_core.data_loader.openpyxl')
+    def test_workbook_no_se_crea_no_hay_cleanup_secundario(self, mock_openpyxl):
+        """Si load_workbook() lanza ANTES de retornar un workbook, no debe
+        producirse ninguna excepción secundaria (NameError, AttributeError)
+        al intentar limpiar un wb que nunca llegó a existir."""
+        mock_openpyxl.load_workbook.side_effect = OSError("no se pudo abrir")
+
+        # No debe propagarse ninguna excepción distinta a la manejada
+        resultado, error = obtener_hojas_visibles("test.xlsx")
+
+        assert resultado is None
+        assert error == "LOAD_FAIL"
+
+    @patch('tz_core.data_loader.openpyxl')
+    def test_workbook_se_cierra_si_excepcion_posterior_a_apertura(self, mock_openpyxl):
+        """El workbook debe cerrarse aunque falle algo DESPUÉS de haber sido
+        abierto exitosamente (ej: error al inspeccionar las hojas)."""
+
+        class HojaQueExplota:
+            title = "HojaX"
+
+            @property
+            def sheet_state(self):
+                raise RuntimeError("fallo simulado post-apertura")
+
+        mock_wb = MagicMock()
+        mock_wb.worksheets = [HojaQueExplota()]
+        mock_openpyxl.load_workbook.return_value = mock_wb
+
+        resultado, error = obtener_hojas_visibles("test.xlsx")
+
+        assert resultado is None
+        assert error == "LOAD_FAIL"
+        mock_wb.close.assert_called_once()
 
 
 class TestListarTodasHojas:
@@ -95,21 +130,49 @@ class TestListarTodasHojas:
         """Test listado exitoso de todas las hojas"""
         mock_xls = MagicMock()
         mock_xls.sheet_names = ["Hoja1", "Hoja2", "HojaOculta"]
+        mock_xls.__enter__.return_value = mock_xls
         mock_excel_file.return_value = mock_xls
-        
+
         resultado = listar_todas_hojas("test.xlsx")
-        
+
         assert resultado == ["Hoja1", "Hoja2", "HojaOculta"]
         mock_excel_file.assert_called_once_with("test.xlsx")
-    
+
     @patch('pandas.ExcelFile')
     def test_excepcion_durante_lectura(self, mock_excel_file):
         """Test manejo de excepciones durante lectura"""
         mock_excel_file.side_effect = Exception("Error simulado")
-        
+
         resultado = listar_todas_hojas("test.xlsx")
-        
+
         assert resultado is None
+
+    @patch('pandas.ExcelFile')
+    def test_excel_file_se_cierra_en_exito(self, mock_excel_file):
+        """pd.ExcelFile debe cerrarse (vía context manager) tras un uso exitoso"""
+        mock_xls = MagicMock()
+        mock_xls.sheet_names = ["Hoja1", "Hoja2"]
+        mock_xls.__enter__.return_value = mock_xls
+        mock_excel_file.return_value = mock_xls
+
+        resultado = listar_todas_hojas("test.xlsx")
+
+        assert resultado == ["Hoja1", "Hoja2"]
+        mock_xls.__exit__.assert_called_once()
+
+    @patch('pandas.ExcelFile')
+    def test_excel_file_se_cierra_si_falla_dentro_del_context(self, mock_excel_file):
+        """pd.ExcelFile debe cerrarse también si algo falla DENTRO del bloque
+        with (ej: acceso a sheet_names lanza una excepción)."""
+        mock_xls = MagicMock()
+        mock_xls.__enter__.return_value = mock_xls
+        type(mock_xls).sheet_names = PropertyMock(side_effect=RuntimeError("boom"))
+        mock_excel_file.return_value = mock_xls
+
+        resultado = listar_todas_hojas("test.xlsx")
+
+        assert resultado is None
+        mock_xls.__exit__.assert_called_once()
 
 
 # Fixtures para tests de integración con archivos reales
@@ -140,7 +203,18 @@ class TestIntegracionArchivosReales:
     def test_listar_hojas_archivo_real(self, excel_temp):
         """Test con archivo Excel real"""
         resultado = listar_todas_hojas(excel_temp)
-        
+
+        assert resultado is not None
+        assert "Datos" in resultado
+        assert "Resumen" in resultado
+        assert len(resultado) == 2
+
+    def test_obtener_hojas_visibles_archivo_real(self, excel_temp):
+        """Test con archivo Excel real usando openpyxl real (sin mocks),
+        confirma que la salida funcional no cambió tras el fix de cierre."""
+        resultado, error = obtener_hojas_visibles(excel_temp)
+
+        assert error is None
         assert resultado is not None
         assert "Datos" in resultado
         assert "Resumen" in resultado

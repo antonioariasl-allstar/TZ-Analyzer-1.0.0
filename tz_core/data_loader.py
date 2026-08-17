@@ -85,16 +85,19 @@ def obtener_hojas_visibles(ruta_excel: str) -> Tuple[Optional[List[str]], Option
     if openpyxl is None:
         return None, "NO_OPENPYXL"
     
+    wb = None
     try:
         wb = openpyxl.load_workbook(ruta_excel, read_only=True, data_only=True)
         visibles = [
-            ws.title for ws in wb.worksheets 
+            ws.title for ws in wb.worksheets
             if getattr(ws, "sheet_state", "visible") == "visible"
         ]
-        wb.close()
         return visibles, None
     except Exception:
         return None, "LOAD_FAIL"
+    finally:
+        if wb is not None:
+            wb.close()
 
 
 def listar_todas_hojas(ruta_excel: str) -> Optional[List[str]]:
@@ -108,8 +111,8 @@ def listar_todas_hojas(ruta_excel: str) -> Optional[List[str]]:
         Lista de nombres de hojas o None si hay error
     """
     try:
-        xls = pd.ExcelFile(ruta_excel)
-        return list(xls.sheet_names)
+        with pd.ExcelFile(ruta_excel) as xls:
+            return list(xls.sheet_names)
     except Exception:
         return None
 
