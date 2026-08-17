@@ -1,5 +1,5 @@
 {
-  "$schema_notes": "Manifiesto curado manualmente (P1-LICENSES). No se genera por inferencia automatica. 'kind' determina como tools/build_third_party_notices.py localiza los archivos: 'pip' resuelve via importlib.metadata usando pip_name+version (identificador reproducible, no ruta); 'vendored' resuelve bajo build_config/third_party_licenses/<vendored_dir>/ (copia local versionada porque el origen real -instalacion base de Python/Tcl/Tk- no es reproducible entre maquinas); 'repo_asset' resuelve bajo <asset_dir>/ dentro del propio repositorio (assets vendorizados que ya viven en tz_core).",
+  "$schema_notes": "Manifiesto curado manualmente (P1-LICENSES). No se genera por inferencia automatica. 'kind' determina como tools/build_third_party_notices.py localiza los archivos: 'pip' resuelve via importlib.metadata usando pip_name+version (identificador reproducible, no ruta); 'vendored' resuelve bajo build_config/third_party_licenses/<vendored_dir>/ (copia local versionada porque el origen real -instalacion base de Python/Tcl/Tk- no es reproducible entre maquinas); 'repo_asset' resuelve bajo <asset_dir>/ dentro del propio repositorio (assets vendorizados que ya viven en tz_core); 'compliance' resuelve bajo compliance/<compliance_dir>/ (textos legales de binarios nativos de terceros -OpenSSL/zlib/SQLite- descargados de upstream oficial para la version exacta identificada y versionados localmente, ver P1-LICENSES-B1). Los componentes 'compliance' agregan ademas 'binary_files' (nombres de archivo, sin ruta) y 'sha256' (mapa nombre->digest) como trazabilidad del bundle DLL auditado.",
   "components": [
     {
       "name": "click",
@@ -429,6 +429,61 @@
       "copyright_holder": "2014 Vladimir Agafonkin (Leaflet.heat); incluye simpleheat, (c) 2014 Vladimir Agafonkin",
       "source_url": "https://github.com/Leaflet/Leaflet.heat",
       "notes": "leaflet-heat.js incluye en su propio encabezado el aviso '(c) 2014, Vladimir Agafonkin - Leaflet.heat, a tiny and fast heatmap plugin for Leaflet. https://github.com/Leaflet/Leaflet.heat', y un segundo aviso para la libreria 'simpleheat' que empaqueta ('(c) 2014, Vladimir Agafonkin - simpleheat ... https://github.com/mourner/simpleheat'). NOTICE.md (misma carpeta, ya presente en el bundle) documenta version 0.2.0 y licencia BSD-2-Clause. Esta evidencia local (header del propio archivo + NOTICE.md) es la que permite identificar la licencia sin STOP; no se agrego el texto boilerplate BSD-2-Clause completo porque no existe localmente un archivo LICENSE separado para este plugin (misma razon que Leaflet)."
+    },
+    {
+      "name": "OpenSSL",
+      "version": "3.0.15",
+      "kind": "compliance",
+      "compliance_dir": "openssl",
+      "license": "Apache-2.0",
+      "license_files": ["LICENSE.txt"],
+      "notice_files": [],
+      "bundled_license_files": [],
+      "copyright_holder": "Copyright 1998-2024 The OpenSSL Authors. All rights reserved.",
+      "source_url": "https://github.com/openssl/openssl/blob/openssl-3.0.15/LICENSE.txt",
+      "binary_files": ["libssl-3.dll", "libcrypto-3.dll"],
+      "sha256": {
+        "libssl-3.dll": "2e4d35b681a172d3298caf7dc670451be7a8ba27c26446efc67470742497a950",
+        "libcrypto-3.dll": "4e5d5d20d6d31e72ab341c81e97b89e514326c4c861b48638243bdf0918cfa43"
+      },
+      "version_evidence": "ssl.OPENSSL_VERSION == 'OpenSSL 3.0.15 3 Sep 2024' y ssl.OPENSSL_VERSION_INFO == (3, 0, 0, 15, 0) (.venv312, Python 3.12.8). PE VersionInfo de ambas DLL en dist/TZ Analyzer/_internal/: FileVersion=ProductVersion='3.0.15', CompanyName='The OpenSSL Project, https://www.openssl.org/', ProductName='The OpenSSL Toolkit', LegalCopyright='Copyright 1998-2024 The OpenSSL Authors. All rights reserved.'. libssl-3.dll y libcrypto-3.dll declaran identica version (3.0.15): mismo release, misma familia 3.x.",
+      "notes": "Una sola entrada cubre libssl-3.dll y libcrypto-3.dll porque el PE VersionInfo confirma que pertenecen al mismo release (3.0.15). OpenSSL 3.x se distribuye bajo Apache License 2.0 (cambio de licencia desde OpenSSL 3.0.0, sustituyendo la licencia dual OpenSSL/SSLeay de las series 1.x). LICENSE.txt descargado integro desde el tag oficial 'openssl-3.0.15' del repositorio upstream (no de main/master), coincide con la version exacta identificada por evidencia de runtime y PE. No existe un archivo NOTICE separado en ese tag (HTTP 404 verificado para NOTICE/NOTICE.md/NOTICE.txt): el aviso de copyright de OpenSSL vive en el propio VersionInfo de las DLL y se preserva aqui como campo copyright_holder, no como archivo NOTICE inventado. Versionado localmente en compliance/openssl/LICENSE.txt."
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.1",
+      "kind": "compliance",
+      "compliance_dir": "zlib",
+      "license": "Zlib",
+      "license_files": ["LICENSE.txt"],
+      "notice_files": [],
+      "bundled_license_files": [],
+      "copyright_holder": "(C) 1995-2022 Jean-loup Gailly and Mark Adler",
+      "source_url": "https://github.com/madler/zlib/blob/v1.3.1/LICENSE",
+      "binary_files": ["zlib1.dll"],
+      "sha256": {
+        "zlib1.dll": "fc431c484e7d6f004d056ac215d6b7e3deb9c41a597065fc840b311e81adf1b8"
+      },
+      "version_evidence": "zlib.ZLIB_VERSION == '1.3.1' (compilada contra el modulo _hashlib/zlib de CPython) y zlib.ZLIB_RUNTIME_VERSION == '1.3.1' (.venv312, Python 3.12.8): compilacion y runtime coinciden, sin contradiccion. PE VersionInfo de zlib1.dll en dist/TZ Analyzer/_internal/: FileVersion=ProductVersion='1.3.1', ProductName='zlib', LegalCopyright='(C) 1995-2022 Jean-loup Gailly & Mark Adler', FileDescription='zlib data compression library'.",
+      "notes": "Copyright del PE VersionInfo ('(C) 1995-2022 Jean-loup Gailly & Mark Adler') coincide exactamente con el aviso de copyright del archivo LICENSE descargado desde el tag oficial 'v1.3.1' del repositorio upstream (madler/zlib), confirmando que corresponde a esa version y no a la actualmente publicada en main si difiriera. zlib usa una licencia permisiva propia (identificador SPDX 'Zlib'), no un LICENSE.txt separado de terceros distinto al propio texto de zlib. Versionado localmente en compliance/zlib/LICENSE.txt."
+    },
+    {
+      "name": "SQLite",
+      "version": "3.45.3",
+      "kind": "compliance",
+      "compliance_dir": "sqlite",
+      "license": "Public Domain",
+      "license_files": ["PUBLIC-DOMAIN.html"],
+      "notice_files": [],
+      "bundled_license_files": [],
+      "copyright_holder": "Ninguno (dominio publico declarado por los autores)",
+      "source_url": "https://www.sqlite.org/copyright.html",
+      "binary_files": ["sqlite3.dll"],
+      "sha256": {
+        "sqlite3.dll": "272c41fb992490d32a1b4904b28ef3fad7fbbd07bbdcee625d849960809cf0bd"
+      },
+      "version_evidence": "sqlite3.sqlite_version == '3.45.3' y sqlite3.sqlite_version_info == (3, 45, 3) (.venv312, Python 3.12.8, modulo estandar sqlite3 de CPython enlazado contra el SQLite core). PE VersionInfo de sqlite3.dll en dist/TZ Analyzer/_internal/: FileVersion=ProductVersion='3.45.3.0', ProductName='SQLite3', CompanyName='SQLite3', FileDescription='SQLite3'. La version de la DLL coincide exactamente con la reportada por el modulo sqlite3 de la biblioteca estandar, confirmando que es el core SQLite estandar vinculado por CPython y no una build alternativa.",
+      "notes": "SQLite no requiere licencia: todo el codigo y documentacion del core esta dedicado a dominio publico por sus autores (declaracion oficial en sqlite.org/copyright.html, descargada integra y versionada en compliance/sqlite/PUBLIC-DOMAIN.html). No se redacto ni invento un archivo LICENSE: license_files apunta a la declaracion oficial de dominio publico como evidencia, conforme a la politica de no inventar documentos legales que no existen."
     }
   ]
 }

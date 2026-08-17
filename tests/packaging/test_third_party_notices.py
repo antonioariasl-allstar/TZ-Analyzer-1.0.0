@@ -82,6 +82,16 @@ def test_load_manifest_raises_when_file_missing(tmp_path, monkeypatch):
         notices_module.load_manifest()
 
 
+@pytest.mark.parametrize("name", ["OpenSSL", "zlib", "SQLite"])
+def test_notices_contains_native_binary_component(rendered_text, name):
+    assert name in rendered_text
+
+
+def test_locate_compliance_file_resolves_under_compliance_dir():
+    path = notices_module._locate_compliance_file("openssl", "LICENSE.txt")
+    assert path == notices_module.REPO_ROOT / "compliance" / "openssl" / "LICENSE.txt"
+
+
 def test_validate_component_files_raises_on_declared_but_absent_file(tmp_path):
     component = {
         "name": "componente-de-prueba",

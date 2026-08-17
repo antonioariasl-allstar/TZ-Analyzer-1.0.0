@@ -25,6 +25,10 @@ Resolución de archivos según ``kind`` de cada componente:
   Python/Tcl/Tk- no es reproducible entre máquinas).
 - ``repo_asset``: resuelve bajo ``<asset_dir>/`` dentro del propio
   repositorio (assets vendorizados que ya viven en tz_core).
+- ``compliance``: resuelve bajo ``compliance/<compliance_dir>/`` (textos
+  legales de binarios nativos de terceros -OpenSSL/zlib/SQLite- descargados
+  desde upstream oficial para la versión exacta identificada y versionados
+  localmente en el propio repo, ver P1-LICENSES-B1).
 
 Uso: ``python -m tools.build_third_party_notices``
 """
@@ -111,6 +115,10 @@ def _locate_repo_asset_file(asset_dir: str, relative_path: str) -> Path:
     return REPO_ROOT / asset_dir / relative_path
 
 
+def _locate_compliance_file(compliance_dir: str, relative_path: str) -> Path:
+    return REPO_ROOT / "compliance" / compliance_dir / relative_path
+
+
 def resolve_component_file(component: dict, relative_path: str) -> Path:
     kind = component.get("kind")
     if kind == "pip":
@@ -119,6 +127,8 @@ def resolve_component_file(component: dict, relative_path: str) -> Path:
         return _locate_vendored_file(component["vendored_dir"], relative_path)
     if kind == "repo_asset":
         return _locate_repo_asset_file(component["asset_dir"], relative_path)
+    if kind == "compliance":
+        return _locate_compliance_file(component["compliance_dir"], relative_path)
     raise NoticesError(f"kind desconocido en manifiesto: {kind!r} (componente {component.get('name')!r})")
 
 

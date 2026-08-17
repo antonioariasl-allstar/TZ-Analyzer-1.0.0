@@ -2,19 +2,23 @@
 
 Valida forma y que los archivos que cada componente declara (license_files,
 notice_files, bundled_license_files) existan realmente, según su 'kind'
-(pip / vendored / repo_asset). No compara textos legales completos contra
-goldens: solo existencia y metadatos básicos (ver P1-LICENSES, sección 30).
+(pip / vendored / repo_asset / compliance). No compara textos legales
+completos contra goldens: solo existencia y metadatos básicos (ver
+P1-LICENSES, sección 30; kind 'compliance' agregado en P1-LICENSES-B1 para
+los binarios nativos OpenSSL/zlib/SQLite).
 """
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
 from tools.build_third_party_notices import MANIFEST_PATH, load_manifest, resolve_component_file
 
 _REQUIRED_STRING_FIELDS = ("name", "version", "kind", "license")
-_VALID_KINDS = {"pip", "vendored", "repo_asset"}
+_VALID_KINDS = {"pip", "vendored", "repo_asset", "compliance"}
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def test_file_exists():
@@ -52,6 +56,8 @@ def test_kind_specific_identifier_present():
             assert component.get("vendored_dir"), component["name"]
         elif kind == "repo_asset":
             assert component.get("asset_dir"), component["name"]
+        elif kind == "compliance":
+            assert component.get("compliance_dir"), component["name"]
 
 
 def test_no_component_declares_absolute_paths():
@@ -105,3 +111,32 @@ def test_simplekml_is_flagged_as_lgpl_special_case():
     simplekml = components["simplekml"]
     assert "LGPL" in simplekml["license"]
     assert "B" in simplekml["notes"] or "clasificacion" in simplekml["notes"].lower()
+
+
+@pytest.mark.parametrize("component", load_manifest(), ids=lambda c: c["name"])
+def test_binary_files_have_valid_sha256(component):
+    binary_files = component.get("binary_files", [])
+    sha256_map = component.get("sha256", {})
+    if not binary_files:
+        return
+    assert set(binary_files) == set(sha256_map), component["name"]
+    for filename, digest in sha256_map.items():
+        assert _SHA256_RE.match(digest), (component["name"], filename, digest)
+        assert "\\" not in filename and "/" not in filename, (component["name"], filename)
+
+
+@pytest.mark.parametrize("name", ["OpenSSL", "zlib", "SQLite"])
+def test_native_binary_components_present(name):
+    components = {component["name"]: component for component in load_manifest()}
+    assert name in components
+
+
+def test_openssl_covers_both_dlls_in_single_entry():
+    components = {component["name"]: component for component in load_manifest()}
+    openssl = components["OpenSSL"]
+    assert set(openssl.get("binary_files", [])) == {"libssl-3.dll", "libcrypto-3.dll"}
+
+
+def test_sqlite_license_is_public_domain():
+    components = {component["name"]: component for component in load_manifest()}
+    assert components["SQLite"]["license"] == "Public Domain"
