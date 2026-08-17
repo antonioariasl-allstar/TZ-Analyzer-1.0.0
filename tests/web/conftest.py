@@ -55,6 +55,26 @@ def configure_test_instance_host(application, port: int = 51234) -> str:
     return host
 
 
+def csrf_token(application) -> str:
+    """Contrato central MB7-B5-A2 (sección 22 del encargo): el token CSRF
+    vigente de ``application`` — ya generado por ``create_app()``, nunca
+    inventado aquí. Los tests que ejercitan tráfico POST legítimo lo usan
+    para autenticar sus requests; los adversariales lo omiten deliberadamente
+    o usan un valor incorrecto."""
+    return application.config["TZ_CSRF_TOKEN"]
+
+
+def attach_csrf_header(test_client, application) -> None:
+    """Hace que ``test_client`` mande el token CSRF vigente en cada request
+    vía ``X-TZ-CSRF-Token`` — el mismo canal que usan los ``fetch()`` reales
+    de la app (ver ``tz_web/static/js/app.js``). Evita repetir el envío
+    manual en cada ``.post()`` de las pruebas que ejercitan tráfico
+    legítimo, sin desactivar ni debilitar ``tz_web.routes._guard_csrf``: el
+    header sigue siendo un token real, comparado con
+    ``hmac.compare_digest`` en cada request."""
+    test_client.environ_base["HTTP_X_TZ_CSRF_TOKEN"] = csrf_token(application)
+
+
 @pytest.fixture()
 def app(tmp_path, monkeypatch):
     # Aísla cada prueba en su propia carpeta de subidas/logs temporales,
@@ -73,7 +93,9 @@ def app(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def client(app):
-    return app.test_client()
+    test_client = app.test_client()
+    attach_csrf_header(test_client, app)
+    return test_client
 
 
 def upload_file_from_path(client, path: str, filename: str):

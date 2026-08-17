@@ -20,6 +20,7 @@
   </p>
 
   <form action="{{ url_for('tz_web.modo3_registro_guardar') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% if registro_editar %}
       <input type="hidden" name="registro_id" value="{{ registro_editar.id }}">
       <div class="tz-banner warning">Editando registro «{{ registro_editar.nombre }}». Guarde para aplicar los cambios.</div>
@@ -127,6 +128,7 @@
             <td>
               <a class="tz-btn tz-btn-secondary" href="{{ url_for('tz_web.modo3_registros_screen', editar=r.id) }}">Editar</a>
               <form action="{{ url_for('tz_web.modo3_registro_eliminar', registro_id=r.id) }}" method="post" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="tz-btn tz-btn-secondary">Eliminar</button>
               </form>
             </td>

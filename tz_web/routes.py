@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import colorsys
 import copy
+import hmac
 import logging
 import os
 import threading
@@ -26,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 from flask import (
     Blueprint,
+    Response,
     abort,
     current_app,
     flash,
@@ -90,6 +92,54 @@ from tz_web.services import (
 bp = Blueprint("tz_web", __name__)
 
 _LOGGER = logging.getLogger("tz_web.routes")
+
+# Mensajes deliberadamente genéricos (sección 5 del encargo MB7-B5-A2): no
+# deben revelar el token recibido, el token esperado ni ningún otro estado
+# interno — ver ``_guard_csrf`` más abajo.
+_CSRF_NOT_READY_BODY = "Servicio no disponible."
+_CSRF_REJECTED_BODY = "Solicitud no permitida."
+
+
+def _configured_csrf_token() -> Optional[str]:
+    token = current_app.config.get("TZ_CSRF_TOKEN")
+    return token or None
+
+
+def _request_csrf_token() -> str:
+    """Busca el token primero en el campo de formulario (funciona también
+    con ``multipart/form-data`` sin tocar el stream de subida — ver sección
+    10/14 del encargo) y, si no está, en el header que usan los ``fetch()``
+    del blueprint principal. Deliberadamente NO usa ``request.data``/
+    ``get_data()``/``get_json()``: eso consumiría/alteraría el stream de
+    subida que ``/upload`` necesita intacto."""
+    token = request.form.get("csrf_token")
+    if token:
+        return token
+    return request.headers.get("X-TZ-CSRF-Token", "")
+
+
+@bp.before_request
+def _guard_csrf() -> Optional[Response]:
+    """Protección CSRF uniforme (MB7-B5-A2) para todo POST del blueprint
+    principal — registrada como ``before_request`` de ESTE blueprint (no
+    ``app.before_request``): así ``/internal/*``, que vive en su propio
+    blueprint (``tz_web.internal_routes``) con su contrato propio de
+    ``X-TZ-Token``, queda excluido estructuralmente, sin necesidad de un
+    prefijo de ruta frágil. Flask ya ejecutó el guard de Host global
+    (``tz_web.app._guard_host``, clave ``None``) antes de llegar aquí.
+    """
+    if request.method != "POST":
+        return None
+    expected = _configured_csrf_token()
+    if expected is None:
+        _LOGGER.warning("request rechazada: CSRF token de instancia aún no configurado")
+        return Response(_CSRF_NOT_READY_BODY, status=503, mimetype="text/plain")
+    provided = _request_csrf_token()
+    if not provided or not hmac.compare_digest(provided, expected):
+        _LOGGER.warning("request rechazada por CSRF")
+        return Response(_CSRF_REJECTED_BODY, status=403, mimetype="text/plain")
+    return None
+
 
 # Puerta de proceso dedicada al selector. Se adquiere sin espera. Mientras
 # esta tomada solo se lee lifecycle (selector -> lifecycle); lifecycle nunca

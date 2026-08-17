@@ -79,9 +79,11 @@
 
 <div class="tz-actions">
   <form action="{{ url_for('tz_web.mapping_edit') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">Volver a editar</button>
   </form>
   <form action="{{ url_for('tz_web.mapping_confirm') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="tz-btn tz-btn-primary">Confirmar mapeo</button>
   </form>
 </div>
@@ -95,6 +97,7 @@
   </p>
 
   <form action="{{ url_for('tz_web.mapping_submit') }}" method="post" id="mapping_form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% for group_name, group_fields in field_groups %}
     <div class="tz-mapping-group" data-group-index="{{ loop.index0 }}" {% if not loop.first %}hidden{% endif %}>
       {% for campo in group_fields %}

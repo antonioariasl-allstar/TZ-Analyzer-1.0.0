@@ -12,6 +12,7 @@
   </p>
 
   <form action="{{ url_for('tz_web.modo3_tipo_submit') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="tz-mapping-row">
       <label class="tz-filtro-option-header">
         <input type="radio" name="tipo" value="antena"

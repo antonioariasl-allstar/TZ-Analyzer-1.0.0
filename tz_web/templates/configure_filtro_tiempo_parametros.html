@@ -9,6 +9,7 @@
   <div class="tz-samples">Ejemplo: {{ entry.ejemplo }}</div>
 
   <form action="{{ url_for('tz_web.configure_filtro_tiempo_parametros_submit') }}" method="post" id="filtro_tiempo_parametros_form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
     {% if tipo == 'dia' %}
     <div class="tz-field">

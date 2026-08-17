@@ -12,6 +12,7 @@
   </div>
   <div class="tz-actions">
     <form action="{{ url_for('tz_web.configure_back_to_mapping') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">← Volver a la revisión del mapeo</button>
     </form>
     <a class="tz-btn tz-btn-secondary" href="{{ url_for('tz_web.menu_screen') }}">Volver al menú principal</a>
@@ -26,6 +27,7 @@
     pantalla siguiente indicará los datos correspondientes a esa elección.</p>
 
   <form action="{{ url_for('tz_web.configure_filtro_tiempo_submit') }}" method="post" id="filtro_tiempo_form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% for tipo in filtro_orden %}
       {% set entry = filtro_catalog[tipo] %}
       {% set habilitado = tipo in tipos_habilitados %}

@@ -7,6 +7,7 @@
   <p class="tz-help">Resumen del análisis</p>
 
   <form action="{{ url_for('tz_web.configure_resumen_submit') }}" method="post" id="configure_resumen_form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
     <div class="tz-summary-block">
       <h3>Identificación</h3>

@@ -20,6 +20,7 @@
   </div>
   <div class="tz-actions">
     <form action="{{ url_for('tz_web.select_mode', modo='1') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="submit" class="tz-btn tz-btn-primary">Seleccionar</button>
     </form>
   </div>
@@ -36,6 +37,7 @@
   </div>
   <div class="tz-actions">
     <form action="{{ url_for('tz_web.select_mode', modo='2') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="submit" class="tz-btn tz-btn-primary">Seleccionar</button>
     </form>
   </div>
@@ -52,6 +54,7 @@
   </div>
   <div class="tz-actions">
     <form action="{{ url_for('tz_web.select_mode', modo='3') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="submit" class="tz-btn tz-btn-primary">Seleccionar</button>
     </form>
   </div>

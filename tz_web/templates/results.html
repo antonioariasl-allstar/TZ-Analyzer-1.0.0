@@ -75,6 +75,7 @@
         <strong>Informe HTML</strong>
         <p>Resultados y análisis</p>
         <form action="{{ url_for('tz_web.open_product', kind='html') }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button type="submit" class="tz-btn tz-btn-secondary">Abrir HTML</button>
         </form>
       </div>
@@ -83,6 +84,7 @@
         <strong>Mapa KMZ</strong>
         <p>Mapa para Google Earth</p>
         <form action="{{ url_for('tz_web.open_product', kind='kmz') }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.kmz_path %}disabled{% endif %}>Abrir KMZ</button>
         </form>
       </div>
@@ -91,6 +93,7 @@
         <strong>Archivo KML</strong>
         <p>Versión sin comprimir del mapa</p>
         <form action="{{ url_for('tz_web.open_product', kind='kml') }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button type="submit" class="tz-btn tz-btn-secondary">Abrir KML</button>
         </form>
       </div>
@@ -99,6 +102,7 @@
         <strong>Hashes SHA-256</strong>
         <p>Verificación de integridad</p>
         <form action="{{ url_for('tz_web.open_product', kind='hashes') }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.hashes_path %}disabled{% endif %}>Abrir hashes</button>
         </form>
       </div>
@@ -106,6 +110,7 @@
         <strong>Log de ejecución</strong>
         <p>Registro técnico</p>
         <form action="{{ url_for('tz_web.open_product', kind='log') }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button type="submit" class="tz-btn tz-btn-secondary" {% if not result.log_path %}disabled{% endif %}>Abrir log</button>
         </form>
       </div>
@@ -113,6 +118,7 @@
         <strong>Carpeta de salida</strong>
         <p>Archivos generados</p>
         <form action="{{ url_for('tz_web.open_product', kind='folder') }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button type="submit" class="tz-btn tz-btn-secondary">Abrir carpeta</button>
         </form>
       </div>
@@ -123,6 +129,7 @@
   <div class="tz-card">
     <div class="tz-actions">
       <form action="{{ url_for('tz_web.results_back_to_products') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">Volver a configurar productos</button>
       </form>
     </div>
@@ -138,19 +145,23 @@
     <div class="tz-actions">
       {% if mostrar_volver_filtro %}
       <form action="{{ url_for('tz_web.results_back_to_filtro_tiempo') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">Volver a revisar filtro temporal</button>
       </form>
       {% endif %}
       {% if mostrar_volver_modo3 %}
       <form action="{{ url_for('tz_web.modo3_results_back') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">Volver a preparar salida</button>
       </form>
       {% else %}
       <form action="{{ url_for('tz_web.results_back_to_mapping') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">Volver a revisar mapeo</button>
       </form>
       {% endif %}
       <form action="{{ url_for('tz_web.new_case') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="tz-btn tz-btn-primary">Iniciar nuevo análisis</button>
       </form>
     </div>
@@ -160,6 +171,7 @@
 {% if case.status in ['success', 'partial'] %}
 <div class="tz-card">
   <form action="{{ url_for('tz_web.new_case') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="tz-btn tz-btn-primary">Iniciar nuevo análisis</button>
   </form>
 </div>

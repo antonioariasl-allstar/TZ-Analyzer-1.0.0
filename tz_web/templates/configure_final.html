@@ -7,6 +7,7 @@
   <p class="tz-help">Paso 5 de 5 · Preparar análisis</p>
 
   <form action="{{ url_for('tz_web.configure_final_submit') }}" method="post" id="configure_final_form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
     <h3>Tipo de bitácora</h3>
     <div class="tz-field">
@@ -85,7 +86,10 @@
     fetch("{{ url_for('tz_web.configure_final_preview_name') }}", {
       method: "POST",
       credentials: "same-origin",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-TZ-CSRF-Token": tzGetCsrfToken()
+      },
       body: body.toString()
     })
       .then(function (resp) { return resp.ok ? resp.json() : null; })

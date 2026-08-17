@@ -16,13 +16,17 @@ original, ahora sección E/L del MICROBLOQUE 5):
 - toda la app (blueprint principal e ``/internal/*`` por igual) exige que
   el ``Host`` de la request coincida exactamente con ``127.0.0.1:<puerto
   real>`` (MICROBLOQUE 7-B5-A1, defensa contra DNS rebinding — ver
-  ``_guard_host`` más abajo).
+  ``_guard_host`` más abajo);
+- todos los POST del blueprint principal exigen un token CSRF propio,
+  independiente de ``TZ_INSTANCE_TOKEN`` (MICROBLOQUE 7-B5-A2 — el guard
+  vive en ``tz_web.routes``, no aquí: ver ``tz_web.routes._guard_csrf``).
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import secrets
 import time
 from typing import Optional
 
@@ -69,6 +73,13 @@ def create_app(
     app.config["TZ_APP_VERSION"] = APP_VERSION
     app.config["TZ_LAUNCHER_VERSION"] = instance.LAUNCHER_VERSION
     app.config["TZ_INSTANCE_STARTED_AT"] = time.time()
+    # Secreto CSRF independiente de TZ_INSTANCE_TOKEN (sección 3 del encargo
+    # MB7-B5-A2): este token queda deliberadamente expuesto en HTML legítimo
+    # (hidden fields, meta tag) para proteger los POST del blueprint
+    # principal — TZ_INSTANCE_TOKEN protege heartbeat/shutdown y nunca debe
+    # aparecer ahí. Solo en memoria, vive lo que dure el proceso; no se
+    # deriva de puerto/pid/instance_id/case_id/SECRET_KEY/TZ_INSTANCE_TOKEN.
+    app.config["TZ_CSRF_TOKEN"] = secrets.token_urlsafe(32)
 
     app.register_blueprint(tz_web_blueprint)
     app.register_blueprint(tz_web_internal_blueprint)
@@ -109,6 +120,11 @@ def create_app(
         return {
             "tz_instance_token": app.config.get("TZ_INSTANCE_TOKEN") or "",
             "tz_app_version": app.config.get("TZ_APP_VERSION") or "",
+            # Solo expone el token ya creado (sección 12 del encargo
+            # MB7-B5-A2) — nunca lo genera aquí. Fallback vacío para no
+            # romper el render si faltara: el POST posterior falla cerrado
+            # (503) en tz_web.routes._guard_csrf.
+            "csrf_token": app.config.get("TZ_CSRF_TOKEN") or "",
         }
 
     state.cleanup_stale_uploads()

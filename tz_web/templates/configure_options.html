@@ -13,6 +13,7 @@
   </p>
 
   <form action="{{ url_for('tz_web.configure_options_submit') }}" method="post" id="configure_options_form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="tz-inline">
       <div class="tz-field">
         <label for="top_antenas">Top de antenas</label>

@@ -2,6 +2,17 @@
 // No usa WebSocket ni Server-Sent Events: el progreso se obtiene por
 // sondeo (polling) periódico de /status, tal como pide el encargo.
 
+// Token CSRF del blueprint principal (MICROBLOQUE 7-B5-A2) — independiente
+// del token de instancia (tz-token/X-TZ-Token, exclusivo de /internal/*).
+// Los formularios clásicos lo mandan como campo oculto; los fetch() propios
+// de esta app lo leen de aquí y lo mandan en X-TZ-CSRF-Token (nunca en la
+// URL) — ver tz_web/templates/base.html (meta[name=csrf-token]) y
+// tz_web/routes.py (_guard_csrf).
+function tzGetCsrfToken() {
+  var meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.content : "";
+}
+
 // Política transversal de teclado para formularios operativos. Enter en un
 // campo de datos no elige un submitter implícito; las acciones siguen
 // disponibles mediante sus botones explícitos. No se interceptan textarea,
@@ -233,6 +244,7 @@ function tzSeleccionarCarpetaSalida() {
   fetch("/output-folder/select", {
     method: "POST",
     credentials: "same-origin",
+    headers: { "X-TZ-CSRF-Token": tzGetCsrfToken() },
   })
     .then(function (resp) {
       return resp.json().catch(function () {

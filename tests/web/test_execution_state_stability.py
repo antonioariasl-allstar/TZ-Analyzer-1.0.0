@@ -14,6 +14,7 @@ from tz_web import lifecycle
 from tz_web import routes
 from tz_web import state
 from tz_web.services import CaseResult, FiltroTiempoSinRegistrosError
+from tests.web.conftest import attach_csrf_header
 
 
 def _attach_case(client, modo: str = state.MODO_1) -> state.Session:
@@ -413,6 +414,7 @@ def test_I_dos_pestanas_misma_sesion_crean_un_solo_worker(
     assert session_cookie is not None
     second_tab = client.application.test_client()
     second_tab.set_cookie(cookie_name, session_cookie.value, domain="127.0.0.1")
+    attach_csrf_header(second_tab, client.application)
 
     try:
         first = client.post(endpoint, data={"accion": "siguiente"})

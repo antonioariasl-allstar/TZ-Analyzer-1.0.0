@@ -37,6 +37,7 @@ def _request_json(
     method: str = "GET",
     token: str | None = None,
     cookie: str | None = None,
+    csrf: bool = False,
     timeout: float = 3.0,
 ):
     headers = {}
@@ -44,6 +45,12 @@ def _request_json(
         headers["X-TZ-Token"] = token
     if cookie is not None:
         headers["Cookie"] = cookie
+    if csrf:
+        # Endpoints del blueprint principal (nunca /internal/*, que sigue
+        # exclusivamente con X-TZ-Token) — MB7-B5-A2: mismo canal
+        # X-TZ-CSRF-Token que usa un fetch() real, tomado del token real ya
+        # generado por create_app() para esta instancia.
+        headers["X-TZ-CSRF-Token"] = server._app.config["TZ_CSRF_TOKEN"]
     request = urllib.request.Request(
         f"http://127.0.0.1:{server.port}{path}",
         data=b"" if method == "POST" else None,
@@ -188,6 +195,7 @@ def test_selector_retenido_no_bloquea_health_heartbeat_ni_shutdown_real(
                 "/output-folder/select",
                 method="POST",
                 cookie=cookie,
+                csrf=True,
                 timeout=5,
             )
         except BaseException as exc:  # noqa: BLE001 - se propaga al hilo principal
@@ -299,6 +307,7 @@ def test_selector_y_analisis_activo_hacen_close_when_idle_por_http_real(
                 "/output-folder/select",
                 method="POST",
                 cookie=selector_cookie,
+                csrf=True,
                 timeout=5,
             )
         except BaseException as exc:  # noqa: BLE001 - se propaga al hilo principal

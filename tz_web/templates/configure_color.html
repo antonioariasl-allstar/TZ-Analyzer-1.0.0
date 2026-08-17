@@ -26,6 +26,7 @@
   {% endif %}
 
   <form action="{{ color_action_url }}" method="post" id="configure_color_form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="tz-color-groups" role="radiogroup" aria-label="Color de la bitácora">
       {% for group_name, colors in palette_groups %}
         <fieldset class="tz-color-group">

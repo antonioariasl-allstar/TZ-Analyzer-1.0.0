@@ -31,6 +31,7 @@ from tz_web.services import CaseRequest
 from tests.web.conftest import (
     REAL_MAPPING_FORM,
     SHEET_NAME,
+    attach_csrf_header,
     select_output_folder,
     upload_real_file,
     wait_for_terminal_status,
@@ -46,6 +47,7 @@ def current_case(client):
 def _client_for_case(app, case_id):
     """Crea un cliente independiente que comparte solo el case_id firmado."""
     test_client = app.test_client()
+    attach_csrf_header(test_client, app)
     with test_client.session_transaction() as browser_session:
         browser_session["case_id"] = case_id
     return test_client

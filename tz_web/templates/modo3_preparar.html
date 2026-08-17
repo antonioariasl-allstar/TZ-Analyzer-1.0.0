@@ -16,6 +16,7 @@
   </div>
 
   <form action="{{ url_for('tz_web.modo3_preparar_submit') }}" method="post" id="modo3_preparar_form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <h3>Nombre de salida</h3>
     <input type="hidden" name="nombre_modo" id="nombre_modo" value="{{ 'manual' if case.output_base_name else 'sugerido' }}">
 

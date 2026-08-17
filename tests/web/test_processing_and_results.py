@@ -16,6 +16,7 @@ from tests.web.conftest import (
     REAL_MAPPING_FORM,
     SHEET_NAME,
     advance_to_configure,
+    attach_csrf_header,
     upload_real_file,
     wait_for_terminal_status,
 )
@@ -361,7 +362,9 @@ def test_bloqueo_de_segunda_tarea_simultanea(app, tmp_path):
     """Dos sesiones distintas: la segunda no puede iniciar mientras la
     primera sigue en ejecución (sección 9)."""
     client_a = app.test_client()
+    attach_csrf_header(client_a, app)
     client_b = app.test_client()
+    attach_csrf_header(client_b, app)
 
     gate = threading.Event()
 

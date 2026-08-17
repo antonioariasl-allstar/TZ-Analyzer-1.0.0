@@ -13,6 +13,7 @@
   </p>
 
   <form action="{{ url_for('tz_web.configure_identity_submit') }}" method="post" id="configure_identity_form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="tz-field">
       <label for="identidad_alias">Alias</label>
       <input type="text" id="identidad_alias" name="identidad_alias" value="{{ case.identity_overrides.get('alias', '') }}">
@@ -33,7 +34,9 @@
     </div>
   </form>
 
-  <form action="{{ url_for('tz_web.configure_back_to_mapping') }}" method="post" id="configure_back_form"></form>
+  <form action="{{ url_for('tz_web.configure_back_to_mapping') }}" method="post" id="configure_back_form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  </form>
 </div>
 
 {% endblock %}

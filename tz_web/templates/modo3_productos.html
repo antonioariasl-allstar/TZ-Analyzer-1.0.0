@@ -32,6 +32,7 @@
 
   <h3>Producto opcional</h3>
   <form action="{{ url_for('tz_web.modo3_productos_submit') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="tz-checkbox">
       <input type="checkbox" id="kml_opcional" name="kml_opcional"
              {% if case.kml_opcional %}checked{% endif %}

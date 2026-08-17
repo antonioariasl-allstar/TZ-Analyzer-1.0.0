@@ -24,7 +24,13 @@ from tz_web.app import create_app
 from tz_web.field_catalog import CANONICAL_FIELDS, FIELD_LABELS
 from tz_web.help_content import HELP_SECTIONS
 from tz_version import AUTHOR, BETA_USAGE_NOTICE, VERSION
-from tests.web.conftest import REAL_MAPPING_FORM, SHEET_NAME, configure_test_instance_host, upload_real_file
+from tests.web.conftest import (
+    REAL_MAPPING_FORM,
+    SHEET_NAME,
+    attach_csrf_header,
+    configure_test_instance_host,
+    upload_real_file,
+)
 
 TOKEN = "token-ayuda-prueba-1234567890"
 
@@ -59,7 +65,9 @@ def token_app(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def token_client(token_app):
-    return token_app.test_client()
+    test_client = token_app.test_client()
+    attach_csrf_header(test_client, token_app)
+    return test_client
 
 
 # ---------------------------------------------------------------------------

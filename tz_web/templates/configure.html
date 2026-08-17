@@ -4,6 +4,7 @@
 {% block content %}
 
 <form action="{{ url_for('tz_web.configure_legacy_submit') }}" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
   <div class="tz-card">
     <h2>Identidad y caso</h2>

@@ -36,6 +36,7 @@
 
   <div class="tz-actions">
     <form action="{{ url_for('tz_web.change_sheet') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="button" class="tz-btn tz-btn-secondary" onclick="tzSubmitExplicitFormAction(this)">Cambiar hoja</button>
     </form>
     <a href="{{ url_for('tz_web.mapping_screen') }}" class="tz-btn tz-btn-primary">Continuar al mapeo</a>

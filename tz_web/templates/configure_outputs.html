@@ -30,6 +30,7 @@
 
   <h3>Producto opcional</h3>
   <form action="{{ url_for('tz_web.configure_outputs_submit') }}" method="post" id="configure_outputs_form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="tz-checkbox">
       <input type="checkbox" id="kml_opcional" name="kml_opcional" {% if case.kml_opcional %}checked{% endif %}>
       <label for="kml_opcional" style="margin:0">Generar también archivo KML</label>
