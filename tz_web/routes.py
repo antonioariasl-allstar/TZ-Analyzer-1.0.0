@@ -55,7 +55,7 @@ from tz_core.folder_dialog import (
 from tz_core.geo_utils import resolve_azimuth_cone_geometry
 from tz_core.mapping_wizard import FIELD_CONTEXT
 from tz_core.user_paths import resolve_default_output_dir
-from tz_version import AUTHOR, BETA_USAGE_NOTICE, COPYRIGHT, VERSION
+from tz_version import AUTHOR, BETA_EXPIRED_NOTICE, BETA_USAGE_NOTICE, COPYRIGHT, VERSION
 from tz_web import help_content
 from tz_web import lifecycle
 from tz_web import manual_validators as mv
@@ -263,7 +263,11 @@ def _mutation_guard(redirect_endpoint: str):
 def _flash_start_rejected(reason: Optional[str]) -> None:
     """Mensaje de UI para un arranque rechazado por ``try_start_run_detailed``
     (sección 1 del MB5): distingue "ya hay un análisis en curso" de "cierre
-    pendiente", en vez de asumir siempre la primera causa."""
+    pendiente" y, ahora, "Beta vencida" (P1-BETA-EXPIRY), en vez de asumir
+    siempre la primera causa."""
+    if reason == state.RUN_START_REJECTED_BETA_EXPIRED:
+        flash(BETA_EXPIRED_NOTICE, "error")
+        return
     message = (
         state.MSG_SHUTDOWN_PENDING
         if reason == state.RUN_START_REJECTED_SHUTDOWN

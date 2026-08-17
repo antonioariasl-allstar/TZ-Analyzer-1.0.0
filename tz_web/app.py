@@ -39,6 +39,7 @@ from typing import Optional
 from flask import Flask, Response, request
 
 from tz_version import VERSION as APP_VERSION
+from tz_version import get_beta_status
 from tz_web import instance, state
 from tz_web.internal_routes import bp as tz_web_internal_blueprint
 from tz_web.routes import bp as tz_web_blueprint
@@ -151,6 +152,15 @@ def create_app(
             # (503) en tz_web.routes._guard_csrf.
             "csrf_token": app.config.get("TZ_CSRF_TOKEN") or "",
         }
+
+    @app.context_processor
+    def _inject_beta_status() -> dict:
+        # Aviso discreto sitewide (P1-BETA-EXPIRY, sección I): ``notice`` ya
+        # viene ``None`` salvo que falten <=30 días o la Beta esté vencida
+        # (ver tz_version.get_beta_status) — no es un chequeo de bloqueo,
+        # solo informa; el rechazo real de análisis nuevos vive en
+        # tz_web.state.try_start_run_detailed.
+        return {"tz_beta_notice": get_beta_status().notice}
 
     state.cleanup_stale_uploads()
 

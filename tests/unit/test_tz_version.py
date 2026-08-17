@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 import tz_version
@@ -187,3 +188,86 @@ def test_assembler_sin_lectura_muerta_de_brand_version():
         "tz_core/html/assembler.py no debe conservar ninguna lectura, "
         "activa o muerta, de una versión declarada en config.json"
     )
+
+
+# ---------------------------------------------------------------------------
+# G — vigencia de la Beta (P1-BETA-EXPIRY): fuente única, fecha inyectable,
+# sin depender del reloj real. Contrato: 31/12/2027 vigente, 01/01/2028
+# vencida (comparación estricta ">", nunca ">=").
+# ---------------------------------------------------------------------------
+
+
+def test_beta_expires_on_es_31_12_2027():
+    assert tz_version.BETA_EXPIRES_ON == date(2027, 12, 31)
+
+
+def test_2027_12_30_vigente():
+    assert tz_version.is_beta_expired(date(2027, 12, 30)) is False
+
+
+def test_2027_12_31_vigente():
+    assert tz_version.is_beta_expired(date(2027, 12, 31)) is False
+
+
+def test_2028_01_01_vencida():
+    assert tz_version.is_beta_expired(date(2028, 1, 1)) is True
+
+
+def test_2028_01_02_vencida():
+    assert tz_version.is_beta_expired(date(2028, 1, 2)) is True
+
+
+def test_dias_restantes_antes_del_vencimiento():
+    assert tz_version.beta_days_remaining(date(2027, 12, 1)) == 30
+    assert tz_version.beta_days_remaining(date(2027, 12, 31)) == 0
+
+
+def test_dias_restantes_negativos_tras_vencer():
+    assert tz_version.beta_days_remaining(date(2028, 1, 1)) == -1
+
+
+def test_aviso_activo_a_30_dias_o_menos():
+    status = tz_version.get_beta_status(date(2027, 12, 1))
+    assert status.show_warning is True
+    assert status.expired is False
+    assert status.notice is not None
+    assert "30" in status.notice or "días" in status.notice
+
+
+def test_sin_aviso_a_mas_de_30_dias():
+    status = tz_version.get_beta_status(date(2027, 11, 30))
+    assert status.days_remaining == 31
+    assert status.show_warning is False
+    assert status.notice is None
+
+
+def test_mensaje_hoy_el_dia_del_vencimiento():
+    status = tz_version.get_beta_status(date(2027, 12, 31))
+    assert status.expired is False
+    assert status.show_warning is True
+    assert status.notice is not None
+    assert "hoy" in status.notice.lower()
+
+
+def test_get_beta_status_vencida_usa_mensaje_de_beta_vencida():
+    status = tz_version.get_beta_status(date(2028, 1, 1))
+    assert status.expired is True
+    assert status.notice == tz_version.BETA_EXPIRED_NOTICE
+
+
+def test_beta_expired_notice_no_usa_lenguaje_comercial():
+    notice = tz_version.BETA_EXPIRED_NOTICE.lower()
+    for termino_prohibido in ("licencia expirada", "producto bloqueado"):
+        assert termino_prohibido not in notice
+
+
+def test_get_beta_status_sin_fecha_usa_hoy():
+    assert tz_version.get_beta_status().days_remaining == tz_version.beta_days_remaining()
+
+
+def test_beta_usage_notice_menciona_evaluacion_y_vigencia():
+    notice = tz_version.BETA_USAGE_NOTICE
+    assert "evaluación" in notice
+    assert "31 de diciembre de 2027" in notice
+    assert "gratuita" in notice
+    assert "autorización" in notice

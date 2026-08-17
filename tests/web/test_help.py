@@ -436,6 +436,21 @@ def test_ayuda_incluye_aviso_beta_canonico(client):
     assert BETA_USAGE_NOTICE in html
 
 
+def test_aviso_beta_canonico_comunica_vigencia_gratuita_y_evaluacion(client):
+    """P1-BETA-EXPIRY, Sub-bloque P: el aviso canónico (mismo texto en AYUDA
+    y en el manual externo, ver test_generate_user_manual.py) debe comunicar
+    que la Beta es gratuita, de evaluación, con vigencia hasta el
+    31/12/2027 y sin autorización de redistribución — nunca lenguaje de
+    licencia comercial."""
+    html = help_html(client)
+    assert "gratuita" in BETA_USAGE_NOTICE
+    assert "evaluación" in BETA_USAGE_NOTICE
+    assert "31 de diciembre de 2027" in BETA_USAGE_NOTICE
+    assert "autorización del autor" in BETA_USAGE_NOTICE
+    assert BETA_USAGE_NOTICE in html
+    assert AUTHOR in html
+
+
 # ---------------------------------------------------------------------------
 # Limpieza editorial ya decidida en fases previas: no debe reaparecer.
 # ---------------------------------------------------------------------------

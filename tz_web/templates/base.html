@@ -46,6 +46,10 @@
   {% endif %}
 
   <main class="tz-main tz-width-{{ layout_width|default('normal') }}">
+    {% if tz_beta_notice %}
+      <div class="tz-banner warning" role="status">{{ tz_beta_notice }}</div>
+    {% endif %}
+
     {% if show_nav|default(true) %}
     {% set steps = [
       ('tz_web.index', 'Archivo'),

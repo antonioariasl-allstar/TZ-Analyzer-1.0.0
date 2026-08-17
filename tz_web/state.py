@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import tz_logging
+import tz_version
 from tz_web.services import (
     AnalysisInProgressError,
     ArchivoNoProcesableError,
@@ -172,8 +173,11 @@ MSG_SHUTDOWN_PENDING = (
 # comparando texto). "busy": ya hay otra sesión con un análisis activo.
 # "shutdown_pending": tz_web.lifecycle está en CLOSE_WHEN_IDLE/SHUTTING_DOWN
 # (ver set_run_start_guard más abajo) — no depende de is_any_run_active().
+# "beta_expired": el período de evaluación de esta Beta ya terminó (ver
+# tz_version.is_beta_expired, fuente única de verdad de la vigencia).
 RUN_START_REJECTED_BUSY = "busy"
 RUN_START_REJECTED_SHUTDOWN = "shutdown_pending"
+RUN_START_REJECTED_BETA_EXPIRED = "beta_expired"
 
 
 def translate_error(exc: BaseException) -> str:
@@ -392,9 +396,18 @@ def try_start_run_detailed(session_id: str) -> Tuple[bool, Optional[str]]:
     ``_RUN_START_GUARD`` — ambos chequeos y la reserva ocurren en una sola
     adquisición de ``_RUNNING_LOCK``, así que no hay ventana entre decidir y
     reservar.
+
+    También es el único punto de arranque real de un análisis nuevo (tanto
+    Modo 1/2 como Modo 3 llaman aquí antes de reservar su ejecución), así
+    que aquí mismo se aplica el guard de vigencia de la Beta
+    (``tz_version.is_beta_expired``): la fecha se consulta en cada llamada,
+    nunca solo al iniciar la aplicación, así que una instancia abierta desde
+    antes del vencimiento igual rechaza un análisis nuevo si ya venció.
     """
     global _RUNNING_SESSION_ID
     with _RUNNING_LOCK:
+        if tz_version.is_beta_expired():
+            return False, RUN_START_REJECTED_BETA_EXPIRED
         if _RUNNING_SESSION_ID is not None:
             return False, RUN_START_REJECTED_BUSY
         if _RUN_START_GUARD is not None:
