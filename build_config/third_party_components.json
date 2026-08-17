@@ -184,19 +184,6 @@
       "notes": "Provee el paquete de datos IANA usado por zoneinfo/pytz en Windows (donde no existe base tz del sistema operativo). Los datos IANA en si no llevan NOTICE separado en esta version local; se preserva el LICENSE Apache-2.0 del empaquetado tal como esta en el dist-info."
     },
     {
-      "name": "simplekml",
-      "version": "1.3.6",
-      "kind": "pip",
-      "pip_name": "simplekml",
-      "license": "LGPL-3.0-or-later",
-      "license_files": ["licenses/LICENSE.txt"],
-      "notice_files": [],
-      "bundled_license_files": [],
-      "copyright_holder": "2011-2018 Kyle Lancaster; 2019-2021 Patrick Eisoldt",
-      "source_url": "https://pypi.org/project/simplekml/",
-      "notes": "COMPONENTE ESPECIAL LGPLv3+. Ver analisis dedicado (LGPL_ANALYSIS.md en este mismo directorio) sobre empaquetado dentro del PYZ y opcion aplicable del Art. 4 de la LGPLv3. Clasificacion: B (requiere material adicional antes de entregar copias externas)."
-    },
-    {
       "name": "waitress",
       "version": "3.0.2",
       "kind": "pip",

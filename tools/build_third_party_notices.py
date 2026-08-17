@@ -9,8 +9,7 @@ producir ``THIRD-PARTY-NOTICES.txt`` en la raíz del repo.
 No infiere licencias, no consulta la red, no descarga nada, no decide
 compatibilidad ni obligaciones jurídicas, no traduce ni altera los textos
 legales. Toda esa curación vive en el manifiesto, escrito a mano por una
-persona a partir de evidencia local (ver build_config/LGPL_ANALYSIS.md para
-el caso especial de simplekml).
+persona a partir de evidencia local.
 
 Resolución de archivos según ``kind`` de cada componente:
 

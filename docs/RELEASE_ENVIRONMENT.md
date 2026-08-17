@@ -35,7 +35,6 @@ openpyxl==3.1.5
 pandas==2.2.2
 python-dateutil==2.9.0.post0
 pytz==2025.2
-simplekml==1.3.6
 six==1.17.0
 tzdata==2025.2
 waitress==3.0.2

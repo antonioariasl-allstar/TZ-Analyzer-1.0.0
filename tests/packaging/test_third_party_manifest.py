@@ -106,13 +106,6 @@ def test_component_declares_at_least_one_evidence_file(component):
     assert declared, component["name"]
 
 
-def test_simplekml_is_flagged_as_lgpl_special_case():
-    components = {component["name"]: component for component in load_manifest()}
-    simplekml = components["simplekml"]
-    assert "LGPL" in simplekml["license"]
-    assert "B" in simplekml["notes"] or "clasificacion" in simplekml["notes"].lower()
-
-
 @pytest.mark.parametrize("component", load_manifest(), ids=lambda c: c["name"])
 def test_binary_files_have_valid_sha256(component):
     binary_files = component.get("binary_files", [])

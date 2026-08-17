@@ -9,11 +9,9 @@ tz_core.geo_utils - UTILIDADES GEOGRÁFICAS PURAS
 RESPONSABILIDADES ESPECÍFICAS:
 - grados_a_radianes(): Conversión angular básica
 - calcular_punto_final(): Navegación geodésica (gran círculo)
-- generar_cono(): Generación de polígonos KML direccionales
 
 DEPENDENCIAS:
 - math: Cálculos trigonométricos
-- simplekml: Generación de elementos KML
 
 MIGRADO DESDE: script_principal_bitacoras_refactory.py líneas 1113-1150
 FECHA MIGRACIÓN: 27 octubre 2025
@@ -21,11 +19,6 @@ FECHA MIGRACIÓN: 27 octubre 2025
 
 import math
 from typing import Tuple
-try:
-    from simplekml import Kml
-except ImportError:
-    # Para tests sin simplekml instalado
-    Kml = None
 
 
 def grados_a_radianes(grados: float) -> float:
@@ -127,50 +120,3 @@ def resolve_azimuth_cone_geometry(config: dict | None) -> Tuple[float, int]:
         az_dist_km = 1.0
         cone_half = 60
     return az_dist_km, cone_half
-
-
-def generar_cono(kml, lat: float, lon: float, azimut: float, distancia_km: float,
-                angulo_lateral: int, color: str):
-    """Genera un polígono tipo 'cono' direccional en KML.
-    
-    Crea un polígono triangular que representa la cobertura direccional de una antena,
-    centrado en las coordenadas especificadas y abierto hacia el azimut dado.
-    
-    Args:
-        kml: Objeto KML donde agregar el polígono
-        lat: Latitud del vértice del cono en grados decimales
-        lon: Longitud del vértice del cono en grados decimales
-        azimut: Dirección central del cono en grados (0° = Norte)
-        distancia_km: Alcance del cono en kilómetros
-        angulo_lateral: Apertura lateral del cono en grados (±)
-        color: Color del polígono en formato KML (AABBGGRR)
-        
-    Returns:
-        None: Modifica el objeto KML directamente
-        
-    Raises:
-        ImportError: Si simplekml no está disponible
-    """
-    if Kml is None:
-        raise ImportError("simplekml requerido para generar_cono")
-        
-    poligono = kml.newpolygon(name=f"Cono Azimut {azimut}°")
-    
-    # Punto central (vértice del cono)
-    coords = [(lon, lat)]
-    
-    # Calcular puntos del arco
-    for i in range(-angulo_lateral, angulo_lateral + 1, 5):  # Cada 5 grados
-        azimut_actual = azimut + i
-        lat_punto, lon_punto = calcular_punto_final(lat, lon, azimut_actual, distancia_km)
-        coords.append((lon_punto, lat_punto))
-    
-    # Cerrar el polígono volviendo al centro
-    coords.append((lon, lat))
-    
-    poligono.outerboundaryis = coords
-    poligono.style.polystyle.color = color
-    poligono.style.polystyle.fill = 1
-    poligono.style.polystyle.outline = 1
-    poligono.style.linestyle.color = color
-    poligono.style.linestyle.width = 2

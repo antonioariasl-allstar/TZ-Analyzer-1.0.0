@@ -13,7 +13,7 @@ MIGRACIÓN ÉPICA:
 
 DEPENDENCIAS:
 - pandas: manipulación del DataFrame
-- simplekml: generación de archivos KML/KMZ
+- tz_core.kml_writer: generación de archivos KML/KMZ (stdlib, sin dependencias externas)
 - tz_core.geo_utils: calcular_punto_final (coordenadas geodésicas)
 - tz_core.time_utils: clasificar_rango_sv, RANGOS_SV
 - tz_core.color_utils: hex_to_kml_color

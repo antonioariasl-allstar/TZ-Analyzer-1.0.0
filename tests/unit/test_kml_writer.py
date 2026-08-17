@@ -2,16 +2,13 @@
 
 Bloque P1-SIMPLEKML-WRITER. Verifica el writer AISLADO (sin negocio de
 kml_generator.py): estructura XML, namespaces, estilos compartidos,
-ScreenOverlay, addfile/save/savekmz y escaping semántico frente a simplekml
-(oracle legacy, instalado en paralelo).
+ScreenOverlay, addfile/save/savekmz y escaping semántico.
 """
 from __future__ import annotations
 
 import os
 import zipfile
 import xml.etree.ElementTree as ET
-
-import simplekml as sk
 
 from tz_core.kml_writer import (
     Kml,
@@ -285,13 +282,6 @@ _ADVERSARIAL = 'Nombre <adversarial> & "quoted" \'single\' texto'
 _ADVERSARIAL_DESC = 'desc & < > " \' <b>markup real</b>'
 
 
-def _legacy_xml(name, description):
-    kml = sk.Kml()
-    p = kml.newpoint(name=name, coords=[(-89.2, 13.7)])
-    p.description = description
-    return kml.kml()
-
-
 def _writer_xml(tmp_path, filename, name, description):
     kml = Kml()
     p = kml.newpoint(name=name, coords=[(-89.2, 13.7)])
@@ -301,20 +291,19 @@ def _writer_xml(tmp_path, filename, name, description):
     return open(out, encoding="utf-8").read()
 
 
-def test_escaping_semantico_coincide_con_legacy(tmp_path):
-    legacy_root = parse_kml(_legacy_xml(_ADVERSARIAL, _ADVERSARIAL_DESC))
-    writer_root = parse_kml(_writer_xml(tmp_path, "esc.kml", _ADVERSARIAL, _ADVERSARIAL_DESC))
+def test_escaping_semantico_solo_amp_lt_gt(tmp_path):
+    """El writer escapa únicamente &, < y > en texto (comillas literales),
+    igual que el serializador estándar de ElementTree, y el contenido
+    original es recuperable tras un único unescape XML."""
+    raw = _writer_xml(tmp_path, "esc.kml", _ADVERSARIAL, _ADVERSARIAL_DESC)
 
-    legacy_pm = legacy_root.find(f".//{{{KML_NS}}}Placemark")
+    assert "Nombre &lt;adversarial&gt; &amp; \"quoted\" 'single' texto" in raw
+    assert "desc &amp; &lt; &gt; \" ' &lt;b&gt;markup real&lt;/b&gt;" in raw
+
+    writer_root = parse_kml(raw)
     writer_pm = writer_root.find(f".//{{{KML_NS}}}Placemark")
-
-    legacy_name = legacy_pm.find(f"{{{KML_NS}}}name").text
-    writer_name = writer_pm.find(f"{{{KML_NS}}}name").text
-    assert writer_name == legacy_name == _ADVERSARIAL
-
-    legacy_desc = legacy_pm.find(f"{{{KML_NS}}}description").text
-    writer_desc = writer_pm.find(f"{{{KML_NS}}}description").text
-    assert writer_desc == legacy_desc == _ADVERSARIAL_DESC
+    assert writer_pm.find(f"{{{KML_NS}}}name").text == _ADVERSARIAL
+    assert writer_pm.find(f"{{{KML_NS}}}description").text == _ADVERSARIAL_DESC
 
 
 def test_escaping_sin_doble_escape_observable(tmp_path):
