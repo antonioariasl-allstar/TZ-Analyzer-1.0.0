@@ -225,9 +225,17 @@ def _reset_and_import():
     return _crear_feature_kml
 
 
-def _contar_geometrias(kml_obj):
-    """Cuenta geometrías reales serializando el objeto simplekml a XML."""
-    root = ET.fromstring(kml_obj.kml())
+def _kml_root(kml_obj, tmp_path):
+    """Serializa el container KML productivo a XML vía save() (API pública
+    compartida por simplekml.Kml y tz_core.kml_writer.Kml)."""
+    out = str(tmp_path / f"_impl_{id(kml_obj)}.kml")
+    kml_obj.save(out)
+    return ET.parse(out).getroot()
+
+
+def _contar_geometrias(kml_obj, tmp_path):
+    """Cuenta geometrías reales serializando el objeto KML productivo a XML."""
+    root = _kml_root(kml_obj, tmp_path)
     return {
         "points":      len(root.findall(".//{*}Point")),
         "polygons":    len(root.findall(".//{*}Polygon")),
@@ -235,49 +243,49 @@ def _contar_geometrias(kml_obj):
     }
 
 
-def test_sin_azimut_solo_pin_y_circulo():
+def test_sin_azimut_solo_pin_y_circulo(tmp_path):
     """azimut=None: exactamente 1 pin + 1 polígono (círculo). Sin líneas."""
-    import simplekml
+    import tz_core.kml_generator as kml_mod
     _crear = _reset_and_import()
-    kml_obj = simplekml.Kml()
+    kml_obj = kml_mod.Kml()
     _crear(kml_obj, "Test", -89.2, 13.7, None, None, _CFG)
-    g = _contar_geometrias(kml_obj)
+    g = _contar_geometrias(kml_obj, tmp_path)
     assert g["points"]      == 1, "Esperado 1 pin"
     assert g["linestrings"] == 0, "Sin líneas (no hay azimut)"
     assert g["polygons"]    == 1, "Esperado 1 polígono (círculo)"
 
 
-def test_azimut_nan_solo_pin_y_circulo():
+def test_azimut_nan_solo_pin_y_circulo(tmp_path):
     """azimut=float('nan'): mismo comportamiento que None."""
-    import simplekml
+    import tz_core.kml_generator as kml_mod
     _crear = _reset_and_import()
-    kml_obj = simplekml.Kml()
+    kml_obj = kml_mod.Kml()
     _crear(kml_obj, "Test", -89.2, 13.7, None, float("nan"), _CFG)
-    g = _contar_geometrias(kml_obj)
+    g = _contar_geometrias(kml_obj, tmp_path)
     assert g["points"]      == 1, "Esperado 1 pin"
     assert g["linestrings"] == 0, "Sin líneas (azimut NaN)"
     assert g["polygons"]    == 1, "Esperado 1 polígono (círculo)"
 
 
-def test_con_azimut_genera_todo():
+def test_con_azimut_genera_todo(tmp_path):
     """Con azimut válido: 1 pin + 2 polígonos (círculo + cono) + 1 línea."""
-    import simplekml
+    import tz_core.kml_generator as kml_mod
     _crear = _reset_and_import()
-    kml_obj = simplekml.Kml()
+    kml_obj = kml_mod.Kml()
     _crear(kml_obj, "Test", -89.2, 13.7, None, 90.0, _CFG)
-    g = _contar_geometrias(kml_obj)
+    g = _contar_geometrias(kml_obj, tmp_path)
     assert g["points"]      == 1, "Esperado 1 pin"
     assert g["linestrings"] == 1, "Esperado 1 línea de azimut"
     assert g["polygons"]    == 2, "Esperado 2 polígonos (círculo + cono)"
 
 
-def test_circulo_sin_relleno_fill_desactivado():
+def test_circulo_sin_relleno_fill_desactivado(tmp_path):
     """El círculo de referencia debe tener PolyStyle/fill=0 (sin relleno interior)."""
-    import simplekml
+    import tz_core.kml_generator as kml_mod
     _crear = _reset_and_import()
-    kml_obj = simplekml.Kml()
+    kml_obj = kml_mod.Kml()
     _crear(kml_obj, "Test", -89.2, 13.7, None, None, _CFG)
-    root = ET.fromstring(kml_obj.kml())
+    root = _kml_root(kml_obj, tmp_path)
     poligonos = root.findall(".//{*}Polygon/..")
     circulo = next(pm for pm in poligonos if pm.find("{*}name").text == "Radio de referencia")
     style_id = circulo.find("{*}styleUrl").text.lstrip("#")
@@ -287,13 +295,13 @@ def test_circulo_sin_relleno_fill_desactivado():
         "El círculo debe tener fill=0 (sin relleno interior)"
 
 
-def test_circulo_contorno_visible():
+def test_circulo_contorno_visible(tmp_path):
     """El círculo conserva LineStyle visible (contorno) pese a fill=0."""
-    import simplekml
+    import tz_core.kml_generator as kml_mod
     _crear = _reset_and_import()
-    kml_obj = simplekml.Kml()
+    kml_obj = kml_mod.Kml()
     _crear(kml_obj, "Test", -89.2, 13.7, None, None, _CFG)
-    root = ET.fromstring(kml_obj.kml())
+    root = _kml_root(kml_obj, tmp_path)
     poligonos = root.findall(".//{*}Polygon/..")
     circulo = next(pm for pm in poligonos if pm.find("{*}name").text == "Radio de referencia")
     style_id = circulo.find("{*}styleUrl").text.lstrip("#")
@@ -303,13 +311,13 @@ def test_circulo_contorno_visible():
         "El círculo debe conservar un LineStyle con color visible"
 
 
-def test_cono_conserva_relleno_y_transparencia():
+def test_cono_conserva_relleno_y_transparencia(tmp_path):
     """El cono/sector conserva fill=1 y su opacidad configurada — no afectado por el fix del círculo."""
-    import simplekml
+    import tz_core.kml_generator as kml_mod
     _crear = _reset_and_import()
-    kml_obj = simplekml.Kml()
+    kml_obj = kml_mod.Kml()
     _crear(kml_obj, "Test", -89.2, 13.7, None, 90.0, _CFG)
-    root = ET.fromstring(kml_obj.kml())
+    root = _kml_root(kml_obj, tmp_path)
     poligonos = root.findall(".//{*}Polygon/..")
     cono = next(pm for pm in poligonos if pm.find("{*}name").text.startswith("Cono Azimut"))
     style_id = cono.find("{*}styleUrl").text.lstrip("#")
@@ -322,13 +330,13 @@ def test_cono_conserva_relleno_y_transparencia():
         "La opacidad del cono no debe cambiar por el fix del círculo"
 
 
-def test_circulo_y_cono_estilos_independientes():
+def test_circulo_y_cono_estilos_independientes(tmp_path):
     """Círculo y cono deben usar estilos distintos (fix de uno no debe afectar al otro)."""
-    import simplekml
+    import tz_core.kml_generator as kml_mod
     _crear = _reset_and_import()
-    kml_obj = simplekml.Kml()
+    kml_obj = kml_mod.Kml()
     _crear(kml_obj, "Test", -89.2, 13.7, None, 90.0, _CFG)
-    root = ET.fromstring(kml_obj.kml())
+    root = _kml_root(kml_obj, tmp_path)
     poligonos = root.findall(".//{*}Polygon/..")
     circulo = next(pm for pm in poligonos if pm.find("{*}name").text == "Radio de referencia")
     cono = next(pm for pm in poligonos if pm.find("{*}name").text.startswith("Cono Azimut"))

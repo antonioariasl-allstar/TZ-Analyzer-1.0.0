@@ -1,9 +1,10 @@
 """Equivalencia LEGACY (simplekml) vs WRITER (tz_core.kml_writer) — P1-SIMPLEKML-WRITER.
 
 Ejecuta el MISMO código de negocio (tz_core.kml_generator, sin modificar) dos
-veces sobre el mismo DataFrame/config: una vez contra simplekml (oracle
-legacy, sin parchar) y otra vez con tz_core.kml_generator.Kml/sk parchados
-(monkeypatch, solo dentro de este test) para apuntar a tz_core.kml_writer.
+veces sobre el mismo DataFrame/config: una vez con tz_core.kml_generator.Kml/sk
+parchados (monkeypatch, solo dentro de este test) para apuntar al oracle
+legacy simplekml, y otra vez sin parchar — productivo/NEW, que desde
+P1-SIMPLEKML-SWITCH usa tz_core.kml_writer por defecto.
 
 No recrea manualmente geometría/estilos/descripciones — solo compara los dos
 productos finales por semántica XML (nunca objetos internos de simplekml),
@@ -22,9 +23,9 @@ import time
 import zipfile
 
 import pandas as pd
+import simplekml
 
 import tz_core.kml_generator as kml_mod
-import tz_core.kml_writer as kml_writer
 from tz_core.kml_generator import generar_kml, generar_kml_puntos_libres
 
 from tests.kml_assertions import (
@@ -53,16 +54,18 @@ def _reset_kml_globals():
     kml_mod._ICON_HREF = None
 
 
-def _use_writer_backend(monkeypatch):
-    """Parcha tz_core.kml_generator.Kml/sk para apuntar al writer stdlib.
+def _use_legacy_backend(monkeypatch):
+    """Parcha tz_core.kml_generator.Kml/sk para apuntar al oracle legacy simplekml.
 
-    Únicamente dentro del test que lo invoca (monkeypatch revierte al
-    finalizar). kml_generator.py permanece sin modificar: los únicos usos de
-    Kml/sk. son los ya inventariados en P1-SIMPLEKML-WRITER (Style,
-    OverlayXY, ScreenXY, Size, Units) — todos cubiertos por kml_writer.
+    Únicamente dentro del test que lo invoca — se revierte con
+    ``monkeypatch.undo()`` antes de generar el producto productivo/NEW (sin
+    parche), o al finalizar el test. kml_generator.py permanece sin
+    modificar: los únicos usos de Kml/sk. son los ya inventariados en
+    P1-SIMPLEKML-WRITER (Style, OverlayXY, ScreenXY, Size, Units) — todos
+    cubiertos también por simplekml.
     """
-    monkeypatch.setattr(kml_mod, "Kml", kml_writer.Kml)
-    monkeypatch.setattr(kml_mod, "sk", kml_writer)
+    monkeypatch.setattr(kml_mod, "Kml", simplekml.Kml)
+    monkeypatch.setattr(kml_mod, "sk", simplekml)
 
 
 def _generar_kmz(df, tmp_path, filename, config=None, flat=False, subdir="out"):
@@ -281,10 +284,11 @@ def _df_escaping_adversarial():
 def test_equivalencia_modo_carpetas(tmp_path, monkeypatch):
     df = _df_carpetas()
 
+    _use_legacy_backend(monkeypatch)
     legacy_kmz = _generar_kmz(df, tmp_path, "carpetas.kml", flat=False, subdir="legacy")
     legacy_root = parse_kml(extract_kml_from_kmz(legacy_kmz))
 
-    _use_writer_backend(monkeypatch)
+    monkeypatch.undo()
     writer_kmz = _generar_kmz(df, tmp_path, "carpetas.kml", flat=False, subdir="writer")
     writer_root = parse_kml(extract_kml_from_kmz(writer_kmz))
 
@@ -302,10 +306,11 @@ def test_equivalencia_modo_carpetas(tmp_path, monkeypatch):
 def test_equivalencia_modo_flat(tmp_path, monkeypatch):
     df = _df_flat()
 
+    _use_legacy_backend(monkeypatch)
     legacy_kmz = _generar_kmz(df, tmp_path, "flat.kml", flat=True, subdir="legacy")
     legacy_root = parse_kml(extract_kml_from_kmz(legacy_kmz))
 
-    _use_writer_backend(monkeypatch)
+    monkeypatch.undo()
     writer_kmz = _generar_kmz(df, tmp_path, "flat.kml", flat=True, subdir="writer")
     writer_root = parse_kml(extract_kml_from_kmz(writer_kmz))
 
@@ -321,10 +326,11 @@ def test_equivalencia_modo_flat(tmp_path, monkeypatch):
 def test_equivalencia_puntos_libres(tmp_path, monkeypatch):
     df = _df_puntos_libres()
 
+    _use_legacy_backend(monkeypatch)
     legacy_kmz, legacy_desc = _generar_puntos_libres_kmz(df, tmp_path, "libres.kml", subdir="legacy")
     legacy_root = parse_kml(extract_kml_from_kmz(legacy_kmz))
 
-    _use_writer_backend(monkeypatch)
+    monkeypatch.undo()
     writer_kmz, writer_desc = _generar_puntos_libres_kmz(df, tmp_path, "libres.kml", subdir="writer")
     writer_root = parse_kml(extract_kml_from_kmz(writer_kmz))
 
@@ -344,10 +350,11 @@ def test_equivalencia_puntos_libres(tmp_path, monkeypatch):
 def test_equivalencia_escaping_adversarial(tmp_path, monkeypatch):
     df = _df_escaping_adversarial()
 
+    _use_legacy_backend(monkeypatch)
     legacy_kmz = _generar_kmz(df, tmp_path, "escaping.kml", flat=True, subdir="legacy")
     legacy_root = parse_kml(extract_kml_from_kmz(legacy_kmz))
 
-    _use_writer_backend(monkeypatch)
+    monkeypatch.undo()
     writer_kmz = _generar_kmz(df, tmp_path, "escaping.kml", flat=True, subdir="writer")
     writer_root = parse_kml(extract_kml_from_kmz(writer_kmz))
 
@@ -373,12 +380,13 @@ def test_performance_sanity_legacy_vs_writer(tmp_path, monkeypatch, capsys):
         "azimut": [(i * 7) % 360 for i in range(filas)],
     })
 
+    _use_legacy_backend(monkeypatch)
     t0 = time.perf_counter()
     legacy_kmz = _generar_kmz(df, tmp_path, "perf.kml", flat=True, subdir="legacy")
     t_legacy = time.perf_counter() - t0
     assert os.path.exists(legacy_kmz)
 
-    _use_writer_backend(monkeypatch)
+    monkeypatch.undo()
     t0 = time.perf_counter()
     writer_kmz = _generar_kmz(df, tmp_path, "perf.kml", flat=True, subdir="writer")
     t_writer = time.perf_counter() - t0

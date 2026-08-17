@@ -32,8 +32,8 @@ from collections import Counter, defaultdict
 from typing import Optional, Tuple
 
 import pandas as pd
-from simplekml import Kml
-import simplekml as sk
+from tz_core.kml_writer import Kml
+import tz_core.kml_writer as sk
 
 # Imports internos del framework tz_core
 from tz_core.geo_utils import calcular_punto_final, generar_coordenadas_circulo
