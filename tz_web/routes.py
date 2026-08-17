@@ -1228,7 +1228,13 @@ def configure_options_screen():
     if case is None or not case.mapping:
         flash("Primero confirme el mapeo de columnas.", "error")
         return redirect(url_for("tz_web.mapping_screen"))
-    return render_template("configure_options.html", case=case)
+    html_cfg = get_config().get("html", {}) or {}
+    return render_template(
+        "configure_options.html",
+        case=case,
+        default_top_antenas=int(html_cfg.get("top_antenas_n", 10)),
+        default_top_contactos=int(html_cfg.get("top_contactos_n", 10)),
+    )
 
 
 @bp.route("/configure/opciones", methods=["POST"])

@@ -17,12 +17,12 @@
     <div class="tz-inline">
       <div class="tz-field">
         <label for="top_antenas">Top de antenas</label>
-        <input type="number" id="top_antenas" name="top_antenas" min="1" value="{{ case.top_antenas or '' }}" placeholder="10 (valor por defecto)">
+        <input type="number" id="top_antenas" name="top_antenas" min="1" value="{{ case.top_antenas or '' }}" placeholder="{{ default_top_antenas }} (valor por defecto)">
         <p class="tz-help">Cantidad de antenas principales que se mostrarán en el análisis.</p>
       </div>
       <div class="tz-field">
         <label for="top_contactos">Top de contactos</label>
-        <input type="number" id="top_contactos" name="top_contactos" min="1" value="{{ case.top_contactos or '' }}" placeholder="10 (valor por defecto)">
+        <input type="number" id="top_contactos" name="top_contactos" min="1" value="{{ case.top_contactos or '' }}" placeholder="{{ default_top_contactos }} (valor por defecto)">
         <p class="tz-help">Cantidad de contactos principales que se mostrarán en el análisis.</p>
       </div>
     </div>

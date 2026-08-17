@@ -230,6 +230,26 @@ def test_3b_persiste_valores_al_navegar_atras_y_adelante(client):
     assert 'value="3"' in html
 
 
+def test_3b_placeholder_top_n_deriva_de_config_no_de_literal_hardcodeado(client, monkeypatch):
+    """El placeholder "(valor por defecto)" de Top de antenas/contactos en 3B
+    debe reflejar el valor real de config.json (html.top_antenas_n /
+    top_contactos_n), no un literal hardcodeado en el template — evita la
+    regresión donde el placeholder mostraba "10" para contactos mientras el
+    motor usaba 5 (config.json real)."""
+    html_cfg = get_config().get("html", {})
+    monkeypatch.setitem(html_cfg, "top_contactos_n", 7)
+    monkeypatch.setitem(html_cfg, "top_antenas_n", 11)
+
+    advance_to_configure(client)
+    client.post("/configure", data={"accion": "siguiente"}, follow_redirects=True)
+    resp = client.get("/configure/opciones")
+    html = resp.data.decode("utf-8")
+
+    assert "7 (valor por defecto)" in html
+    assert "11 (valor por defecto)" in html
+    assert "10 (valor por defecto)" not in html
+
+
 # ---------------------------------------------------------------------------
 # Subpantalla 3C — Productos de salida
 # ---------------------------------------------------------------------------
