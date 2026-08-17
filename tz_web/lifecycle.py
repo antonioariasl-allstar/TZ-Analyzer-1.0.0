@@ -100,13 +100,24 @@ def reset_for_tests() -> None:
 
 
 def _do_shutdown_locked(reason: str) -> None:
-    """Ejecuta la transicion terminal. El llamador debe sostener ``_LOCK``."""
+    """Ejecuta la transicion terminal. El llamador debe sostener ``_LOCK``.
+
+    En este punto ya no queda ningun analisis activo (todo llamador lo
+    confirma bajo ``state.run_lock()`` antes de llegar aqui — ver
+    ``request_shutdown``, ``on_run_finished`` y ``_watchdog_loop``), asi que
+    es el momento seguro y unico de convergencia para la limpieza sincrona
+    de temporales de esta instancia, antes de detener el servidor.
+    """
     global _STATE, _SHUTDOWN_REASON
     if _STATE == SHUTTING_DOWN:
         return
     _STATE = SHUTTING_DOWN
     _SHUTDOWN_REASON = reason
     _LOGGER.info("shutdown iniciado (motivo=%s)", reason)
+    try:
+        state.cleanup_session_uploads_on_shutdown()
+    except Exception:
+        _LOGGER.exception("fallo inesperado durante la limpieza de temporales al apagar")
     hook = _SHUTDOWN_HOOK
     if hook is not None:
         try:

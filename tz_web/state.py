@@ -123,6 +123,7 @@ _STALE_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60  # 24h
 # ``tz_logging.configure_logging()`` configura una sola vez por proceso
 # (archivo rotado en LOCALAPPDATA + consola) — ver tz_launcher.py/run.py.
 _TECH_LOGGER = logging.getLogger("tz_web.technical")
+_LOGGER = logging.getLogger("tz_web.state")
 
 
 def log_technical_error(context: str, exc: BaseException) -> None:
@@ -492,6 +493,41 @@ def _cleanup_upload_dir(upload_dir: Optional[str]) -> None:
             shutil.rmtree(upload_dir, ignore_errors=True)
     except (OSError, ValueError):
         pass
+
+
+def cleanup_session_uploads_on_shutdown() -> None:
+    """Limpia, de forma síncrona y best-effort, los directorios de subida
+    (incluidos sus snapshots de ejecución) de todas las sesiones creadas por
+    ESTE proceso, al cerrar normalmente (SALIR o heartbeat_timeout en
+    reposo).
+
+    Fuente de verdad de propiedad: ``_SESSIONS`` — el único registro de
+    sesiones que este proceso mantiene en memoria, vacío al arrancar. Nunca
+    infiere propiedad por antigüedad ni nombre de carpeta, y nunca toca
+    ``UPLOAD_ROOT`` en sí ni directorios de otra instancia: esos jamás
+    aparecen en este diccionario porque cada proceso solo conoce las
+    sesiones que él mismo creó.
+
+    Cada carpeta se intenta de forma independiente: un fallo de E/S
+    (antivirus, indexador, handle residual de Windows) se registra como
+    advertencia genérica y no impide intentar las demás ni completar el
+    apagado. El residuo, si lo hay, queda para ``cleanup_stale_uploads()``
+    en el siguiente arranque.
+    """
+    with _SESSIONS_LOCK:
+        upload_dirs = [s.upload_dir for s in _SESSIONS.values() if s.upload_dir]
+
+    abs_root = os.path.abspath(UPLOAD_ROOT)
+    for upload_dir in upload_dirs:
+        try:
+            abs_dir = os.path.abspath(upload_dir)
+            if not os.path.isdir(abs_dir):
+                continue
+            if os.path.commonpath([abs_dir, abs_root]) != abs_root:
+                continue
+            shutil.rmtree(abs_dir)
+        except (OSError, ValueError):
+            _LOGGER.warning("No fue posible completar la limpieza temporal de una sesión.")
 
 
 def ensure_writable_dir(path: str) -> str:

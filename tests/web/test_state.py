@@ -1,9 +1,11 @@
 """FASE 2 WEB — tz_web.state: contrato de progreso, sesiones y limpieza."""
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
+from unittest.mock import patch
 
 import pytest
 
@@ -171,6 +173,129 @@ def test_ensure_writable_dir_falla_si_la_ruta_es_un_archivo(tmp_path):
     archivo.write_text("contenido")
     with pytest.raises(OSError):
         tz_web_state.ensure_writable_dir(str(archivo))
+
+
+@pytest.fixture(autouse=True)
+def _sessions_isolation():
+    """Aísla ``_SESSIONS`` (registro global por proceso) entre pruebas, igual
+    que ``tests/web/test_lifecycle.py``: sin esto, sesiones creadas por una
+    prueba de limpieza contaminarían el conteo/iteración de las siguientes."""
+    with tz_web_state._SESSIONS_LOCK:
+        tz_web_state._SESSIONS.clear()
+    yield
+    with tz_web_state._SESSIONS_LOCK:
+        tz_web_state._SESSIONS.clear()
+
+
+# ---------------------------------------------------------------------------
+# cleanup_session_uploads_on_shutdown — limpieza normal de temporales al
+# cierre (SALIR / heartbeat_timeout en reposo). La integración con
+# tz_web.lifecycle (cuándo se invoca) se prueba en tests/web/test_lifecycle.py;
+# aquí se prueba la función en sí, aislada.
+# ---------------------------------------------------------------------------
+
+
+def _sesion_con_upload(tmp_path, con_snapshot: bool = False) -> tz_web_state.Session:
+    session = tz_web_state.create_session()
+    upload_dir = os.path.join(str(tmp_path), session.id)
+    os.makedirs(upload_dir, exist_ok=True)
+    with open(os.path.join(upload_dir, "archivo.xlsx"), "w") as fh:
+        fh.write("contenido")
+    if con_snapshot:
+        snap_dir = os.path.join(upload_dir, ".execution-snapshots")
+        os.makedirs(snap_dir, exist_ok=True)
+        with open(os.path.join(snap_dir, ".execution-input-abc.xlsx"), "w") as fh:
+            fh.write("snapshot")
+    session.upload_dir = upload_dir
+    return session
+
+
+def test_cleanup_shutdown_borra_upload_y_snapshot_de_la_sesion(tmp_path, monkeypatch):
+    monkeypatch.setattr(tz_web_state, "UPLOAD_ROOT", str(tmp_path))
+    session = _sesion_con_upload(tmp_path, con_snapshot=True)
+
+    tz_web_state.cleanup_session_uploads_on_shutdown()
+
+    assert not os.path.isdir(session.upload_dir)
+
+
+def test_cleanup_shutdown_es_idempotente(tmp_path, monkeypatch):
+    monkeypatch.setattr(tz_web_state, "UPLOAD_ROOT", str(tmp_path))
+    _sesion_con_upload(tmp_path)
+
+    tz_web_state.cleanup_session_uploads_on_shutdown()
+    # Segunda llamada: el directorio ya no existe, no debe fallar.
+    tz_web_state.cleanup_session_uploads_on_shutdown()
+
+
+def test_cleanup_shutdown_tolera_sesion_sin_upload(tmp_path, monkeypatch):
+    monkeypatch.setattr(tz_web_state, "UPLOAD_ROOT", str(tmp_path))
+    tz_web_state.create_session()  # sin upload_dir (None)
+
+    tz_web_state.cleanup_session_uploads_on_shutdown()  # no debe lanzar
+
+
+def test_cleanup_shutdown_limpia_todas_las_sesiones_propias(tmp_path, monkeypatch):
+    monkeypatch.setattr(tz_web_state, "UPLOAD_ROOT", str(tmp_path))
+    session_a = _sesion_con_upload(tmp_path)
+    session_b = _sesion_con_upload(tmp_path)
+
+    tz_web_state.cleanup_session_uploads_on_shutdown()
+
+    assert not os.path.isdir(session_a.upload_dir)
+    assert not os.path.isdir(session_b.upload_dir)
+
+
+def test_cleanup_shutdown_no_toca_carpeta_de_instancia_ajena(tmp_path, monkeypatch):
+    """Un directorio dentro de UPLOAD_ROOT que esta sesión (este proceso) no
+    creó — p. ej. de otra instancia — nunca aparece en ``_SESSIONS``, así que
+    la limpieza no debe tocarlo."""
+    monkeypatch.setattr(tz_web_state, "UPLOAD_ROOT", str(tmp_path))
+    ajena = tmp_path / "caso-de-otra-instancia"
+    ajena.mkdir()
+    (ajena / "archivo.xlsx").write_text("no tocar")
+
+    session = _sesion_con_upload(tmp_path)
+
+    tz_web_state.cleanup_session_uploads_on_shutdown()
+
+    assert not os.path.isdir(session.upload_dir)
+    assert ajena.is_dir()
+    assert (ajena / "archivo.xlsx").exists()
+
+
+def test_cleanup_shutdown_no_toca_productos_finales_fuera_de_upload_root(tmp_path, monkeypatch):
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr(tz_web_state, "UPLOAD_ROOT", str(upload_root))
+    salida = tmp_path / "salida_usuario"
+    salida.mkdir()
+    (salida / "reporte.html").write_text("<html></html>")
+
+    session = _sesion_con_upload(upload_root)
+
+    tz_web_state.cleanup_session_uploads_on_shutdown()
+
+    assert not os.path.isdir(session.upload_dir)
+    assert (salida / "reporte.html").exists()
+
+
+def test_cleanup_shutdown_permissionerror_loguea_warning_generico_y_continua(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(tz_web_state, "UPLOAD_ROOT", str(tmp_path))
+    session_a = _sesion_con_upload(tmp_path)
+    session_b = _sesion_con_upload(tmp_path)
+
+    with patch.object(tz_web_state.shutil, "rmtree", side_effect=PermissionError("bloqueado")):
+        with caplog.at_level(logging.WARNING, logger="tz_web.state"):
+            tz_web_state.cleanup_session_uploads_on_shutdown()  # no debe lanzar
+
+    warnings = [r for r in caplog.records if r.name == "tz_web.state"]
+    assert len(warnings) == 2  # una por sesión afectada, cierre continuó con ambas
+    for record in warnings:
+        message = record.getMessage()
+        assert session_a.upload_dir not in message
+        assert session_b.upload_dir not in message
+        assert session_a.id not in message
+        assert session_b.id not in message
 
 
 def test_cleanup_stale_uploads_borra_solo_lo_antiguo(tmp_path, monkeypatch):

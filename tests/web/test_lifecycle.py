@@ -4,6 +4,7 @@ las pruebas ejerciten la integración de verdad, no un doble simulado."""
 
 from __future__ import annotations
 
+import os
 import time
 
 import pytest
@@ -307,3 +308,109 @@ def test_carrera_cierre_pendiente_vs_nuevo_analisis_queda_serializada():
             # lifecycle decidió, nunca "ocupado" por una corrida fantasma.
             assert reason == state.RUN_START_REJECTED_SHUTDOWN
             assert final_state == lifecycle.SHUTTING_DOWN
+
+
+# ---------------------------------------------------------------------------
+# Cleanup normal de temporales al cierre — el shutdown definitivo
+# (``_do_shutdown_locked``, único punto de convergencia entre SALIR y
+# heartbeat_timeout) dispara ``state.cleanup_session_uploads_on_shutdown()``
+# antes de invocar el hook de apagado real.
+# ---------------------------------------------------------------------------
+
+
+def _session_con_upload(tmp_path) -> state.Session:
+    session = state.create_session()
+    upload_dir = os.path.join(str(tmp_path), session.id)
+    os.makedirs(upload_dir, exist_ok=True)
+    with open(os.path.join(upload_dir, "archivo.xlsx"), "w") as fh:
+        fh.write("contenido")
+    session.upload_dir = upload_dir
+    return session
+
+
+def test_salir_en_reposo_limpia_temporales_de_la_instancia(tmp_path, monkeypatch):
+    monkeypatch.setattr(state, "UPLOAD_ROOT", str(tmp_path))
+    lifecycle.set_shutdown_hook(lambda: None)
+    session = _session_con_upload(tmp_path)
+
+    result = lifecycle.request_shutdown(reason="user_requested")
+
+    assert result == lifecycle.SHUTTING_DOWN
+    assert not os.path.isdir(session.upload_dir)
+
+
+def test_worker_activo_no_limpia_hasta_que_termina(tmp_path, monkeypatch):
+    """Caso crítico: un cierre pedido mientras hay un análisis activo NO debe
+    tocar los temporales todavía — recién al terminar ese análisis (y
+    completarse el cierre diferido) debe ejecutarse la limpieza."""
+    monkeypatch.setattr(state, "UPLOAD_ROOT", str(tmp_path))
+    lifecycle.set_shutdown_hook(lambda: None)
+    session = _session_con_upload(tmp_path)
+    assert state.try_start_run(session.id) is True
+
+    result = lifecycle.request_shutdown(reason="user_requested")
+    assert result == lifecycle.CLOSE_WHEN_IDLE
+    assert os.path.isdir(session.upload_dir)  # el worker sigue "activo"
+
+    state.finish_run(session.id)
+
+    assert lifecycle.get_state() == lifecycle.SHUTTING_DOWN
+    assert not os.path.isdir(session.upload_dir)  # limpieza recién ahora
+
+
+def test_heartbeat_timeout_en_reposo_limpia_temporales(tmp_path, monkeypatch):
+    monkeypatch.setattr(state, "UPLOAD_ROOT", str(tmp_path))
+    lifecycle.set_shutdown_hook(lambda: None)
+    session = _session_con_upload(tmp_path)
+    lifecycle.set_heartbeat_timeout(0.1)
+    lifecycle.start_watchdog(interval=0.03)
+    try:
+        deadline = time.time() + 2.0
+        while time.time() < deadline and lifecycle.get_state() != lifecycle.SHUTTING_DOWN:
+            time.sleep(0.03)
+        assert lifecycle.get_state() == lifecycle.SHUTTING_DOWN
+        assert not os.path.isdir(session.upload_dir)
+    finally:
+        lifecycle.stop_watchdog()
+
+
+def test_heartbeat_timeout_durante_analisis_no_limpia_hasta_finalizar(tmp_path, monkeypatch):
+    monkeypatch.setattr(state, "UPLOAD_ROOT", str(tmp_path))
+    lifecycle.set_shutdown_hook(lambda: None)
+    session = _session_con_upload(tmp_path)
+    assert state.try_start_run(session.id) is True
+    lifecycle.set_heartbeat_timeout(0.1)
+    lifecycle.start_watchdog(interval=0.03)
+    try:
+        deadline = time.time() + 1.0
+        while time.time() < deadline and lifecycle.get_state() == lifecycle.RUNNING:
+            time.sleep(0.03)
+        assert lifecycle.get_state() == lifecycle.CLOSE_WHEN_IDLE
+        assert os.path.isdir(session.upload_dir)
+
+        state.finish_run(session.id)
+        assert lifecycle.get_state() == lifecycle.SHUTTING_DOWN
+        assert not os.path.isdir(session.upload_dir)
+    finally:
+        lifecycle.stop_watchdog()
+
+
+def test_cleanup_ocurre_antes_del_hook_de_apagado(monkeypatch):
+    """Orden exigido: limpiar temporales ANTES de detener el servidor real
+    (nunca al revés), para no dejar una ventana donde el servidor ya está
+    caído pero los temporales siguen vivos innecesariamente."""
+    orden = []
+    monkeypatch.setattr(
+        state, "cleanup_session_uploads_on_shutdown", lambda: orden.append("cleanup")
+    )
+    lifecycle.set_shutdown_hook(lambda: orden.append("hook"))
+
+    lifecycle.request_shutdown(reason="user_requested")
+
+    assert orden == ["cleanup", "hook"]
+
+
+def test_shutdown_no_falla_si_no_hay_sesiones_con_upload():
+    lifecycle.set_shutdown_hook(lambda: None)
+    result = lifecycle.request_shutdown(reason="user_requested")
+    assert result == lifecycle.SHUTTING_DOWN
