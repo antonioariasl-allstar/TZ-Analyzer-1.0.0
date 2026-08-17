@@ -2,11 +2,11 @@
 
 Responsabilidades exactas: verificar Python/PyInstaller, limpiar solo los
 artefactos de packaging (build/pyinstaller y dist/"TZ Analyzer"), generar
-version_info.txt y el manual, invocar
-``python -m PyInstaller --clean TZ_Analyzer.spec``, copiar el manual al
-bundle y verificar que el .exe y el manual quedaron en dist/. No corre
-tests, no toca git, no genera íconos, no edita el .spec, no firma, no toca
-el registro ni instala dependencias.
+version_info.txt, el manual y THIRD-PARTY-NOTICES.txt, invocar
+``python -m PyInstaller --clean TZ_Analyzer.spec``, copiar el manual y los
+avisos de terceros al bundle y verificar que el .exe, el manual y los
+avisos quedaron en dist/. No corre tests, no toca git, no genera íconos, no
+edita el .spec, no firma, no toca el registro ni instala dependencias.
 
 Uso: ``python -m tools.build_windows``
 """
@@ -23,6 +23,7 @@ SPEC_PATH = REPO_ROOT / "TZ_Analyzer.spec"
 BUILD_PYINSTALLER_DIR = REPO_ROOT / "build" / "pyinstaller"
 DIST_DIR = REPO_ROOT / "dist" / "TZ Analyzer"
 MANUAL_FILENAME = "Manual de usuario - TZ Analyzer.html"
+NOTICES_FILENAME = "THIRD-PARTY-NOTICES.txt"
 
 
 class BuildError(RuntimeError):
@@ -59,6 +60,13 @@ def generate_manual() -> Path:
     return Path(generate_manual_html())
 
 
+def generate_third_party_notices() -> Path:
+    from tools.build_third_party_notices import generate_notices_text, load_manifest, write_notices
+
+    text = generate_notices_text(load_manifest())
+    return write_notices(text)
+
+
 def run_pyinstaller() -> None:
     subprocess.run(
         [sys.executable, "-m", "PyInstaller", "--clean", str(SPEC_PATH)],
@@ -73,13 +81,22 @@ def copy_manual_to_dist(manual_path: Path) -> Path:
     return destination
 
 
+def copy_notices_to_dist(notices_path: Path) -> Path:
+    destination = DIST_DIR / NOTICES_FILENAME
+    shutil.copyfile(notices_path, destination)
+    return destination
+
+
 def verify_dist() -> None:
     exe_path = DIST_DIR / f"{spec_config_product_name()}.exe"
     manual_path = DIST_DIR / MANUAL_FILENAME
+    notices_path = DIST_DIR / NOTICES_FILENAME
     if not exe_path.exists():
         raise BuildError(f"No se generó el ejecutable esperado: {exe_path}")
     if not manual_path.exists():
         raise BuildError(f"No se copió el manual esperado: {manual_path}")
+    if not notices_path.exists():
+        raise BuildError(f"No se copiaron los avisos de terceros esperados: {notices_path}")
 
 
 def spec_config_product_name() -> str:
@@ -89,16 +106,20 @@ def spec_config_product_name() -> str:
 
 
 def main() -> int:
+    from tools.build_third_party_notices import NoticesError
+
     try:
         check_python()
         check_pyinstaller_installed()
         clean_packaging_artifacts()
         generate_version_info()
         manual_path = generate_manual()
+        notices_path = generate_third_party_notices()
         run_pyinstaller()
         copy_manual_to_dist(manual_path)
+        copy_notices_to_dist(notices_path)
         verify_dist()
-    except BuildError as exc:
+    except (BuildError, NoticesError) as exc:
         print(f"[ERROR] {exc}")
         return 1
     print(f"Build completo: {DIST_DIR}")

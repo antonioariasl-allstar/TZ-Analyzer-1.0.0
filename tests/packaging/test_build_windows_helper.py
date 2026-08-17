@@ -91,10 +91,25 @@ def test_copy_manual_to_dist(tmp_path, monkeypatch):
     assert destination.read_text(encoding="utf-8") == "contenido"
 
 
+def test_copy_notices_to_dist(tmp_path, monkeypatch):
+    dist_dir = tmp_path / "dist" / "TZ Analyzer"
+    dist_dir.mkdir(parents=True)
+    monkeypatch.setattr(build_windows, "DIST_DIR", dist_dir)
+
+    notices_source = tmp_path / "THIRD-PARTY-NOTICES.txt"
+    notices_source.write_text("contenido", encoding="utf-8")
+
+    destination = build_windows.copy_notices_to_dist(notices_source)
+
+    assert destination == dist_dir / build_windows.NOTICES_FILENAME
+    assert destination.read_text(encoding="utf-8") == "contenido"
+
+
 def test_verify_dist_raises_when_exe_missing(tmp_path, monkeypatch):
     dist_dir = tmp_path / "dist" / "TZ Analyzer"
     dist_dir.mkdir(parents=True)
     (dist_dir / build_windows.MANUAL_FILENAME).write_text("x", encoding="utf-8")
+    (dist_dir / build_windows.NOTICES_FILENAME).write_text("x", encoding="utf-8")
     monkeypatch.setattr(build_windows, "DIST_DIR", dist_dir)
 
     with pytest.raises(build_windows.BuildError):
@@ -105,17 +120,30 @@ def test_verify_dist_raises_when_manual_missing(tmp_path, monkeypatch):
     dist_dir = tmp_path / "dist" / "TZ Analyzer"
     dist_dir.mkdir(parents=True)
     (dist_dir / "TZ Analyzer.exe").write_bytes(b"x")
+    (dist_dir / build_windows.NOTICES_FILENAME).write_text("x", encoding="utf-8")
     monkeypatch.setattr(build_windows, "DIST_DIR", dist_dir)
 
     with pytest.raises(build_windows.BuildError):
         build_windows.verify_dist()
 
 
-def test_verify_dist_passes_when_both_present(tmp_path, monkeypatch):
+def test_verify_dist_raises_when_notices_missing(tmp_path, monkeypatch):
     dist_dir = tmp_path / "dist" / "TZ Analyzer"
     dist_dir.mkdir(parents=True)
     (dist_dir / "TZ Analyzer.exe").write_bytes(b"x")
     (dist_dir / build_windows.MANUAL_FILENAME).write_text("x", encoding="utf-8")
+    monkeypatch.setattr(build_windows, "DIST_DIR", dist_dir)
+
+    with pytest.raises(build_windows.BuildError):
+        build_windows.verify_dist()
+
+
+def test_verify_dist_passes_when_all_present(tmp_path, monkeypatch):
+    dist_dir = tmp_path / "dist" / "TZ Analyzer"
+    dist_dir.mkdir(parents=True)
+    (dist_dir / "TZ Analyzer.exe").write_bytes(b"x")
+    (dist_dir / build_windows.MANUAL_FILENAME).write_text("x", encoding="utf-8")
+    (dist_dir / build_windows.NOTICES_FILENAME).write_text("x", encoding="utf-8")
     monkeypatch.setattr(build_windows, "DIST_DIR", dist_dir)
 
     build_windows.verify_dist()  # no debe lanzar
