@@ -59,6 +59,7 @@ from tz_version import AUTHOR, BETA_USAGE_NOTICE, COPYRIGHT, VERSION
 from tz_web import help_content
 from tz_web import lifecycle
 from tz_web import manual_validators as mv
+from tz_web import origin_guard
 from tz_web import state
 from tz_web.field_catalog import FIELD_DESCRIPTIONS, FIELD_GROUPS, FIELD_LABELS
 from tz_web.output_transaction import (
@@ -119,6 +120,21 @@ def _request_csrf_token() -> str:
 
 
 @bp.before_request
+def _guard_origin_fetch() -> Optional[Response]:
+    """Origin / Sec-Fetch-Site (MB7-B5-B) para todo POST del blueprint
+    principal — registrada ANTES que ``_guard_csrf`` en este mismo
+    ``before_request`` de blueprint (Flask ejecuta los antes de blueprint
+    en orden de registro), así que corre antes que CSRF y solo inspecciona
+    cabeceras: rechaza pronto sin necesidad de leer el body/form de una
+    request externa. Ver ``tz_web.origin_guard`` para la política completa.
+    GET/HEAD/OPTIONS del blueprint principal quedan fuera (solo lectura,
+    ver sección 9/10 del encargo)."""
+    if request.method != "POST":
+        return None
+    return origin_guard.guard_request()
+
+
+@bp.before_request
 def _guard_csrf() -> Optional[Response]:
     """Protección CSRF uniforme (MB7-B5-A2) para todo POST del blueprint
     principal — registrada como ``before_request`` de ESTE blueprint (no
@@ -126,7 +142,8 @@ def _guard_csrf() -> Optional[Response]:
     blueprint (``tz_web.internal_routes``) con su contrato propio de
     ``X-TZ-Token``, queda excluido estructuralmente, sin necesidad de un
     prefijo de ruta frágil. Flask ya ejecutó el guard de Host global
-    (``tz_web.app._guard_host``, clave ``None``) antes de llegar aquí.
+    (``tz_web.app._guard_host``, clave ``None``) y el guard de Origin/Fetch
+    (``_guard_origin_fetch``, arriba) antes de llegar aquí.
     """
     if request.method != "POST":
         return None

@@ -19,7 +19,13 @@ original, ahora sección E/L del MICROBLOQUE 5):
   ``_guard_host`` más abajo);
 - todos los POST del blueprint principal exigen un token CSRF propio,
   independiente de ``TZ_INSTANCE_TOKEN`` (MICROBLOQUE 7-B5-A2 — el guard
-  vive en ``tz_web.routes``, no aquí: ver ``tz_web.routes._guard_csrf``).
+  vive en ``tz_web.routes``, no aquí: ver ``tz_web.routes._guard_csrf``);
+- esos mismos POST, más ``/internal/heartbeat``, ``/internal/shutdown`` y
+  ``GET /internal/health``, exigen además que ``Origin`` (si está
+  presente) coincida exactamente con esta instancia y que
+  ``Sec-Fetch-Site`` no indique un contexto cross-site (MICROBLOQUE 7-B5-B
+  — el guard vive en ``tz_web.origin_guard``, invocado desde el
+  ``before_request`` de cada blueprint).
 """
 
 from __future__ import annotations
@@ -70,6 +76,21 @@ def create_app(
     app.config["TZ_INSTANCE_ID"] = instance_id
     app.config["TZ_INSTANCE_PID"] = os.getpid()
     app.config["TZ_INSTANCE_PORT"] = None
+    # Fuente de verdad del Origin esperado (MB7-B5-B, ver
+    # ``tz_web.origin_guard``): ``None`` hasta que ``ManagedServer.start()``
+    # la calcule junto con TZ_INSTANCE_PORT — el guard falla cerrado (503)
+    # mientras tanto, igual que ya hace el guard de Host con el puerto.
+    app.config["TZ_INSTANCE_ORIGIN"] = None
+
+    # Cookie de sesión (MB7-B5-B, sección 13 del encargo): configuración
+    # explícita, sin depender del comportamiento implícito del navegador.
+    # HttpOnly: la cookie solo guarda ``case_id``, JS nunca necesita leerla.
+    # Secure=False: la app sirve HTTP puro sobre 127.0.0.1; Secure=True
+    # rompería el envío normal de la cookie. SameSite=Strict: todo el flujo
+    # legítimo de TZ Analyzer es local/same-origin.
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SECURE"] = False
+    app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
     app.config["TZ_APP_VERSION"] = APP_VERSION
     app.config["TZ_LAUNCHER_VERSION"] = instance.LAUNCHER_VERSION
     app.config["TZ_INSTANCE_STARTED_AT"] = time.time()

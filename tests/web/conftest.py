@@ -52,6 +52,12 @@ def configure_test_instance_host(application, port: int = 51234) -> str:
     host = f"127.0.0.1:{port}"
     application.config["TZ_INSTANCE_PORT"] = port
     application.config["SERVER_NAME"] = host
+    # Misma fuente de verdad que ``tz_web.server.ManagedServer.start()``
+    # calcula en producción (MB7-B5-B, ver ``tz_web.origin_guard``): sin
+    # esto, cualquier POST/`/internal/*` de prueba caería en el 503
+    # fail-closed del guard de Origin, no en el comportamiento que la
+    # prueba realmente quiere ejercitar.
+    application.config["TZ_INSTANCE_ORIGIN"] = f"http://{host}"
     return host
 
 

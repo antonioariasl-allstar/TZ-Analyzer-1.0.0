@@ -9,12 +9,15 @@ Tres rutas, todas bajo ``/internal`` y todas protegidas por el mismo guard:
   mientras la pagina esta abierta (ver ``tz_web/static/js/app.js``).
 - ``POST /internal/shutdown``: boton "Cerrar TZ Analyzer" de la interfaz.
 
-Seguridad local basica (sección L del encargo, sin abordar CSRF/Origin
-todavia): exige IP de loopback *y* el token secreto de esta instancia via
+Seguridad: Host guard global (MB7-B5-A1, ``tz_web.app._guard_host``) corre
+primero; después Origin/Sec-Fetch-Site (MB7-B5-B, ``_guard_internal_origin_fetch``
+más abajo, ver ``tz_web.origin_guard``); después el guard de esta capa,
+que exige IP de loopback *y* el token secreto de esta instancia via
 cabecera ``X-TZ-Token`` — nunca en la URL (evita que quede en logs de
 acceso o en el historial del navegador). Sin token configurado en la app
 (``TZ_INSTANCE_TOKEN`` ausente), todo pedido se rechaza — no hay modo
-"abierto" por omision.
+"abierto" por omision. Este blueprint sigue exento del CSRF token propio
+del blueprint principal (MB7-B5-A2): su contrato es ``X-TZ-Token``.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from typing import Optional
 from flask import Blueprint, current_app, jsonify, request
 
 from tz_web import lifecycle
+from tz_web import origin_guard
 
 bp = Blueprint("tz_web_internal", __name__, url_prefix="/internal")
 
@@ -47,6 +51,21 @@ def _request_token_valid() -> bool:
 
 def _is_local_request() -> bool:
     return request.remote_addr in _LOCAL_ADDRESSES
+
+
+@bp.before_request
+def _guard_internal_origin_fetch():
+    """Origin / Sec-Fetch-Site (MB7-B5-B), registrada ANTES que
+    ``_guard_internal_requests`` en este mismo ``before_request`` de
+    blueprint: corre antes que ``X-TZ-Token``, igual que en el blueprint
+    principal (``tz_web.routes._guard_origin_fetch``). Deja pasar
+    HEAD/OPTIONS sin tocar (sección 10 del encargo); las tres rutas reales
+    de este blueprint (``GET /health``, ``POST /heartbeat``,
+    ``POST /shutdown``) quedan sujetas a la política — ver
+    ``tz_web.origin_guard`` para el detalle."""
+    if request.method in ("HEAD", "OPTIONS"):
+        return None
+    return origin_guard.guard_request()
 
 
 @bp.before_request

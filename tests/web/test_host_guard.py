@@ -28,6 +28,11 @@ def guard_app(tmp_path, monkeypatch):
     application.config.update(TESTING=True)
     application.config["TZ_INSTANCE_PORT"] = PORT
     application.config["SERVER_NAME"] = f"{HOST}:{PORT}"
+    # GET /internal/health también queda sujeto al guard de Origin/Fetch
+    # (MB7-B5-B, ver tz_web.origin_guard): sin esto, las pruebas de este
+    # archivo que lo ejercitan verían el 503 fail-closed de ese guard en
+    # vez del comportamiento del guard de Host que quieren probar.
+    application.config["TZ_INSTANCE_ORIGIN"] = f"http://{HOST}:{PORT}"
     yield application
     lifecycle.reset_for_tests()
     with state._SESSIONS_LOCK:

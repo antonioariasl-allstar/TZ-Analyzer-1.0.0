@@ -84,6 +84,13 @@ class ManagedServer:
             raise ServerStartError(str(exc)) from exc
 
         self._app.config["TZ_INSTANCE_PORT"] = int(self._server.effective_port)
+        # Fuente de verdad única del origen esperado (MB7-B5-B, ver
+        # ``tz_web.origin_guard``): calculado aquí, en el mismo momento
+        # lógico en que queda fijado TZ_INSTANCE_PORT — nunca reconstruido
+        # por request a partir de ``request.host``/``Origin`` recibido.
+        self._app.config["TZ_INSTANCE_ORIGIN"] = (
+            f"http://{self._host}:{self._app.config['TZ_INSTANCE_PORT']}"
+        )
         self._thread = threading.Thread(
             target=self._server.run, daemon=True, name="tz-waitress"
         )
