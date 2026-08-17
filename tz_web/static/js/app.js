@@ -378,6 +378,17 @@ function tzStartPolling(statusUrl, resultsUrl) {
 // ---------------------------------------------------------------------------
 
 var TZ_HEARTBEAT_INTERVAL_MS = 60000;
+var TZ_HEALTH_POLL_INTERVAL_MS = 1000;
+var TZ_HEALTH_POLL_TIMEOUT_MS = 3000;
+
+// Estado de cierre en curso (sección 3 del encargo UX): vive solo en esta
+// pestaña — nunca persistido, nunca reflejado en la URL. Una vez true tras
+// una respuesta exitosa de /internal/shutdown, ya no vuelve a false: el
+// overlay terminal es la única salida de este estado.
+var tzShutdownRequested = false;
+var tzShutdownClosed = false;
+var tzHeartbeatIntervalId = null;
+var tzHealthPollIntervalId = null;
 
 function tzGetInstanceToken() {
   var meta = document.querySelector('meta[name="tz-token"]');
@@ -401,7 +412,106 @@ function tzStartHeartbeat() {
     });
   }
   beat();
-  window.setInterval(beat, TZ_HEARTBEAT_INTERVAL_MS);
+  tzHeartbeatIntervalId = window.setInterval(beat, TZ_HEARTBEAT_INTERVAL_MS);
+}
+
+// Una vez que SALIR fue aceptado no tiene sentido seguir manteniendo viva
+// esta instancia con heartbeats (sección 17 del encargo UX): su terminación
+// ya fue solicitada.
+function tzStopHeartbeat() {
+  if (tzHeartbeatIntervalId !== null) {
+    window.clearInterval(tzHeartbeatIntervalId);
+    tzHeartbeatIntervalId = null;
+  }
+}
+
+function tzShowShutdownOverlay(state, closeWhenIdle) {
+  var overlay = document.getElementById("tz-shutdown-overlay");
+  var closingEl = document.getElementById("tz-shutdown-closing");
+  var closedEl = document.getElementById("tz-shutdown-closed");
+  var detailEl = document.getElementById("tz-shutdown-closing-detail");
+  if (!overlay || !closingEl || !closedEl) {
+    return;
+  }
+  overlay.hidden = false;
+  if (state === "closed") {
+    closingEl.hidden = true;
+    closedEl.hidden = false;
+  } else {
+    closingEl.hidden = false;
+    closedEl.hidden = true;
+    if (detailEl) {
+      detailEl.hidden = !closeWhenIdle;
+    }
+  }
+}
+
+// Sondeo de /internal/health tras un cierre aceptado (sección 9 del encargo
+// UX): deliberadamente separado del heartbeat (que ya se detuvo arriba) y a
+// 1s en vez de los 60s del heartbeat — aquí solo interesa detectar, lo antes
+// posible, el instante en que el backend deja de responder.
+function tzMarkShutdownClosed() {
+  if (tzShutdownClosed) {
+    return;
+  }
+  tzShutdownClosed = true;
+  tzStopShutdownHealthPolling();
+  tzShowShutdownOverlay("closed");
+}
+
+function tzPollShutdownHealth() {
+  if (!tzShutdownRequested || tzShutdownClosed) {
+    return;
+  }
+  var token = tzGetInstanceToken();
+  var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  var timeoutId = controller
+    ? window.setTimeout(function () { controller.abort(); }, TZ_HEALTH_POLL_TIMEOUT_MS)
+    : null;
+  fetch("/internal/health", {
+    method: "GET",
+    credentials: "same-origin",
+    headers: { "X-TZ-Token": token },
+    signal: controller ? controller.signal : undefined,
+  })
+    .catch(function () {
+      // connection refused / fetch fallida / timeout: el backend ya no
+      // responde -> interpretado como cierre alcanzado (sección 10/11 del
+      // encargo UX). Una respuesta HTTP no-2xx (el servidor SIGUE
+      // respondiendo, solo con error) no cae en este catch a propósito.
+      tzMarkShutdownClosed();
+    })
+    .finally(function () {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    });
+}
+
+function tzStartShutdownHealthPolling() {
+  if (tzHealthPollIntervalId !== null) {
+    return;
+  }
+  tzPollShutdownHealth();
+  tzHealthPollIntervalId = window.setInterval(tzPollShutdownHealth, TZ_HEALTH_POLL_INTERVAL_MS);
+}
+
+function tzStopShutdownHealthPolling() {
+  if (tzHealthPollIntervalId !== null) {
+    window.clearInterval(tzHealthPollIntervalId);
+    tzHealthPollIntervalId = null;
+  }
+}
+
+// Cubre navegadores que suspenden setInterval/setTimeout en segundo plano
+// (sección 16 del encargo UX): al volver visible con un cierre ya pedido,
+// se fuerza una comprobación inmediata en vez de esperar al próximo tick.
+function tzInstallShutdownWatchers() {
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && tzShutdownRequested && !tzShutdownClosed) {
+      tzPollShutdownHealth();
+    }
+  });
 }
 
 function tzRequestShutdown() {
@@ -412,21 +522,39 @@ function tzRequestShutdown() {
   if (!window.confirm("¿Cerrar TZ Analyzer? Si hay un análisis en curso, continuará hasta terminar y luego se cerrará.")) {
     return;
   }
+  var btn = document.getElementById("tz-btn-exit");
+  // Deshabilitado ANTES del fetch (sección 13 del encargo UX): evita una
+  // segunda solicitud de cierre mientras la primera sigue pendiente.
+  if (btn) {
+    btn.disabled = true;
+  }
   fetch("/internal/shutdown", {
     method: "POST",
     credentials: "same-origin",
     headers: { "X-TZ-Token": token },
   })
     .then(function (resp) {
+      if (!resp.ok) {
+        throw new Error("shutdown request failed");
+      }
       return resp.json();
     })
     .then(function (data) {
-      var mensaje = data.lifecycle_state === "CLOSE_WHEN_IDLE"
-        ? "Hay un análisis en curso. TZ Analyzer se cerrará automáticamente al finalizar."
-        : "TZ Analyzer se está cerrando.";
-      window.alert(mensaje);
+      if (!data || data.ok !== true) {
+        throw new Error("shutdown request rejected");
+      }
+      // El overlay solo se muestra DESPUÉS de confirmar la aceptación
+      // (sección 12 del encargo UX): nunca una transición visual falsa
+      // antes de tener respuesta.
+      tzShutdownRequested = true;
+      tzStopHeartbeat();
+      tzShowShutdownOverlay("closing", data.lifecycle_state === "CLOSE_WHEN_IDLE");
+      tzStartShutdownHealthPolling();
     })
     .catch(function () {
+      if (btn) {
+        btn.disabled = false;
+      }
       window.alert("No se pudo solicitar el cierre de TZ Analyzer. Intente nuevamente.");
     });
 }

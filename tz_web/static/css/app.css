@@ -1083,3 +1083,45 @@ table.tz-table th {
 .tz-filtro-option.disabled .tz-filtro-option-header {
   cursor: not-allowed;
 }
+
+.tz-shutdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  background: var(--tz-navy-dark);
+  color: #fff;
+}
+
+.tz-shutdown-overlay[hidden] {
+  display: none;
+}
+
+.tz-shutdown-box {
+  max-width: 460px;
+}
+
+.tz-shutdown-logo {
+  height: 56px;
+  width: auto;
+  margin-bottom: 20px;
+}
+
+.tz-shutdown-state[hidden] {
+  display: none;
+}
+
+.tz-shutdown-state h2 {
+  font-size: 21px;
+  margin: 0 0 10px;
+}
+
+.tz-shutdown-detail {
+  font-size: 14px;
+  color: #cfd8ec;
+  margin: 6px 0;
+}

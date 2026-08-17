@@ -22,11 +22,28 @@
         {% endif %}
         <button type="button" class="tz-btn tz-btn-secondary tz-btn-help" onclick="tzAbrirAyuda()">AYUDA</button>
         {% if tz_instance_token %}
-          <button type="button" class="tz-btn tz-btn-danger tz-btn-exit" onclick="tzRequestShutdown()">SALIR</button>
+          <button type="button" id="tz-btn-exit" class="tz-btn tz-btn-danger tz-btn-exit" onclick="tzRequestShutdown()">SALIR</button>
         {% endif %}
       </div>
     </div>
   </header>
+
+  {% if tz_instance_token %}
+  <div id="tz-shutdown-overlay" class="tz-shutdown-overlay" hidden>
+    <div class="tz-shutdown-box">
+      <img class="tz-shutdown-logo" src="{{ url_for('tz_web.logo_asset') }}" alt="TZ Analyzer">
+      <div id="tz-shutdown-closing" class="tz-shutdown-state">
+        <h2>Cerrando TZ Analyzer…</h2>
+        <p id="tz-shutdown-closing-detail" class="tz-shutdown-detail" hidden>Cerrando al finalizar el análisis en curso…</p>
+      </div>
+      <div id="tz-shutdown-closed" class="tz-shutdown-state" hidden>
+        <h2>TZ Analyzer se ha cerrado.</h2>
+        <p class="tz-shutdown-detail">Para realizar un nuevo análisis, ejecute nuevamente TZ Analyzer.</p>
+        <p class="tz-shutdown-detail">Puede cerrar esta pestaña.</p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <main class="tz-main tz-width-{{ layout_width|default('normal') }}">
     {% if show_nav|default(true) %}
@@ -78,6 +95,7 @@
     document.addEventListener("DOMContentLoaded", function () {
       tzInstallFormEnterGuard(document);
       tzStartHeartbeat();
+      tzInstallShutdownWatchers();
     });
   </script>
   {% block scripts %}{% endblock %}
