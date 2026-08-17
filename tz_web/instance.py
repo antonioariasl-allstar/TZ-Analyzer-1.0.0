@@ -168,6 +168,22 @@ class InstanceLock:
             self._fd = None
 
 
+_current_instance_id: Optional[str] = None
+
+
+def set_current_instance_id(instance_id: Optional[str]) -> None:
+    """Registra el ``instance_id`` de esta ejecución para consumidores sin
+    contexto Flask propio (p. ej. ``tz_web.output_transaction``, que corre en
+    threads de trabajo sin app context). Único punto de entrada: llamado por
+    ``tz_web.app.create_app()`` con el mismo valor que ya recibe la app."""
+    global _current_instance_id
+    _current_instance_id = instance_id
+
+
+def get_current_instance_id() -> Optional[str]:
+    return _current_instance_id
+
+
 def check_health(
     port: int, token: str, timeout: float = HEALTH_TIMEOUT_SECONDS
 ) -> Optional[Dict[str, Any]]:

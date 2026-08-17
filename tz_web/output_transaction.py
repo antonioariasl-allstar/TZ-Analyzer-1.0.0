@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import shutil
 import uuid
@@ -20,11 +21,23 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence
 from xml.etree import ElementTree
 
+from tz_version import PRODUCT_NAME, PRODUCT_VERSION
+from tz_web.instance import get_current_instance_id
+from tz_web.machine_id import get_or_create_machine_id
+
+_LOGGER = logging.getLogger("tz_web.output_transaction")
 
 RESULT_SUCCESS = "success"
 RESULT_PARTIAL = "partial"
 RESULT_FAILED = "failed"
 MANIFEST_SCHEMA = "TZ_ANALYZER_MANIFEST_V1"
+
+# Marker técnico de ownership (MB8-B1): sibling de la carpeta de staging,
+# nunca dentro de ella (publish() renombra staging -> final sin arrastrar
+# metadata técnica al producto). Contenido exclusivamente técnico, sin nada
+# derivable del caso — ver `_build_marker_payload`.
+MARKER_SCHEMA = 1
+_MARKER_SUFFIX = ".marker"
 
 
 class TransactionError(RuntimeError):
@@ -150,6 +163,42 @@ def verify_input_snapshot(snapshot_path: str, expected_sha256: str) -> None:
         raise InputIntegrityError("El snapshot de entrada cambió durante el procesamiento.")
 
 
+def _marker_path_for(reservation_dir: str) -> str:
+    return reservation_dir + _MARKER_SUFFIX
+
+
+def _build_marker_payload(transaction_id: str) -> Dict[str, Any]:
+    return {
+        "schema": MARKER_SCHEMA,
+        "product": PRODUCT_NAME,
+        "product_version": PRODUCT_VERSION,
+        "transaction_id": transaction_id,
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "instance_id": get_current_instance_id(),
+        "machine_id": get_or_create_machine_id(),
+    }
+
+
+def _write_ownership_marker(marker_path: str, transaction_id: str) -> None:
+    """Best-effort: el marker es housekeeping auxiliar, nunca condición para
+    que el análisis sea correcto (sección 12 del encargo MB8-B1)."""
+    try:
+        payload = _build_marker_payload(transaction_id)
+        with open(marker_path, "x", encoding="utf-8") as target:
+            json.dump(payload, target, ensure_ascii=False, sort_keys=True)
+    except OSError:
+        _LOGGER.warning("no se pudo crear el marker de ownership del staging transaccional.")
+
+
+def _remove_ownership_marker(marker_path: str) -> None:
+    """Best-effort: un marker huérfano no invalida el resultado ya publicado
+    ni un abort ya en curso (secciones 14/15 del encargo MB8-B1)."""
+    try:
+        os.remove(marker_path)
+    except OSError:
+        _LOGGER.warning("no se pudo eliminar el marker de ownership del staging transaccional.")
+
+
 @dataclass
 class OutputTransaction:
     base_dir: str
@@ -158,6 +207,8 @@ class OutputTransaction:
     staging_root: str
     work_dir: str
     final_dir: str
+    transaction_id: str
+    marker_path: str
     _published: bool = False
 
     @classmethod
@@ -195,6 +246,14 @@ class OutputTransaction:
 
             staging_root = reservation_dir
             work_dir = reservation_dir
+            transaction_id = uuid.uuid4().hex
+            marker_path = _marker_path_for(reservation_dir)
+            # Inmediatamente tras reservar el staging, antes de cualquier otro
+            # paso: minimiza la ventana en la que existe sin marker (sección
+            # 11 del encargo MB8-B1). Si el proceso muere entre el mkdir y
+            # esta escritura, o si la escritura falla, queda sin marker — es
+            # aceptable (housekeeping futuro, MB8-B2, deberá conservarlo).
+            _write_ownership_marker(marker_path, transaction_id)
             return cls(
                 base_dir=base_abs,
                 name=name,
@@ -202,6 +261,8 @@ class OutputTransaction:
                 staging_root=staging_root,
                 work_dir=work_dir,
                 final_dir=final_dir,
+                transaction_id=transaction_id,
+                marker_path=marker_path,
             )
 
     def publish(self) -> str:
@@ -222,6 +283,9 @@ class OutputTransaction:
                     os.rmdir(self.reservation_dir)
                 except OSError:
                     pass
+                # Solo después del rename exitoso (sección 14 del encargo
+                # MB8-B1): un fallo aquí no invalida el producto ya publicado.
+                _remove_ownership_marker(self.marker_path)
 
     def abort(self) -> None:
         """Política de fallo: elimina staging y reserva; nunca deja final normal."""
@@ -242,6 +306,9 @@ class OutputTransaction:
             os.rmdir(self.reservation_dir)
         except OSError:
             pass
+        # Best-effort (sección 15 del encargo MB8-B1): nunca sustituye ni
+        # oculta la excepción que originó este abort.
+        _remove_ownership_marker(self.marker_path)
 
 
 def _relative_to_work(path: str, work_dir: str) -> str:

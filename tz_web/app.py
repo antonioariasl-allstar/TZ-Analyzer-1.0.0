@@ -74,6 +74,10 @@ def create_app(
 
     app.config["TZ_INSTANCE_TOKEN"] = instance_token
     app.config["TZ_INSTANCE_ID"] = instance_id
+    # Mismo valor, expuesto también fuera de app.config: el staging
+    # transaccional (tz_web.output_transaction) corre en threads de trabajo
+    # propios, sin app context, y no puede leer current_app.
+    instance.set_current_instance_id(instance_id)
     app.config["TZ_INSTANCE_PID"] = os.getpid()
     app.config["TZ_INSTANCE_PORT"] = None
     # Fuente de verdad del Origin esperado (MB7-B5-B, ver
