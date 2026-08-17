@@ -147,3 +147,25 @@ def test_logo_horizontal_no_se_fuerza_en_pantallas_pequenas(client):
 
 def test_icono_app_es_la_fuente_canonica_declarada():
     assert os.path.basename(tz_web_routes._LOGO_PATH) == "TZ_Analyzer_icono_app.png"
+
+
+# ---------------------------------------------------------------------------
+# J — icono Windows multiresolución (.ico) generado a partir de la fuente
+# canónica; usado por el futuro empaquetado PyInstaller (no runtime web).
+# ---------------------------------------------------------------------------
+
+
+def test_icono_windows_multiresolucion_presente_y_legible():
+    from PIL import Image
+
+    ico_path = os.path.join(BRANDING_DIR, "TZ_Analyzer.ico")
+    assert os.path.isfile(ico_path), f"falta el icono Windows: {ico_path}"
+    assert os.path.getsize(ico_path) > 0
+
+    with Image.open(ico_path) as im:
+        assert im.format == "ICO"
+        sizes = set(im.info.get("sizes", []))
+        for critical in (16, 32, 48, 256):
+            assert (critical, critical) in sizes, (
+                f"al icono le falta la resolución {critical}x{critical}"
+            )
